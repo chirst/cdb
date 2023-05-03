@@ -1,0 +1,14 @@
+{
+	"name": "byod",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"golang.go",
+				"streetsidesoftware.code-spell-checker"
+			]
+		}
+	}
+}
