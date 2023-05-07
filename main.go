@@ -11,6 +11,6 @@ func main() {
 		log.Fatal(err)
 	}
 	kv.Set([]byte{1}, []byte{'c', 'a', 'r', 'l'})
-	res := kv.Get([]byte{1})
-	fmt.Print(res)
+	res, found := kv.Get([]byte{1})
+	fmt.Print(res, found)
 }
