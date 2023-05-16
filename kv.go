@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"io"
 	"os"
 	"sort"
 )
@@ -49,15 +50,52 @@ const (
 	ROOT_PAGE_NUMBER         = 0
 )
 
+type storage interface {
+	io.WriterAt
+	io.ReaderAt
+}
+
+type memoryFile struct {
+	buf []byte
+}
+
+func (mf *memoryFile) WriteAt(p []byte, off int64) (n int, err error) {
+	for len(mf.buf) < int(off)+len(p) {
+		mf.buf = append(mf.buf, make([]byte, PAGE_SIZE)...)
+	}
+	copy(mf.buf[off:len(p)], p)
+	return 0, nil
+}
+
+func (mf *memoryFile) ReadAt(p []byte, off int64) (n int, err error) {
+	for len(mf.buf) < int(off)+len(p) {
+		mf.buf = append(mf.buf, make([]byte, PAGE_SIZE)...)
+	}
+	copy(p, mf.buf[off:len(p)])
+	return 0, nil
+}
+
+func newMemoryFile() storage {
+	return &memoryFile{
+		buf: make([]byte, PAGE_SIZE),
+	}
+}
+
 type pager struct {
-	file  *os.File
+	file  storage
 	cache map[int][]byte // Map of page numbers to chunks
 }
 
 func newPager(filename string) (*pager, error) {
-	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		return nil, err
+	var f storage
+	if filename == "" {
+		f = newMemoryFile()
+	} else {
+		fl, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
+		if err != nil {
+			return nil, err
+		}
+		f = fl
 	}
 	p := &pager{
 		file:  f,
@@ -95,8 +133,8 @@ A page is structured as follows:
   - Count of records uint16.
   - Record offsets uint16 each. Variable length multiple of record count. First
     offset is for the first key second offset is for the first value and so on.
-  - Records. Variable length multiple of record count. First record starts at
-    the end of the page.
+  - Records. Variable length multiple of record count. First record ends at
+    the end of the page. Second record ends at start of first record and so on.
 */
 type page struct {
 	content []byte

@@ -115,3 +115,19 @@ func ExpectByteArray(t *testing.T, content []byte, start int, expeted []byte) {
 		t.Errorf("expected %v got %v at range start %d end %d", expeted, content[start:end], start, end)
 	}
 }
+
+func TestKv(t *testing.T) {
+	t.Run("get", func(t *testing.T) {
+		kv, _ := NewKv("")
+		k := []byte{1}
+		v := []byte{'n', 'e', 'd'}
+		kv.Set(k, v)
+		res, found := kv.Get(k)
+		if !found {
+			t.Errorf("expected value for %v to be found", k)
+		}
+		if !bytes.Equal(res, v) {
+			t.Errorf("expected value %v got %v", v, res)
+		}
+	})
+}
