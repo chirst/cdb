@@ -45,7 +45,6 @@ const (
 	PAGE_RECORD_COUNT_SIZE   = 2
 	PAGE_ROW_OFFSETS_OFFSET  = PAGE_TYPE_SIZE + PAGE_RECORD_COUNT_SIZE
 	PAGE_ROW_OFFSET_SIZE     = 2
-	PAGE_KEY_SIZE            = 2
 	ROOT_PAGE_START          = 0
 	ROOT_PAGE_NUMBER         = 0
 )
@@ -140,13 +139,17 @@ type page struct {
 	content []byte
 }
 
+type pageEntry struct {
+	key   []byte
+	value []byte
+}
+
 func newPage(content []byte) *page {
 	return &page{
 		content: content,
 	}
 }
 
-// internal of leaf
 func (p *page) getType() uint16 {
 	return binary.LittleEndian.Uint16(p.content[PAGE_TYPE_OFFSET:PAGE_TYPE_SIZE])
 }
@@ -172,54 +175,90 @@ func (p *page) setRecordCount(newCount uint16) {
 	)
 }
 
-func (p *page) getRowOffsets() []uint16 {
-	rowOffsets := []uint16{}
-	recordCount := p.getRecordCount()
-	for i := uint16(0); i < recordCount; i += 1 {
-		startOffset := PAGE_ROW_OFFSETS_OFFSET + i*PAGE_ROW_OFFSET_SIZE
-		endOffset := PAGE_ROW_OFFSETS_OFFSET + i*PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE
-		offset := binary.LittleEndian.Uint16(p.content[startOffset:endOffset])
-		rowOffsets = append(rowOffsets, offset)
+func (p *page) setEntries(entries []pageEntry) {
+	copy(p.content[PAGE_ROW_OFFSETS_OFFSET:PAGE_SIZE], make([]byte, PAGE_SIZE-PAGE_ROW_OFFSETS_OFFSET))
+	sort.Slice(entries, func(a, b int) bool { return bytes.Compare(entries[a].key, entries[b].key) == -1 })
+	shift := PAGE_ROW_OFFSETS_OFFSET
+	entryEnd := PAGE_SIZE
+	for _, entry := range entries {
+		startKeyOffset := shift
+		endKeyOffset := shift + PAGE_ROW_OFFSET_SIZE
+		endValueOffset := shift + PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE
+
+		// set key offset
+		keyOffset := uint16(entryEnd - len(entry.key) - len(entry.value))
+		byteKeyOffset := make([]byte, PAGE_ROW_OFFSET_SIZE)
+		binary.LittleEndian.PutUint16(byteKeyOffset, keyOffset)
+		copy(p.content[startKeyOffset:endKeyOffset], byteKeyOffset)
+
+		// set value offset
+		valueOffset := uint16(entryEnd - len(entry.value))
+		byteValueOffset := make([]byte, PAGE_ROW_OFFSET_SIZE)
+		binary.LittleEndian.PutUint16(byteValueOffset, valueOffset)
+		copy(p.content[endKeyOffset:endValueOffset], byteValueOffset)
+
+		// set key
+		copy(p.content[keyOffset:valueOffset], entry.key)
+
+		// set value
+		copy(p.content[valueOffset:valueOffset+uint16(len(entry.value))], entry.value)
+
+		// update for next iteration
+		shift = endValueOffset
+		entryEnd = int(keyOffset)
 	}
-	sort.Slice(rowOffsets, func(a, b int) bool { return rowOffsets[a] > rowOffsets[b] })
-	return rowOffsets
+	p.setRecordCount(uint16(len(entries)))
 }
 
-func (p *page) setRowOffset(idx, offset uint16) {
-	byteRecordOffset := make([]byte, PAGE_RECORD_COUNT_SIZE)
-	binary.LittleEndian.PutUint16(byteRecordOffset, offset)
-	copy(p.content[PAGE_ROW_OFFSETS_OFFSET+PAGE_ROW_OFFSET_SIZE*idx:], byteRecordOffset)
+func (p *page) getEntries() []pageEntry {
+	entries := []pageEntry{}
+	recordCount := p.getRecordCount()
+	entryEnd := PAGE_SIZE
+	for i := uint16(0); i < recordCount; i += 1 {
+		startKeyOffset := PAGE_ROW_OFFSETS_OFFSET + (i * (PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE))
+		endKeyOffset := PAGE_ROW_OFFSETS_OFFSET + (i * (PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE)) + PAGE_ROW_OFFSET_SIZE
+		endValueOffset := PAGE_ROW_OFFSETS_OFFSET + (i * (PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE)) + PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE
+
+		keyOffset := binary.LittleEndian.Uint16(p.content[startKeyOffset:endKeyOffset])
+		valueOffset := binary.LittleEndian.Uint16(p.content[endKeyOffset:endValueOffset])
+
+		// These must be copied otherwise the underlying byte array is returned.
+		// This causes what seems a unique value to be treated as a reference.
+		byteKey := make([]byte, valueOffset-keyOffset)
+		copy(byteKey, p.content[keyOffset:valueOffset])
+		byteValue := make([]byte, entryEnd-int(valueOffset))
+		copy(byteValue, p.content[valueOffset:entryEnd])
+		entries = append(entries, pageEntry{
+			key:   byteKey,
+			value: byteValue,
+		})
+		entryEnd = int(keyOffset)
+	}
+	return entries
 }
 
 func (p *page) setValue(key, value []byte) {
-	offsets := p.getRowOffsets()
-	lastOffset := uint16(PAGE_SIZE)
-	if len(offsets) != 0 {
-		lastOffset = offsets[len(offsets)-1]
+	_, found := p.getValue(key)
+	if found {
+		withoutFound := []pageEntry{}
+		e := p.getEntries()
+		for _, entry := range e {
+			if !bytes.Equal(entry.key, key) {
+				withoutFound = append(withoutFound, entry)
+			}
+		}
+		p.setEntries(append(withoutFound, pageEntry{key, value}))
+	} else {
+		p.setEntries(append(p.getEntries(), pageEntry{key, value}))
 	}
-
-	recordCount := p.getRecordCount()
-	p.setRecordCount(uint16(recordCount) + 1)
-
-	offset := lastOffset - uint16(len(value)) - PAGE_KEY_SIZE
-	p.setRowOffset(recordCount, uint16(offset))
-
-	copy(p.content[offset:offset+PAGE_KEY_SIZE], key)
-	copy(p.content[offset+PAGE_KEY_SIZE:offset+PAGE_KEY_SIZE+uint16(len(value))], value)
 }
 
 func (p *page) getValue(key []byte) ([]byte, bool) {
-	offsets := p.getRowOffsets()
-	endOffset := uint16(PAGE_SIZE)
-	for i, o := range offsets {
-		k := p.content[o : o+PAGE_KEY_SIZE]
-		v := p.content[o+PAGE_KEY_SIZE : endOffset]
-		keyBuf := make([]byte, 2)
-		copy(keyBuf, key)
-		if bytes.Equal(k, keyBuf) {
-			return v, true
+	e := p.getEntries()
+	for _, entry := range e {
+		if bytes.Equal(entry.key, key) {
+			return entry.value, true
 		}
-		endOffset = offsets[i]
 	}
 	return []byte{}, false
 }

@@ -24,25 +24,11 @@ func TestPageHelpers(t *testing.T) {
 		}
 	})
 
-	t.Run("get set record", func(t *testing.T) {
+	t.Run("get set record count", func(t *testing.T) {
 		want := uint16(2)
 		p.setRecordCount(want)
 		if res := p.getRecordCount(); res != want {
 			t.Errorf("want %d got %d", want, res)
-		}
-	})
-
-	t.Run("get set offsets", func(t *testing.T) {
-		want1 := uint16(PAGE_SIZE + 16)
-		want2 := uint16(PAGE_SIZE + 32)
-		p.setRowOffset(0, want1)
-		p.setRowOffset(1, want2)
-		res := p.getRowOffsets()
-		if got := res[0]; got != want1 {
-			t.Errorf("want %d got %d", want1, got)
-		}
-		if got := res[1]; got != want2 {
-			t.Errorf("want %d got %d", want2, got)
 		}
 	})
 }
@@ -52,21 +38,39 @@ func TestPageSet(t *testing.T) {
 		c := make([]byte, PAGE_SIZE)
 		p := newPage(c)
 
-		p.setValue([]byte{1}, []byte{'c', 'a', 'r', 'l'})
 		p.setValue([]byte{2}, []byte{'g', 'r', 'e', 'g'})
+		p.setValue([]byte{1}, []byte{'c', 'a', 'r', 'l'})
 		p.setValue([]byte{3}, []byte{'j', 'i', 'l', 'l', 'i', 'a', 'n'})
 
 		ExpectUint16(t, p.content, 2, 3)
-		ExpectUint16(t, p.content, 4, 4090)
-		ExpectUint16(t, p.content, 6, 4084)
-		ExpectUint16(t, p.content, 8, 4075)
+		ExpectUint16(t, p.content, 4, 4091)
+		ExpectUint16(t, p.content, 6, 4092)
+		ExpectUint16(t, p.content, 8, 4086)
+		ExpectUint16(t, p.content, 10, 4087)
+		ExpectUint16(t, p.content, 12, 4078)
+		ExpectUint16(t, p.content, 14, 4079)
 
-		ExpectUint16(t, p.content, 4075, 3)
-		ExpectByteArray(t, p.content, 4077, []byte{'j', 'i', 'l', 'l', 'i', 'a', 'n'})
-		ExpectUint16(t, p.content, 4084, 2)
-		ExpectByteArray(t, p.content, 4086, []byte{'g', 'r', 'e', 'g'})
-		ExpectUint16(t, p.content, 4090, 1)
+		ExpectByteArray(t, p.content, 4078, []byte{3})
+		ExpectByteArray(t, p.content, 4079, []byte{'j', 'i', 'l', 'l', 'i', 'a', 'n'})
+		ExpectByteArray(t, p.content, 4086, []byte{2})
+		ExpectByteArray(t, p.content, 4087, []byte{'g', 'r', 'e', 'g'})
+		ExpectByteArray(t, p.content, 4091, []byte{1})
 		ExpectByteArray(t, p.content, 4092, []byte{'c', 'a', 'r', 'l'})
+	})
+
+	t.Run("set update", func(t *testing.T) {
+		c := make([]byte, PAGE_SIZE)
+		p := newPage(c)
+
+		p.setValue([]byte{1}, []byte{'c', 'a', 'r', 'l'})
+		p.setValue([]byte{1}, []byte{'r', 'o', 'l', 'f'})
+
+		ExpectUint16(t, p.content, 2, 1)
+		ExpectUint16(t, p.content, 4, 4091)
+		ExpectUint16(t, p.content, 6, 4092)
+
+		ExpectByteArray(t, p.content, 4091, []byte{1})
+		ExpectByteArray(t, p.content, 4092, []byte{'r', 'o', 'l', 'f'})
 	})
 }
 
