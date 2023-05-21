@@ -33,8 +33,6 @@ func (kv *kv) Set(key, value []byte) {
 	kv.pager.writePage(0, page.content)
 }
 
-// func (kv *kv) Delete(key []byte) Who wants to delete anyways?
-
 const (
 	PAGE_SIZE                = 4096
 	PAGE_TYPE_INTERNAL       = 1
@@ -81,8 +79,7 @@ func newMemoryFile() storage {
 }
 
 type pager struct {
-	file  storage
-	cache map[int][]byte // Map of page numbers to chunks
+	file storage
 }
 
 func newPager(filename string) (*pager, error) {
@@ -97,8 +94,7 @@ func newPager(filename string) (*pager, error) {
 		f = fl
 	}
 	p := &pager{
-		file:  f,
-		cache: make(map[int][]byte),
+		file: f,
 	}
 	p.createRootPageIfNeeded()
 	return p, nil
@@ -126,15 +122,17 @@ func (p *pager) createRootPageIfNeeded() {
 	}
 }
 
-/*
-A page is structured as follows:
-  - Page type uint16. Tells if internal or leaf node.
-  - Count of records uint16.
-  - Record offsets uint16 each. Variable length multiple of record count. First
-    offset is for the first key second offset is for the first value and so on.
-  - Records. Variable length multiple of record count. First record ends at
-    the end of the page. Second record ends at start of first record and so on.
-*/
+// A leaf page is structured as follows:
+// - 2 bytes for the page type.
+// - 2 bytes for the count of tuples.
+// - 4 bytes for the tuple offsets (2 bytes key 2 bytes value) multiplied by the
+// amount of tuples.
+// - Variable length key and value tuples filling the remaining space.
+//
+// Tuple offsets are sorted and listed in order. Tuples are stored in reverse
+// order starting at the end of the page. This is so the end of each tuple can
+// be calculated by the start of the previous tuple and in the case of the first
+// tuple the size of the page.
 type page struct {
 	content []byte
 }
@@ -173,6 +171,19 @@ func (p *page) setRecordCount(newCount uint16) {
 		p.content[PAGE_RECORD_COUNT_OFFSET:PAGE_RECORD_COUNT_OFFSET+PAGE_RECORD_COUNT_SIZE],
 		byteRecordCount,
 	)
+}
+
+func (p *page) getFreeSpace() int {
+	allocatedSpace := 0
+	allocatedSpace += PAGE_TYPE_SIZE
+	allocatedSpace += PAGE_RECORD_COUNT_SIZE
+	entries := p.getEntries()
+	allocatedSpace += len(entries) * (PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE)
+	for _, e := range entries {
+		allocatedSpace += len(e.key)
+		allocatedSpace += len(e.value)
+	}
+	return PAGE_SIZE - allocatedSpace
 }
 
 func (p *page) setEntries(entries []pageEntry) {
@@ -238,6 +249,9 @@ func (p *page) getEntries() []pageEntry {
 }
 
 func (p *page) setValue(key, value []byte) {
+	if p.getFreeSpace() < len(key)+len(value) {
+		panic("page cannot fit record")
+	}
 	_, found := p.getValue(key)
 	if found {
 		withoutFound := []pageEntry{}

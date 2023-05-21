@@ -134,4 +134,14 @@ func TestKv(t *testing.T) {
 			t.Errorf("expected value %v got %v", v, res)
 		}
 	})
+
+	t.Run("set page split", func(t *testing.T) {
+		kv, _ := NewKv("")
+		for i := 0; i < 256; i += 1 {
+			kv.Set([]byte{byte(i)}, []byte{1, 2, 3, 4, 5})
+		}
+		for i := 0; i < 139; i += 1 {
+			kv.Set([]byte{byte(i), 0}, []byte{1, 2, 3, 4, 5})
+		}
+	})
 }
