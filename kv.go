@@ -100,10 +100,10 @@ func newPager(filename string) (*pager, error) {
 	return p, nil
 }
 
-func (p *pager) getPage(pageNumber int) *page {
+func (p *pager) getPage(pageNumber int) *leafPage {
 	page := make([]byte, PAGE_SIZE)
 	p.file.ReadAt(page, int64(ROOT_PAGE_START+pageNumber*PAGE_SIZE))
-	return newPage(page)
+	return newLeafPage(page)
 }
 
 func (p *pager) writePage(pageNumber int, content []byte) error {
@@ -122,7 +122,7 @@ func (p *pager) createRootPageIfNeeded() {
 	}
 }
 
-// A leaf page is structured as follows:
+// leafPage is structured as follows:
 // - 2 bytes for the page type.
 // - 2 bytes for the count of tuples.
 // - 4 bytes for the tuple offsets (2 bytes key 2 bytes value) multiplied by the
@@ -133,38 +133,39 @@ func (p *pager) createRootPageIfNeeded() {
 // order starting at the end of the page. This is so the end of each tuple can
 // be calculated by the start of the previous tuple and in the case of the first
 // tuple the size of the page.
-type page struct {
+type leafPage struct {
 	content []byte
 }
 
-type pageEntry struct {
+// leafPageTuple is a variable length key value pair.
+type leafPageTuple struct {
 	key   []byte
 	value []byte
 }
 
-func newPage(content []byte) *page {
-	return &page{
+func newLeafPage(content []byte) *leafPage {
+	return &leafPage{
 		content: content,
 	}
 }
 
-func (p *page) getType() uint16 {
+func (p *leafPage) getType() uint16 {
 	return binary.LittleEndian.Uint16(p.content[PAGE_TYPE_OFFSET:PAGE_TYPE_SIZE])
 }
 
-func (p *page) setType(t uint16) {
+func (p *leafPage) setType(t uint16) {
 	bytePageType := make([]byte, PAGE_TYPE_SIZE)
 	binary.LittleEndian.PutUint16(bytePageType, t)
 	copy(p.content[PAGE_TYPE_OFFSET:PAGE_TYPE_SIZE], bytePageType)
 }
 
-func (p *page) getRecordCount() uint16 {
+func (p *leafPage) getRecordCount() uint16 {
 	return binary.LittleEndian.Uint16(
 		p.content[PAGE_RECORD_COUNT_OFFSET : PAGE_RECORD_COUNT_OFFSET+PAGE_RECORD_COUNT_SIZE],
 	)
 }
 
-func (p *page) setRecordCount(newCount uint16) {
+func (p *leafPage) setRecordCount(newCount uint16) {
 	byteRecordCount := make([]byte, PAGE_RECORD_COUNT_SIZE)
 	binary.LittleEndian.PutUint16(byteRecordCount, newCount)
 	copy(
@@ -173,7 +174,7 @@ func (p *page) setRecordCount(newCount uint16) {
 	)
 }
 
-func (p *page) getFreeSpace() int {
+func (p *leafPage) getFreeSpace() int {
 	allocatedSpace := 0
 	allocatedSpace += PAGE_TYPE_SIZE
 	allocatedSpace += PAGE_RECORD_COUNT_SIZE
@@ -186,7 +187,7 @@ func (p *page) getFreeSpace() int {
 	return PAGE_SIZE - allocatedSpace
 }
 
-func (p *page) setEntries(entries []pageEntry) {
+func (p *leafPage) setEntries(entries []leafPageTuple) {
 	copy(p.content[PAGE_ROW_OFFSETS_OFFSET:PAGE_SIZE], make([]byte, PAGE_SIZE-PAGE_ROW_OFFSETS_OFFSET))
 	sort.Slice(entries, func(a, b int) bool { return bytes.Compare(entries[a].key, entries[b].key) == -1 })
 	shift := PAGE_ROW_OFFSETS_OFFSET
@@ -221,8 +222,8 @@ func (p *page) setEntries(entries []pageEntry) {
 	p.setRecordCount(uint16(len(entries)))
 }
 
-func (p *page) getEntries() []pageEntry {
-	entries := []pageEntry{}
+func (p *leafPage) getEntries() []leafPageTuple {
+	entries := []leafPageTuple{}
 	recordCount := p.getRecordCount()
 	entryEnd := PAGE_SIZE
 	for i := uint16(0); i < recordCount; i += 1 {
@@ -239,7 +240,7 @@ func (p *page) getEntries() []pageEntry {
 		copy(byteKey, p.content[keyOffset:valueOffset])
 		byteValue := make([]byte, entryEnd-int(valueOffset))
 		copy(byteValue, p.content[valueOffset:entryEnd])
-		entries = append(entries, pageEntry{
+		entries = append(entries, leafPageTuple{
 			key:   byteKey,
 			value: byteValue,
 		})
@@ -248,26 +249,26 @@ func (p *page) getEntries() []pageEntry {
 	return entries
 }
 
-func (p *page) setValue(key, value []byte) {
+func (p *leafPage) setValue(key, value []byte) {
 	if p.getFreeSpace() < len(key)+len(value) {
 		panic("page cannot fit record")
 	}
 	_, found := p.getValue(key)
 	if found {
-		withoutFound := []pageEntry{}
+		withoutFound := []leafPageTuple{}
 		e := p.getEntries()
 		for _, entry := range e {
 			if !bytes.Equal(entry.key, key) {
 				withoutFound = append(withoutFound, entry)
 			}
 		}
-		p.setEntries(append(withoutFound, pageEntry{key, value}))
+		p.setEntries(append(withoutFound, leafPageTuple{key, value}))
 	} else {
-		p.setEntries(append(p.getEntries(), pageEntry{key, value}))
+		p.setEntries(append(p.getEntries(), leafPageTuple{key, value}))
 	}
 }
 
-func (p *page) getValue(key []byte) ([]byte, bool) {
+func (p *leafPage) getValue(key []byte) ([]byte, bool) {
 	e := p.getEntries()
 	for _, entry := range e {
 		if bytes.Equal(entry.key, key) {
