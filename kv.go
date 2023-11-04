@@ -23,12 +23,33 @@ func NewKv(filename string) (*kv, error) {
 }
 
 func (kv *kv) Get(key []byte) ([]byte, bool) {
-	page := kv.pager.getPage(0)
-	return page.getValue(key)
+	// 1. Need a source page to start from. Will start from 0 if there is no source
+	// page specified. This source page has to do with a table. 0 has to be the
+	// system catalog.
+	//
+	// 2. Decide whether the page is an internal node or a leaf node. This can be
+	// determined by asking what the page type is.
+	//
+	// 3. If the page is internal jump to the next page and go back to step 2.
+	// This process guarantees that we are on a leaf page for step 4.
+	//
+	// 4. Find the value for the key and return.
+	return kv.getPage(key).getValue(key)
+}
+
+func (kv *kv) getPage(key []byte) *leafPage {
+	pageNumber := 0
+	for {
+		internalPage, leafPage := kv.pager.getPage(pageNumber)
+		if leafPage != nil {
+			return leafPage
+		}
+		pageNumber = internalPage.getPageNumberFor(key)
+	}
 }
 
 func (kv *kv) Set(key, value []byte) {
-	page := kv.pager.getPage(0)
+	page := kv.getPage(key)
 	page.setValue(key, value)
 	kv.pager.writePage(0, page.content)
 }
@@ -96,14 +117,22 @@ func newPager(filename string) (*pager, error) {
 	p := &pager{
 		file: f,
 	}
-	p.createRootPageIfNeeded()
+	p.getPage(0)
 	return p, nil
 }
 
-func (p *pager) getPage(pageNumber int) *leafPage {
+func (p *pager) getPage(pageNumber int) (*internalPage, *leafPage) {
 	page := make([]byte, PAGE_SIZE)
 	p.file.ReadAt(page, int64(ROOT_PAGE_START+pageNumber*PAGE_SIZE))
-	return newLeafPage(page)
+	pt := p.getPageType(page)
+	if pt == PAGE_TYPE_INTERNAL {
+		return newInternalPage(page), nil
+	}
+	if pt == PAGE_TYPE_LEAF {
+		return nil, newLeafPage(page)
+	}
+	p.createRootPage(page)
+	return nil, nil
 }
 
 func (p *pager) writePage(pageNumber int, content []byte) error {
@@ -114,12 +143,45 @@ func (p *pager) writePage(pageNumber int, content []byte) error {
 	return nil
 }
 
-func (p *pager) createRootPageIfNeeded() {
-	rootPage := p.getPage(0)
-	if rootPage.getType() == 0 {
-		rootPage.setType(PAGE_TYPE_LEAF)
-		p.writePage(0, rootPage.content)
+func (p *pager) createRootPage(content []byte) {
+	rootPage := newLeafPage(content)
+	rootPage.setType(PAGE_TYPE_LEAF)
+	p.writePage(0, rootPage.content)
+}
+
+func (p *pager) getPageType(page []byte) uint16 {
+	return binary.LittleEndian.Uint16(page[PAGE_TYPE_OFFSET:PAGE_TYPE_SIZE])
+}
+
+// internalPage is structured as follows:
+// - 2 bytes for the page type.
+// - 2 bytes for the number of pairs.
+// - 2 bytes for a key 2 bytes for the page number for each pair.
+// The page is organized with the tuples starting at the end of the page and
+// accumulating to the beginning.
+type internalPage struct {
+	content []byte
+}
+
+// internalPair associates a key with a page number leading to the key value.
+type internalPair struct {
+	// leftKey represents a range meaning the page contains the range greater
+	// than leftKey and less than the next leftKey
+	leftKey    []byte
+	pageNumber uint16
+}
+
+func newInternalPage(content []byte) *internalPage {
+	return &internalPage{
+		content: content,
 	}
+}
+
+func (i *internalPage) getPageNumberFor(key []byte) int {
+	// This should be filled out
+	// Needs to look at key ranges in internal page and return page number that
+	// key range is pointing to.
+	return 0
 }
 
 // leafPage is structured as follows:
@@ -252,6 +314,7 @@ func (p *leafPage) getEntries() []leafPageTuple {
 func (p *leafPage) setValue(key, value []byte) {
 	if p.getFreeSpace() < len(key)+len(value) {
 		panic("page cannot fit record")
+		// need to implement the split operation here
 	}
 	_, found := p.getValue(key)
 	if found {
