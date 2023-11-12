@@ -8,7 +8,7 @@ import (
 
 func TestPageHelpers(t *testing.T) {
 	c := make([]byte, PAGE_SIZE)
-	p := newLeafPage(c)
+	p := allocatePage(0, c)
 
 	t.Run("get set internal", func(t *testing.T) {
 		p.setType(PAGE_TYPE_INTERNAL)
@@ -36,7 +36,7 @@ func TestPageHelpers(t *testing.T) {
 func TestPageSet(t *testing.T) {
 	t.Run("set", func(t *testing.T) {
 		c := make([]byte, PAGE_SIZE)
-		p := newLeafPage(c)
+		p := allocatePage(0, c)
 
 		p.setValue([]byte{2}, []byte{'g', 'r', 'e', 'g'})
 		p.setValue([]byte{1}, []byte{'c', 'a', 'r', 'l'})
@@ -60,7 +60,7 @@ func TestPageSet(t *testing.T) {
 
 	t.Run("set update", func(t *testing.T) {
 		c := make([]byte, PAGE_SIZE)
-		p := newLeafPage(c)
+		p := allocatePage(0, c)
 
 		p.setValue([]byte{1}, []byte{'c', 'a', 'r', 'l'})
 		p.setValue([]byte{1}, []byte{'r', 'o', 'l', 'f'})
@@ -77,7 +77,7 @@ func TestPageSet(t *testing.T) {
 func TestGet(t *testing.T) {
 	t.Run("get", func(t *testing.T) {
 		c := make([]byte, PAGE_SIZE)
-		p := newLeafPage(c)
+		p := allocatePage(0, c)
 		n := []byte{'o', 'k', 'i', 'e'}
 		p.setValue([]byte{3}, []byte{'j', 'a', 'n', 'i', 'c', 'e'})
 		p.setValue([]byte{1}, n)
@@ -95,7 +95,7 @@ func TestGet(t *testing.T) {
 
 	t.Run("get not found", func(t *testing.T) {
 		c := make([]byte, PAGE_SIZE)
-		p := newLeafPage(c)
+		p := allocatePage(0, c)
 
 		_, found := p.getValue([]byte{1})
 
@@ -142,6 +142,17 @@ func TestKv(t *testing.T) {
 		}
 		for i := 0; i < 139; i += 1 {
 			kv.Set([]byte{byte(i), 0}, []byte{1, 2, 3, 4, 5})
+		}
+		// this value causes a split
+		k := []byte{byte(140), 0}
+		v := []byte{1, 1, 1, 1, 1}
+		kv.Set(k, v)
+		res, found := kv.Get(k)
+		if !found {
+			t.Errorf("expected value for %v to be found", k)
+		}
+		if !bytes.Equal(res, v) {
+			t.Errorf("expected value %v got %v", v, res)
 		}
 	})
 }

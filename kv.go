@@ -26,36 +26,103 @@ func (kv *kv) Get(key []byte) ([]byte, bool) {
 	// 1. Need a source page to start from. Will start from 0 if there is no source
 	// page specified. This source page has to do with a table. 0 has to be the
 	// system catalog.
-	//
-	// 2. Decide whether the page is an internal node or a leaf node. This can be
-	// determined by asking what the page type is.
-	//
-	// 3. If the page is internal jump to the next page and go back to step 2.
-	// This process guarantees that we are on a leaf page for step 4.
-	//
-	// 4. Find the value for the key and return.
-	return kv.getPage(key).getValue(key)
-}
-
-func (kv *kv) getPage(key []byte) *leafPage {
-	pageNumber := 0
+	var pageNumber uint16 = 0
 	for {
-		internalPage, leafPage := kv.pager.getPage(pageNumber)
-		if leafPage != nil {
-			return leafPage
+		page := kv.pager.getPage(pageNumber)
+		// 2. Decide whether the page is an internal node or a leaf node. This
+		// can be determined by asking what the page type is.
+		if page.getType() == PAGE_TYPE_LEAF {
+			// 4. Find the value for the key and return.
+			return page.getValue(key)
 		}
-		pageNumber = internalPage.getPageNumberFor(key)
+		v, found := page.getValue(key)
+		if !found {
+			return nil, false
+		}
+		// 3. If the page is internal jump to the next page and go back to step
+		// 2. This process guarantees that we are on a leaf page for step 4.
+		pageNumber = binary.LittleEndian.Uint16(v)
 	}
 }
 
 func (kv *kv) Set(key, value []byte) {
-	page := kv.getPage(key)
-	page.setValue(key, value)
-	kv.pager.writePage(0, page.content)
+	// page number has to do with the table or index
+	var pageNumber uint16 = 0
+	var parents []*page
+	for {
+		page := kv.pager.getPage(pageNumber)
+		if page.getType() == PAGE_TYPE_LEAF {
+			if page.getFreeSpace() < len(key)+len(value) {
+				// need to split
+				entries := page.getEntries()
+				// allocate left page
+				leftPage := kv.pager.newPage()
+				leftEntries := entries[:len(entries)/2]
+				leftPage.setEntries(leftEntries)
+				leftKey := leftPage.getEntries()[0].key
+				// allocate right page
+				rightPage := kv.pager.newPage()
+				rightEntries := entries[len(entries)/2:]
+				rightPage.setEntries(rightEntries)
+				rightKey := rightPage.getEntries()[0].key
+				if len(parents) > 0 {
+					parent := parents[len(parents)-1]
+					neededSpace := len(leftKey) + len(leftPage.getNumberAsBytes()) + len(rightKey) + len(rightPage.getNumberAsBytes())
+					if parent.getFreeSpace() < neededSpace {
+						// need to split parent
+					}
+					parentEntries := parent.getEntries()
+					parentEntries = append(parentEntries, pageTuple{
+						key:   leftKey,
+						value: leftPage.getNumberAsBytes(),
+					})
+					parentEntries = append(parentEntries, pageTuple{
+						key:   rightKey,
+						value: rightPage.getNumberAsBytes(),
+					})
+					parent.setEntries(parentEntries)
+					for _, p := range parents {
+						kv.pager.writePage(p.getNumber(), p.content)
+					}
+					kv.pager.writePage(leftPage.getNumber(), leftPage.content)
+					kv.pager.writePage(rightPage.getNumber(), rightPage.content)
+					return
+				}
+				// this is if the page is a root page because no parent
+				// turn page into internal page and allocate
+				page.setType(PAGE_TYPE_INTERNAL)
+				// left page needs to be the lowest left key that points to a page
+				pointers := []pageTuple{{
+					key:   leftKey,
+					value: leftPage.getNumberAsBytes(),
+				}}
+				// right page needs to be the lowest right key that points to a page
+				pointers = append(pointers, pageTuple{
+					key:   rightKey,
+					value: rightPage.getNumberAsBytes(),
+				})
+				page.setEntries(pointers)
+				kv.pager.writePage(page.number, page.content)
+				kv.pager.writePage(leftPage.number, leftPage.content)
+				kv.pager.writePage(rightPage.number, rightPage.content)
+				return
+			}
+			page.setValue(key, value)
+			kv.pager.writePage(pageNumber, page.content)
+			return
+		}
+		v, found := page.getValue(key)
+		if !found {
+			return
+		}
+		parents = append(parents, page)
+		pageNumber = binary.LittleEndian.Uint16(v)
+	}
 }
 
 const (
 	PAGE_SIZE                = 4096
+	PAGE_TYPE_UNKNOWN        = 0
 	PAGE_TYPE_INTERNAL       = 1
 	PAGE_TYPE_LEAF           = 2
 	PAGE_TYPE_OFFSET         = 0
@@ -64,8 +131,10 @@ const (
 	PAGE_RECORD_COUNT_SIZE   = 2
 	PAGE_ROW_OFFSETS_OFFSET  = PAGE_TYPE_SIZE + PAGE_RECORD_COUNT_SIZE
 	PAGE_ROW_OFFSET_SIZE     = 2
-	ROOT_PAGE_START          = 0
+	ROOT_PAGE_START          = 3
 	ROOT_PAGE_NUMBER         = 0
+	FREE_PAGE_COUNTER_SIZE   = 2
+	FREE_PAGE_COUNTER_OFFSET = 0
 )
 
 type storage interface {
@@ -81,7 +150,7 @@ func (mf *memoryFile) WriteAt(p []byte, off int64) (n int, err error) {
 	for len(mf.buf) < int(off)+len(p) {
 		mf.buf = append(mf.buf, make([]byte, PAGE_SIZE)...)
 	}
-	copy(mf.buf[off:len(p)], p)
+	copy(mf.buf[off:len(p)+int(off)], p)
 	return 0, nil
 }
 
@@ -89,7 +158,7 @@ func (mf *memoryFile) ReadAt(p []byte, off int64) (n int, err error) {
 	for len(mf.buf) < int(off)+len(p) {
 		mf.buf = append(mf.buf, make([]byte, PAGE_SIZE)...)
 	}
-	copy(p, mf.buf[off:len(p)])
+	copy(p, mf.buf[off:len(p)+int(off)])
 	return 0, nil
 }
 
@@ -100,7 +169,8 @@ func newMemoryFile() storage {
 }
 
 type pager struct {
-	file storage
+	file           storage
+	currentMaxPage uint16
 }
 
 func newPager(filename string) (*pager, error) {
@@ -114,28 +184,24 @@ func newPager(filename string) (*pager, error) {
 		}
 		f = fl
 	}
+	cmpb := make([]byte, FREE_PAGE_COUNTER_SIZE)
+	f.ReadAt(cmpb, FREE_PAGE_COUNTER_OFFSET)
 	p := &pager{
-		file: f,
+		file:           f,
+		currentMaxPage: binary.LittleEndian.Uint16(cmpb),
 	}
 	p.getPage(0)
 	return p, nil
 }
 
-func (p *pager) getPage(pageNumber int) (*internalPage, *leafPage) {
+func (p *pager) getPage(pageNumber uint16) *page {
 	page := make([]byte, PAGE_SIZE)
 	p.file.ReadAt(page, int64(ROOT_PAGE_START+pageNumber*PAGE_SIZE))
-	pt := p.getPageType(page)
-	if pt == PAGE_TYPE_INTERNAL {
-		return newInternalPage(page), nil
-	}
-	if pt == PAGE_TYPE_LEAF {
-		return nil, newLeafPage(page)
-	}
-	p.createRootPage(page)
-	return nil, nil
+	return allocatePage(pageNumber, page)
 }
 
-func (p *pager) writePage(pageNumber int, content []byte) error {
+// TODO could possibly just take a page as an argument since pages should know their number
+func (p *pager) writePage(pageNumber uint16, content []byte) error {
 	_, err := p.file.WriteAt(content, int64(ROOT_PAGE_START+pageNumber*PAGE_SIZE))
 	if err != nil {
 		return err
@@ -143,48 +209,7 @@ func (p *pager) writePage(pageNumber int, content []byte) error {
 	return nil
 }
 
-func (p *pager) createRootPage(content []byte) {
-	rootPage := newLeafPage(content)
-	rootPage.setType(PAGE_TYPE_LEAF)
-	p.writePage(0, rootPage.content)
-}
-
-func (p *pager) getPageType(page []byte) uint16 {
-	return binary.LittleEndian.Uint16(page[PAGE_TYPE_OFFSET:PAGE_TYPE_SIZE])
-}
-
-// internalPage is structured as follows:
-// - 2 bytes for the page type.
-// - 2 bytes for the number of pairs.
-// - 2 bytes for a key 2 bytes for the page number for each pair.
-// The page is organized with the tuples starting at the end of the page and
-// accumulating to the beginning.
-type internalPage struct {
-	content []byte
-}
-
-// internalPair associates a key with a page number leading to the key value.
-type internalPair struct {
-	// leftKey represents a range meaning the page contains the range greater
-	// than leftKey and less than the next leftKey
-	leftKey    []byte
-	pageNumber uint16
-}
-
-func newInternalPage(content []byte) *internalPage {
-	return &internalPage{
-		content: content,
-	}
-}
-
-func (i *internalPage) getPageNumberFor(key []byte) int {
-	// This should be filled out
-	// Needs to look at key ranges in internal page and return page number that
-	// key range is pointing to.
-	return 0
-}
-
-// leafPage is structured as follows:
+// page is structured as follows:
 // - 2 bytes for the page type.
 // - 2 bytes for the count of tuples.
 // - 4 bytes for the tuple offsets (2 bytes key 2 bytes value) multiplied by the
@@ -195,39 +220,64 @@ func (i *internalPage) getPageNumberFor(key []byte) int {
 // order starting at the end of the page. This is so the end of each tuple can
 // be calculated by the start of the previous tuple and in the case of the first
 // tuple the size of the page.
-type leafPage struct {
+type page struct {
 	content []byte
+	number  uint16
 }
 
-// leafPageTuple is a variable length key value pair.
-type leafPageTuple struct {
+// pageTuple is a variable length key value pair.
+type pageTuple struct {
 	key   []byte
 	value []byte
 }
 
-func newLeafPage(content []byte) *leafPage {
-	return &leafPage{
-		content: content,
-	}
+func (p *pager) newPage() *page {
+	p.currentMaxPage += 1
+	cmpb := make([]byte, FREE_PAGE_COUNTER_SIZE)
+	binary.LittleEndian.PutUint16(cmpb, p.currentMaxPage)
+	p.file.WriteAt(cmpb, FREE_PAGE_COUNTER_OFFSET)
+	return allocatePage(p.currentMaxPage, make([]byte, PAGE_SIZE))
 }
 
-func (p *leafPage) getType() uint16 {
+func allocatePage(pageNumber uint16, content []byte) *page {
+	np := &page{
+		content: content,
+		number:  pageNumber,
+	}
+	if np.getType() == PAGE_TYPE_UNKNOWN {
+		np.setType(PAGE_TYPE_LEAF)
+	}
+	return np
+}
+
+func (p *page) getNumber() uint16 {
+	return p.number
+}
+
+func (p *page) getNumberAsBytes() []byte {
+	n := p.getNumber()
+	bn := make([]byte, FREE_PAGE_COUNTER_SIZE)
+	binary.LittleEndian.PutUint16(bn, n)
+	return bn
+}
+
+func (p *page) getType() uint16 {
 	return binary.LittleEndian.Uint16(p.content[PAGE_TYPE_OFFSET:PAGE_TYPE_SIZE])
 }
 
-func (p *leafPage) setType(t uint16) {
+func (p *page) setType(t uint16) {
 	bytePageType := make([]byte, PAGE_TYPE_SIZE)
 	binary.LittleEndian.PutUint16(bytePageType, t)
 	copy(p.content[PAGE_TYPE_OFFSET:PAGE_TYPE_SIZE], bytePageType)
 }
 
-func (p *leafPage) getRecordCount() uint16 {
+func (p *page) getRecordCount() uint16 {
 	return binary.LittleEndian.Uint16(
 		p.content[PAGE_RECORD_COUNT_OFFSET : PAGE_RECORD_COUNT_OFFSET+PAGE_RECORD_COUNT_SIZE],
 	)
 }
 
-func (p *leafPage) setRecordCount(newCount uint16) {
+func (p *page) setRecordCount(newCount uint16) {
 	byteRecordCount := make([]byte, PAGE_RECORD_COUNT_SIZE)
 	binary.LittleEndian.PutUint16(byteRecordCount, newCount)
 	copy(
@@ -236,7 +286,7 @@ func (p *leafPage) setRecordCount(newCount uint16) {
 	)
 }
 
-func (p *leafPage) getFreeSpace() int {
+func (p *page) getFreeSpace() int {
 	allocatedSpace := 0
 	allocatedSpace += PAGE_TYPE_SIZE
 	allocatedSpace += PAGE_RECORD_COUNT_SIZE
@@ -249,7 +299,7 @@ func (p *leafPage) getFreeSpace() int {
 	return PAGE_SIZE - allocatedSpace
 }
 
-func (p *leafPage) setEntries(entries []leafPageTuple) {
+func (p *page) setEntries(entries []pageTuple) {
 	copy(p.content[PAGE_ROW_OFFSETS_OFFSET:PAGE_SIZE], make([]byte, PAGE_SIZE-PAGE_ROW_OFFSETS_OFFSET))
 	sort.Slice(entries, func(a, b int) bool { return bytes.Compare(entries[a].key, entries[b].key) == -1 })
 	shift := PAGE_ROW_OFFSETS_OFFSET
@@ -284,8 +334,8 @@ func (p *leafPage) setEntries(entries []leafPageTuple) {
 	p.setRecordCount(uint16(len(entries)))
 }
 
-func (p *leafPage) getEntries() []leafPageTuple {
-	entries := []leafPageTuple{}
+func (p *page) getEntries() []pageTuple {
+	entries := []pageTuple{}
 	recordCount := p.getRecordCount()
 	entryEnd := PAGE_SIZE
 	for i := uint16(0); i < recordCount; i += 1 {
@@ -302,7 +352,7 @@ func (p *leafPage) getEntries() []leafPageTuple {
 		copy(byteKey, p.content[keyOffset:valueOffset])
 		byteValue := make([]byte, entryEnd-int(valueOffset))
 		copy(byteValue, p.content[valueOffset:entryEnd])
-		entries = append(entries, leafPageTuple{
+		entries = append(entries, pageTuple{
 			key:   byteKey,
 			value: byteValue,
 		})
@@ -311,27 +361,23 @@ func (p *leafPage) getEntries() []leafPageTuple {
 	return entries
 }
 
-func (p *leafPage) setValue(key, value []byte) {
-	if p.getFreeSpace() < len(key)+len(value) {
-		panic("page cannot fit record")
-		// need to implement the split operation here
-	}
+func (p *page) setValue(key, value []byte) {
 	_, found := p.getValue(key)
 	if found {
-		withoutFound := []leafPageTuple{}
+		withoutFound := []pageTuple{}
 		e := p.getEntries()
 		for _, entry := range e {
 			if !bytes.Equal(entry.key, key) {
 				withoutFound = append(withoutFound, entry)
 			}
 		}
-		p.setEntries(append(withoutFound, leafPageTuple{key, value}))
+		p.setEntries(append(withoutFound, pageTuple{key, value}))
 	} else {
-		p.setEntries(append(p.getEntries(), leafPageTuple{key, value}))
+		p.setEntries(append(p.getEntries(), pageTuple{key, value}))
 	}
 }
 
-func (p *leafPage) getValue(key []byte) ([]byte, bool) {
+func (p *page) getValue(key []byte) ([]byte, bool) {
 	e := p.getEntries()
 	for _, entry := range e {
 		if bytes.Equal(entry.key, key) {
