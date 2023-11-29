@@ -46,78 +46,69 @@ func (kv *kv) Get(key []byte) ([]byte, bool) {
 }
 
 func (kv *kv) Set(key, value []byte) {
-	// page number has to do with the table or index
+	// TODO perhaps there needs to be something like a cursor that handles the
+	// write transaction of updating and creating all of these pages.
 	var pageNumber uint16 = 0
-	var parents []*page
-	for {
-		page := kv.pager.getPage(pageNumber)
-		if page.getType() == PAGE_TYPE_LEAF {
-			if page.getFreeSpace() < len(key)+len(value) {
-				// need to split
-				entries := page.getEntries()
-				// allocate left page
-				leftPage := kv.pager.newPage()
-				leftEntries := entries[:len(entries)/2]
-				leftPage.setEntries(leftEntries)
-				leftKey := leftPage.getEntries()[0].key
-				// allocate right page
-				rightPage := kv.pager.newPage()
-				rightEntries := entries[len(entries)/2:]
-				rightPage.setEntries(rightEntries)
-				rightKey := rightPage.getEntries()[0].key
-				if len(parents) > 0 {
-					parent := parents[len(parents)-1]
-					neededSpace := len(leftKey) + len(leftPage.getNumberAsBytes()) + len(rightKey) + len(rightPage.getNumberAsBytes())
-					if parent.getFreeSpace() < neededSpace {
-						// need to split parent
-					}
-					parentEntries := parent.getEntries()
-					parentEntries = append(parentEntries, pageTuple{
-						key:   leftKey,
-						value: leftPage.getNumberAsBytes(),
-					})
-					parentEntries = append(parentEntries, pageTuple{
-						key:   rightKey,
-						value: rightPage.getNumberAsBytes(),
-					})
-					parent.setEntries(parentEntries)
-					for _, p := range parents {
-						kv.pager.writePage(p.getNumber(), p.content)
-					}
-					kv.pager.writePage(leftPage.getNumber(), leftPage.content)
-					kv.pager.writePage(rightPage.getNumber(), rightPage.content)
-					return
-				}
-				// this is if the page is a root page because no parent
-				// turn page into internal page and allocate
-				page.setType(PAGE_TYPE_INTERNAL)
-				// left page needs to be the lowest left key that points to a page
-				pointers := []pageTuple{{
+	// TODO advancing to a leaf page would make for a nice function of its own
+	leafPage := kv.pager.getPage(pageNumber)
+	for leafPage.getType() != PAGE_TYPE_LEAF {
+		// Increment to the next page. TODO This should likely not be
+		// page.getValue(key), but should be something like page.search(key) in
+		// order to get to a leaf node
+		nextPage, found := leafPage.getValue(key)
+		if !found {
+			// TODO need to be searching not looking directly at key
+			return
+		}
+		pageNumber = binary.LittleEndian.Uint16(nextPage)
+		leafPage = kv.pager.getPage(pageNumber)
+	}
+	// At this point the loop has advanced "leafPage" to a leaf node and can try
+	// to update or insert the key value pair within "page".
+	// TODO this should likely be a smarter calculation that figures out if the
+	// key value can be updated or inserted without a split.
+	if leafPage.getFreeSpace() < len(key)+len(value) {
+		// TODO this logic of splitting ranges could likely be a function
+		// Need to split the node in order to insert
+		entries := leafPage.getEntries()
+		// allocate left page
+		leftPage := kv.pager.newPage()
+		leftEntries := entries[:len(entries)/2]
+		leftPage.setEntries(leftEntries)
+		leftKey := leftPage.getEntries()[0].key
+		// allocate right page
+		rightPage := kv.pager.newPage()
+		rightEntries := entries[len(entries)/2:]
+		rightPage.setEntries(rightEntries)
+		rightKey := rightPage.getEntries()[0].key
+		// TODO possibly flip this switch
+		if hasParent, parentPageNumber := leafPage.getParentPageNumber(); !hasParent {
+			newParent := kv.pager.newPage()
+			newParent.setType(PAGE_TYPE_INTERNAL)
+			newParent.setEntries([]pageTuple{
+				{
 					key:   leftKey,
 					value: leftPage.getNumberAsBytes(),
-				}}
-				// right page needs to be the lowest right key that points to a page
-				pointers = append(pointers, pageTuple{
+				},
+				{
 					key:   rightKey,
 					value: rightPage.getNumberAsBytes(),
-				})
-				page.setEntries(pointers)
-				kv.pager.writePage(page.number, page.content)
-				kv.pager.writePage(leftPage.number, leftPage.content)
-				kv.pager.writePage(rightPage.number, rightPage.content)
-				return
-			}
-			page.setValue(key, value)
-			kv.pager.writePage(pageNumber, page.content)
-			return
+				},
+			})
+		} else {
+			parentPage := kv.pager.getPage(parentPageNumber)
+			parentPage.internalInsert(
+				kv.pager,
+				leftKey,
+				leftPage.getNumberAsBytes(),
+				rightKey,
+				rightPage.getNumberAsBytes(),
+			)
 		}
-		v, found := page.getValue(key)
-		if !found {
-			return
-		}
-		parents = append(parents, page)
-		pageNumber = binary.LittleEndian.Uint16(v)
+		return
 	}
+	// No splitting needed just update or insert the value
+	leafPage.setValue(key, value)
 }
 
 const (
@@ -248,6 +239,12 @@ func allocatePage(pageNumber uint16, content []byte) *page {
 		np.setType(PAGE_TYPE_LEAF)
 	}
 	return np
+}
+
+func (p *page) getParentPageNumber() (hasParent bool, pageNumber uint16) {
+	// TODO actually store the parent page number and plan to store sibling
+	// pages.
+	return false, 0
 }
 
 func (p *page) getNumber() uint16 {
@@ -385,4 +382,56 @@ func (p *page) getValue(key []byte) ([]byte, bool) {
 		}
 	}
 	return []byte{}, false
+}
+
+func (p *page) internalInsert(pager *pager, k1, v1, k2, v2 []byte) {
+	// TODO should this be more involved with kv or a cursor of some sort
+	// instead of passing the parameter pager as a pointer?
+	// Check if the internal page can hold the proposed entries and perform
+	// another split or root node allocation if needed. This should have
+	// recursive behavior. Otherwise just insert the entries.
+	// TODO this if should do a more precise calculation.
+	if p.getFreeSpace() < len(k1)+len(v1)+len(k2)+len(v2) {
+		// Need to split
+		entries := p.getEntries()
+		// allocate left page
+		leftPage := pager.newPage()
+		leftEntries := entries[:len(entries)/2]
+		leftPage.setEntries(leftEntries)
+		leftKey := leftPage.getEntries()[0].key
+		// allocate right page
+		rightPage := pager.newPage()
+		rightEntries := entries[len(entries)/2:]
+		rightPage.setEntries(rightEntries)
+		rightKey := rightPage.getEntries()[0].key
+		if hasParent, parentPageNumber := p.getParentPageNumber(); hasParent {
+			// Try to insert the newly introduced pointers into the parent page.
+			parent := pager.getPage(parentPageNumber)
+			parent.internalInsert(
+				pager,
+				leftKey,
+				leftPage.getNumberAsBytes(),
+				rightKey,
+				rightPage.getNumberAsBytes(),
+			)
+		} else {
+			// The root node needs to be split. It is wise to keep the root node
+			// the same page so the table catalog doesn't need to be updated
+			// every time a root node splits.
+			p.setType(PAGE_TYPE_INTERNAL)
+			p.setEntries([]pageTuple{
+				{
+					key:   leftKey,
+					value: leftPage.getNumberAsBytes(),
+				},
+				{
+					key:   rightKey,
+					value: rightPage.getNumberAsBytes(),
+				},
+			})
+		}
+		return
+	}
+	p.setValue(k1, v1)
+	p.setValue(k2, v2)
 }
