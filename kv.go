@@ -57,8 +57,8 @@ func (kv *kv) Set(key, value []byte) {
 			// because the pager shouldn't know anything about a b tree or index
 			// or whatever.
 			parentPage := kv.pager.getPage(parentPageNumber)
-			parentPage.internalInsert(
-				kv.pager,
+			kv.parentInsert(
+				parentPage,
 				leftPage.getEntries()[0].key,
 				leftPage.getNumberAsBytes(),
 				rightPage.getEntries()[0].key,
@@ -111,4 +111,42 @@ func (kv *kv) splitPage(page *page) (left, right *page) {
 	rightEntries := entries[len(entries)/2:]
 	rightPage.setEntries(rightEntries)
 	return leftPage, rightPage
+}
+
+func (kv *kv) parentInsert(p *page, k1, v1, k2, v2 []byte) {
+	if !p.canInsertTuples([]pageTuple{
+		{key: k1, value: v1},
+		{key: k2, value: v2},
+	}) {
+		leftPage, rightPage := kv.splitPage(p)
+		hasParent, parentPageNumber := p.getParentPageNumber()
+		if hasParent {
+			parentParent := kv.pager.getPage(parentPageNumber)
+			kv.parentInsert(
+				parentParent,
+				leftPage.getEntries()[0].key,
+				leftPage.getNumberAsBytes(),
+				rightPage.getEntries()[0].key,
+				rightPage.getNumberAsBytes(),
+			)
+		} else {
+			// The root node needs to be split. It is wise to keep the root node
+			// the same page so the table catalog doesn't need to be updated
+			// every time a root node splits.
+			p.setType(PAGE_TYPE_INTERNAL)
+			p.setEntries([]pageTuple{
+				{
+					key:   leftPage.getEntries()[0].key,
+					value: leftPage.getNumberAsBytes(),
+				},
+				{
+					key:   rightPage.getEntries()[0].key,
+					value: rightPage.getNumberAsBytes(),
+				},
+			})
+		}
+		return
+	}
+	p.setValue(k1, v1)
+	p.setValue(k2, v2)
 }

@@ -4,6 +4,8 @@
 package main
 
 // TODO handle read write transactions
+// TODO handle page caching
+// TODO probably make this it's own package or better define public api
 
 import (
 	"bytes"
@@ -262,59 +264,4 @@ func (p *page) getValue(key []byte) ([]byte, bool) {
 		}
 	}
 	return []byte{}, false
-}
-
-func (p *page) internalInsert(pager *pager, k1, v1, k2, v2 []byte) {
-	// TODO should this be more involved with kv or a cursor of some sort
-	// instead of passing the parameter pager as a pointer?
-	// Check if the internal page can hold the proposed entries and perform
-	// another split or root node allocation if needed. This should have
-	// recursive behavior. Otherwise just insert the entries.
-	// TODO this if should do a more precise calculation.
-	if !p.canInsertTuples([]pageTuple{
-		{key: k1, value: v1},
-		{key: k2, value: v2},
-	}) {
-		// Need to split
-		entries := p.getEntries()
-		// allocate left page
-		leftPage := pager.newPage()
-		leftEntries := entries[:len(entries)/2]
-		leftPage.setEntries(leftEntries)
-		leftKey := leftPage.getEntries()[0].key
-		// allocate right page
-		rightPage := pager.newPage()
-		rightEntries := entries[len(entries)/2:]
-		rightPage.setEntries(rightEntries)
-		rightKey := rightPage.getEntries()[0].key
-		if hasParent, parentPageNumber := p.getParentPageNumber(); hasParent {
-			// Try to insert the newly introduced pointers into the parent page.
-			parent := pager.getPage(parentPageNumber)
-			parent.internalInsert(
-				pager,
-				leftKey,
-				leftPage.getNumberAsBytes(),
-				rightKey,
-				rightPage.getNumberAsBytes(),
-			)
-		} else {
-			// The root node needs to be split. It is wise to keep the root node
-			// the same page so the table catalog doesn't need to be updated
-			// every time a root node splits.
-			p.setType(PAGE_TYPE_INTERNAL)
-			p.setEntries([]pageTuple{
-				{
-					key:   leftKey,
-					value: leftPage.getNumberAsBytes(),
-				},
-				{
-					key:   rightKey,
-					value: rightPage.getNumberAsBytes(),
-				},
-			})
-		}
-		return
-	}
-	p.setValue(k1, v1)
-	p.setValue(k2, v2)
 }
