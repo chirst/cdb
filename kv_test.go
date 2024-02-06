@@ -125,8 +125,8 @@ func TestKv(t *testing.T) {
 		kv, _ := NewKv("")
 		k := []byte{1}
 		v := []byte{'n', 'e', 'd'}
-		kv.Set(k, v)
-		res, found := kv.Get(k)
+		kv.Set(0, k, v)
+		res, found := kv.Get(0, k)
 		if !found {
 			t.Errorf("expected value for %v to be found", k)
 		}
@@ -138,16 +138,16 @@ func TestKv(t *testing.T) {
 	t.Run("set page split", func(t *testing.T) {
 		kv, _ := NewKv("")
 		for i := 0; i < 256; i += 1 {
-			kv.Set([]byte{byte(i)}, []byte{1, 2, 3, 4, 5})
+			kv.Set(0, []byte{byte(i)}, []byte{1, 2, 3, 4, 5})
 		}
 		for i := 0; i < 139; i += 1 {
-			kv.Set([]byte{byte(i), 0}, []byte{1, 2, 3, 4, 5})
+			kv.Set(0, []byte{byte(i), 0}, []byte{1, 2, 3, 4, 5})
 		}
 		// this value causes a split
 		k := []byte{byte(140), 0}
 		v := []byte{1, 1, 1, 1, 1}
-		kv.Set(k, v)
-		res, found := kv.Get(k)
+		kv.Set(0, k, v)
+		res, found := kv.Get(0, k)
 		if !found {
 			t.Errorf("expected value for %v to be found", k)
 		}
