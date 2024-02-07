@@ -8,7 +8,7 @@ import (
 
 func TestPageHelpers(t *testing.T) {
 	c := make([]byte, PAGE_SIZE)
-	p := allocatePage(0, c)
+	p := allocatePage(1, c)
 
 	t.Run("get set internal", func(t *testing.T) {
 		p.setType(PAGE_TYPE_INTERNAL)
@@ -36,19 +36,19 @@ func TestPageHelpers(t *testing.T) {
 func TestPageSet(t *testing.T) {
 	t.Run("set", func(t *testing.T) {
 		c := make([]byte, PAGE_SIZE)
-		p := allocatePage(0, c)
+		p := allocatePage(1, c)
 
 		p.setValue([]byte{2}, []byte{'g', 'r', 'e', 'g'})
 		p.setValue([]byte{1}, []byte{'c', 'a', 'r', 'l'})
 		p.setValue([]byte{3}, []byte{'j', 'i', 'l', 'l', 'i', 'a', 'n'})
 
-		ExpectUint16(t, p.content, 2, 3)
-		ExpectUint16(t, p.content, 4, 4091)
-		ExpectUint16(t, p.content, 6, 4092)
-		ExpectUint16(t, p.content, 8, 4086)
-		ExpectUint16(t, p.content, 10, 4087)
-		ExpectUint16(t, p.content, 12, 4078)
-		ExpectUint16(t, p.content, 14, 4079)
+		ExpectUint16(t, p.content, 14, 3)
+		ExpectUint16(t, p.content, 16, 4091)
+		ExpectUint16(t, p.content, 18, 4092)
+		ExpectUint16(t, p.content, 20, 4086)
+		ExpectUint16(t, p.content, 22, 4087)
+		ExpectUint16(t, p.content, 24, 4078)
+		ExpectUint16(t, p.content, 26, 4079)
 
 		ExpectByteArray(t, p.content, 4078, []byte{3})
 		ExpectByteArray(t, p.content, 4079, []byte{'j', 'i', 'l', 'l', 'i', 'a', 'n'})
@@ -60,14 +60,14 @@ func TestPageSet(t *testing.T) {
 
 	t.Run("set update", func(t *testing.T) {
 		c := make([]byte, PAGE_SIZE)
-		p := allocatePage(0, c)
+		p := allocatePage(1, c)
 
 		p.setValue([]byte{1}, []byte{'c', 'a', 'r', 'l'})
 		p.setValue([]byte{1}, []byte{'r', 'o', 'l', 'f'})
 
-		ExpectUint16(t, p.content, 2, 1)
-		ExpectUint16(t, p.content, 4, 4091)
-		ExpectUint16(t, p.content, 6, 4092)
+		ExpectUint16(t, p.content, 14, 1)
+		ExpectUint16(t, p.content, 16, 4091)
+		ExpectUint16(t, p.content, 18, 4092)
 
 		ExpectByteArray(t, p.content, 4091, []byte{1})
 		ExpectByteArray(t, p.content, 4092, []byte{'r', 'o', 'l', 'f'})
@@ -77,7 +77,7 @@ func TestPageSet(t *testing.T) {
 func TestGet(t *testing.T) {
 	t.Run("get", func(t *testing.T) {
 		c := make([]byte, PAGE_SIZE)
-		p := allocatePage(0, c)
+		p := allocatePage(1, c)
 		n := []byte{'o', 'k', 'i', 'e'}
 		p.setValue([]byte{3}, []byte{'j', 'a', 'n', 'i', 'c', 'e'})
 		p.setValue([]byte{1}, n)
@@ -95,7 +95,7 @@ func TestGet(t *testing.T) {
 
 	t.Run("get not found", func(t *testing.T) {
 		c := make([]byte, PAGE_SIZE)
-		p := allocatePage(0, c)
+		p := allocatePage(1, c)
 
 		_, found := p.getValue([]byte{1})
 
@@ -125,8 +125,8 @@ func TestKv(t *testing.T) {
 		kv, _ := NewKv("")
 		k := []byte{1}
 		v := []byte{'n', 'e', 'd'}
-		kv.Set(0, k, v)
-		res, found := kv.Get(0, k)
+		kv.Set(1, k, v)
+		res, found := kv.Get(1, k)
 		if !found {
 			t.Errorf("expected value for %v to be found", k)
 		}
@@ -138,16 +138,16 @@ func TestKv(t *testing.T) {
 	t.Run("set page split", func(t *testing.T) {
 		kv, _ := NewKv("")
 		for i := 0; i < 256; i += 1 {
-			kv.Set(0, []byte{byte(i)}, []byte{1, 2, 3, 4, 5})
+			kv.Set(1, []byte{byte(i)}, []byte{1, 2, 3, 4, 5})
 		}
 		for i := 0; i < 139; i += 1 {
-			kv.Set(0, []byte{byte(i), 0}, []byte{1, 2, 3, 4, 5})
+			kv.Set(1, []byte{byte(i), 0}, []byte{1, 2, 3, 4, 5})
 		}
 		// this value causes a split
 		k := []byte{byte(140), 0}
 		v := []byte{1, 1, 1, 1, 1}
-		kv.Set(0, k, v)
-		res, found := kv.Get(0, k)
+		kv.Set(1, k, v)
+		res, found := kv.Get(1, k)
 		if !found {
 			t.Errorf("expected value for %v to be found", k)
 		}

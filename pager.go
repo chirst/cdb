@@ -21,14 +21,18 @@ const (
 	PAGE_TYPE_LEAF           = 2
 	PAGE_TYPE_OFFSET         = 0
 	PAGE_TYPE_SIZE           = 2
-	PAGE_RECORD_COUNT_OFFSET = PAGE_TYPE_SIZE
+	PAGE_POINTER_SIZE        = 4
+	PARENT_POINTER_OFFSET    = PAGE_TYPE_OFFSET + PAGE_TYPE_SIZE
+	LEFT_POINTER_OFFSET      = PARENT_POINTER_OFFSET + PAGE_POINTER_SIZE
+	RIGHT_POINTER_OFFSET     = LEFT_POINTER_OFFSET + PAGE_POINTER_SIZE
+	PAGE_RECORD_COUNT_OFFSET = RIGHT_POINTER_OFFSET + PAGE_POINTER_SIZE
 	PAGE_RECORD_COUNT_SIZE   = 2
-	PAGE_ROW_OFFSETS_OFFSET  = PAGE_TYPE_SIZE + PAGE_RECORD_COUNT_SIZE
+	PAGE_ROW_OFFSETS_OFFSET  = PAGE_RECORD_COUNT_OFFSET + PAGE_RECORD_COUNT_SIZE
 	PAGE_ROW_OFFSET_SIZE     = 2
 	ROOT_PAGE_START          = 3
-	ROOT_PAGE_NUMBER         = 0
 	FREE_PAGE_COUNTER_SIZE   = 2
 	FREE_PAGE_COUNTER_OFFSET = 0
+	EMPTY_PARENT_PAGE_NUMBER = 0
 )
 
 type pager struct {
@@ -49,24 +53,43 @@ func newPager(filename string) (*pager, error) {
 	}
 	cmpb := make([]byte, FREE_PAGE_COUNTER_SIZE)
 	f.ReadAt(cmpb, FREE_PAGE_COUNTER_OFFSET)
+	cmpi := binary.LittleEndian.Uint16(cmpb)
+	if cmpi == EMPTY_PARENT_PAGE_NUMBER {
+		// The max page cannot be the reserved page number
+		cmpi = 1
+	}
 	p := &pager{
 		file:           f,
-		currentMaxPage: binary.LittleEndian.Uint16(cmpb),
+		currentMaxPage: cmpi,
 	}
-	p.getPage(0)
+	p.getPage(1)
 	return p, nil
+}
+
+// TODO this is a dirty way of flushing pages
+var pageCache []*page = []*page{}
+
+func (p *pager) flush() {
+	for _, fp := range pageCache {
+		p.writePage(fp)
+	}
+	pageCache = []*page{}
 }
 
 func (p *pager) getPage(pageNumber uint16) *page {
 	page := make([]byte, PAGE_SIZE)
-	p.file.ReadAt(page, int64(ROOT_PAGE_START+pageNumber*PAGE_SIZE))
-	return allocatePage(pageNumber, page)
+	// Page number subtracted by one since 0 is reserved as a pointer to nothing
+	p.file.ReadAt(page, int64(ROOT_PAGE_START+(pageNumber-1)*PAGE_SIZE))
+	ap := allocatePage(pageNumber, page)
+	pageCache = append(pageCache, ap)
+	return ap
 }
 
 // TODO could possibly just take a page as an argument since pages should know
 // their number
-func (p *pager) writePage(pageNumber uint16, content []byte) error {
-	_, err := p.file.WriteAt(content, int64(ROOT_PAGE_START+pageNumber*PAGE_SIZE))
+func (p *pager) writePage(page *page) error {
+	// Page number subtracted by one since 0 is reserved as a pointer to nothing
+	_, err := p.file.WriteAt(page.content, int64(ROOT_PAGE_START+(page.getNumber()-1)*PAGE_SIZE))
 	if err != nil {
 		return err
 	}
@@ -89,11 +112,15 @@ func allocatePage(pageNumber uint16, content []byte) *page {
 	if np.getType() == PAGE_TYPE_UNKNOWN {
 		np.setType(PAGE_TYPE_LEAF)
 	}
+	pageCache = append(pageCache, np)
 	return np
 }
 
 // page is structured as follows:
 // - 2 bytes for the page type.
+// - 4 bytes for the parent pointer.
+// - 4 bytes for the left pointer.
+// - 4 bytes for the right pointer.
 // - 2 bytes for the count of tuples.
 // - 4 bytes for the tuple offsets (2 bytes key 2 bytes value) multiplied by the
 // amount of tuples.
@@ -115,9 +142,19 @@ type pageTuple struct {
 }
 
 func (p *page) getParentPageNumber() (hasParent bool, pageNumber uint16) {
-	// TODO actually store the parent page number and plan to store sibling
-	// pages.
-	return false, 0
+	pn := binary.LittleEndian.Uint16(p.content[PARENT_POINTER_OFFSET : PARENT_POINTER_OFFSET+PAGE_POINTER_SIZE])
+	// An unsigned int page number has to be reserved to tell if the current
+	// page is a root.
+	if pn == EMPTY_PARENT_PAGE_NUMBER {
+		return false, EMPTY_PARENT_PAGE_NUMBER
+	}
+	return true, pn
+}
+
+func (p *page) setParentPageNumber(pageNumber uint16) {
+	bpn := make([]byte, PAGE_POINTER_SIZE)
+	binary.LittleEndian.PutUint16(bpn, pageNumber)
+	copy(p.content[PARENT_POINTER_OFFSET:PARENT_POINTER_OFFSET+PAGE_POINTER_SIZE], bpn)
 }
 
 func (p *page) getNumber() uint16 {
@@ -138,7 +175,7 @@ func (p *page) getType() uint16 {
 func (p *page) setType(t uint16) {
 	bytePageType := make([]byte, PAGE_TYPE_SIZE)
 	binary.LittleEndian.PutUint16(bytePageType, t)
-	copy(p.content[PAGE_TYPE_OFFSET:PAGE_TYPE_SIZE], bytePageType)
+	copy(p.content[PAGE_TYPE_OFFSET:PAGE_TYPE_OFFSET+PAGE_TYPE_SIZE], bytePageType)
 }
 
 func (p *page) getRecordCount() uint16 {
@@ -169,13 +206,16 @@ func (p *page) canInsertTuples(pageTuples []pageTuple) bool {
 	s := 0
 	s += PAGE_TYPE_SIZE
 	s += PAGE_RECORD_COUNT_SIZE
+	s += PAGE_POINTER_SIZE // parent
+	s += PAGE_POINTER_SIZE // left
+	s += PAGE_POINTER_SIZE // right
 	entries := append(pageTuples, p.getEntries()...)
 	s += len(entries) * (PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE)
 	for _, e := range entries {
 		s += len(e.key)
 		s += len(e.value)
 	}
-	return PAGE_SIZE < s
+	return PAGE_SIZE >= s
 }
 
 func (p *page) setEntries(entries []pageTuple) {
