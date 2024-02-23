@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"log"
 )
@@ -43,8 +44,6 @@ func (kv *kv) Get(pageNumber uint16, key []byte) ([]byte, bool) {
 		}
 		v, found := page.getValue(key)
 		if !found {
-			// TODO need to really be doing a search option when looking at an
-			// internal node.
 			return nil, false
 		}
 		// Step 3. If the page is internal jump to the next page and go back to
@@ -69,15 +68,15 @@ func (kv *kv) Set(pageNumber uint16, key, value []byte) {
 		return
 	}
 	leftPage, rightPage := kv.splitPage(leafPage)
+	insertIntoOne(key, value, leftPage, rightPage)
 	hasParent, parentPageNumber := leafPage.getParentPageNumber()
 	if hasParent {
 		parentPage := kv.pager.getPage(parentPageNumber)
 		kv.parentInsert(parentPage, leftPage, rightPage)
 		return
 	}
-	newParent := kv.pager.newPage()
-	newParent.setType(PAGE_TYPE_INTERNAL)
-	newParent.setEntries([]pageTuple{
+	leafPage.setType(PAGE_TYPE_INTERNAL)
+	leafPage.setEntries([]pageTuple{
 		{
 			key:   leftPage.getEntries()[0].key,
 			value: leftPage.getNumberAsBytes(),
@@ -87,25 +86,39 @@ func (kv *kv) Set(pageNumber uint16, key, value []byte) {
 			value: rightPage.getNumberAsBytes(),
 		},
 	})
-	leftPage.setParentPageNumber(newParent.getNumber())
-	rightPage.setParentPageNumber(newParent.getNumber())
+	leftPage.setParentPageNumber(leafPage.getNumber())
+	rightPage.setParentPageNumber(leafPage.getNumber())
 }
 
-func (kv *kv) getLeafPage(pageNumber uint16, key []byte) *page {
-	leafPage := kv.pager.getPage(pageNumber)
-	for leafPage.getType() != PAGE_TYPE_LEAF {
-		// Increment to the next page. TODO This should likely not be
-		// page.getValue(key), but should be something like page.search(key) in
-		// order to get to a leaf node
-		nextPage, found := leafPage.getValue(key)
+func insertIntoOne(key, value []byte, p1, p2 *page) {
+	p1k := p1.getEntries()[0].key
+	p2k := p2.getEntries()[0].key
+	if bytes.Compare(p1k, key) == 0 {
+		p1.setEntries(append(p1.getEntries(), pageTuple{key, value}))
+		return
+	}
+	if bytes.Compare(p2k, key) == 0 {
+		p2.setEntries(append(p2.getEntries(), pageTuple{key, value}))
+		return
+	}
+	if bytes.Compare(p1k, key) == -1 && bytes.Compare(key, p2k) == -1 {
+		p1.setEntries(append(p1.getEntries(), pageTuple{key, value}))
+		return
+	}
+	p2.setEntries(append(p2.getEntries(), pageTuple{key, value}))
+}
+
+func (kv *kv) getLeafPage(nextPageNumber uint16, key []byte) *page {
+	p := kv.pager.getPage(nextPageNumber)
+	for p.getType() != PAGE_TYPE_LEAF {
+		nextPage, found := p.getValue(key)
 		if !found {
-			// TODO need to be searching not looking directly at key
 			return nil
 		}
-		pageNumber = binary.LittleEndian.Uint16(nextPage)
-		leafPage = kv.pager.getPage(pageNumber)
+		nextPageNumber = binary.LittleEndian.Uint16(nextPage)
+		p = kv.pager.getPage(nextPageNumber)
 	}
-	return leafPage
+	return p
 }
 
 func (kv *kv) splitPage(page *page) (left, right *page) {
@@ -135,11 +148,8 @@ func (kv *kv) parentInsert(p, l, r *page) {
 	leftPage, rightPage := kv.splitPage(p)
 	hasParent, parentPageNumber := p.getParentPageNumber()
 	if hasParent {
-		// TODO need to do calculation to see what left or right is appropriate
-		l.setParentPageNumber(leftPage.getNumber())
-		// TODO need to do calculation to see what left or right is appropriate
-		r.setParentPageNumber(rightPage.getNumber())
-
+		l.setParentPageNumber(parentPageNumber)
+		r.setParentPageNumber(parentPageNumber)
 		parentParent := kv.pager.getPage(parentPageNumber)
 		kv.parentInsert(parentParent, leftPage, rightPage)
 		return

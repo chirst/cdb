@@ -298,10 +298,28 @@ func (p *page) setValue(key, value []byte) {
 
 func (p *page) getValue(key []byte) ([]byte, bool) {
 	e := p.getEntries()
+	if p.getType() == PAGE_TYPE_LEAF {
+		for _, entry := range e {
+			c := bytes.Compare(entry.key, key)
+			if c == 0 { // entryKey == searchKey
+				return entry.value, true
+			}
+		}
+		return []byte{}, false
+	}
+	var prevEntry *pageTuple = nil
 	for _, entry := range e {
-		if bytes.Equal(entry.key, key) {
+		c := bytes.Compare(entry.key, key)
+		if c == 0 { // entryKey == searchKey
 			return entry.value, true
 		}
+		if c == 1 { // searchKey < entryKey
+			return prevEntry.value, true
+		}
+		prevEntry = &entry
+	}
+	if prevEntry != nil {
+		return prevEntry.value, true
 	}
 	return []byte{}, false
 }

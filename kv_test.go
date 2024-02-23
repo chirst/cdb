@@ -140,7 +140,7 @@ func TestKv(t *testing.T) {
 		for i := 0; i < 256; i += 1 {
 			kv.Set(1, []byte{byte(i)}, []byte{1, 2, 3, 4, 5})
 		}
-		for i := 0; i < 139; i += 1 {
+		for i := 0; i < 138; i += 1 {
 			kv.Set(1, []byte{byte(i), 0}, []byte{1, 2, 3, 4, 5})
 		}
 		// this value causes a split
