@@ -85,8 +85,6 @@ func (p *pager) getPage(pageNumber uint16) *page {
 	return ap
 }
 
-// TODO could possibly just take a page as an argument since pages should know
-// their number
 func (p *pager) writePage(page *page) error {
 	// Page number subtracted by one since 0 is reserved as a pointer to nothing
 	_, err := p.file.WriteAt(page.content, int64(ROOT_PAGE_START+(page.getNumber()-1)*PAGE_SIZE))

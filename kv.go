@@ -90,14 +90,16 @@ func (kv *kv) Set(pageNumber uint16, key, value []byte) {
 	rightPage.setParentPageNumber(leafPage.getNumber())
 }
 
+// TODO this is really messy and is a symptom of internal pages using two keys
+// to represent two ranges where only one key is necessary.
 func insertIntoOne(key, value []byte, p1, p2 *page) {
 	p1k := p1.getEntries()[0].key
 	p2k := p2.getEntries()[0].key
-	if bytes.Compare(p1k, key) == 0 {
+	if bytes.Equal(p1k, key) {
 		p1.setEntries(append(p1.getEntries(), pageTuple{key, value}))
 		return
 	}
-	if bytes.Compare(p2k, key) == 0 {
+	if bytes.Equal(p2k, key) {
 		p2.setEntries(append(p2.getEntries(), pageTuple{key, value}))
 		return
 	}
