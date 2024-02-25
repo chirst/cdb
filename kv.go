@@ -31,6 +31,8 @@ func (kv *kv) Get(pageNumber uint16, key []byte) ([]byte, bool) {
 		// randomly failing.
 		log.Fatal("specified a reserved page number")
 	}
+	kv.pager.beginRead()
+	defer kv.pager.endRead()
 	// Step 1. Need a source page to start from. Will start from 1 if there is
 	// no source page specified. This source page has to do with a table. 1 has
 	// to be the system catalog.
@@ -61,7 +63,8 @@ func (kv *kv) Set(pageNumber uint16, key, value []byte) {
 		// randomly failing.
 		log.Fatal("specified a reserved page number")
 	}
-	defer kv.pager.flush()
+	kv.pager.beginWrite()
+	defer kv.pager.endWrite()
 	leafPage := kv.getLeafPage(pageNumber, key)
 	if leafPage.canInsertTuple(key, value) {
 		leafPage.setValue(key, value)

@@ -3,7 +3,6 @@
 // memory. It also handles locking.
 package main
 
-// TODO handle read write transactions
 // TODO handle page caching
 // TODO probably make this it's own package or better define public api
 
@@ -12,6 +11,7 @@ import (
 	"encoding/binary"
 	"os"
 	"sort"
+	"sync"
 )
 
 const (
@@ -36,8 +36,23 @@ const (
 )
 
 type pager struct {
-	file           storage
+	// file implements storage
+	file storage
+	// currentMaxPage is a counter that holds a free page number
 	currentMaxPage uint16
+	// fileLock enables read and writes to be in isolation. The RWMutex allows
+	// either many readers or only one writer. RWMutex also prevents writer
+	// starvation by only allowing readers to acquire a lock if there is no
+	// pending writer.
+	fileLock sync.RWMutex
+	// isWriting is a helper flag that is true when a writer has acquired a
+	// lock. This enables functions distributing pages to the kv layer to mark
+	// the pages as dirty so the pages can be flushed to disk before the write
+	// lock is released.
+	isWriting bool
+	// dirtyPages is a list of pages that need to be flushed to disk in order
+	// for a write to be considered complete.
+	dirtyPages []*page
 }
 
 func newPager(filename string) (*pager, error) {
@@ -61,19 +76,36 @@ func newPager(filename string) (*pager, error) {
 	p := &pager{
 		file:           f,
 		currentMaxPage: cmpi,
+		fileLock:       sync.RWMutex{},
+		dirtyPages:     []*page{},
 	}
 	p.getPage(1)
 	return p, nil
 }
 
-// TODO this is a dirty way of flushing pages
-var pageCache []*page = []*page{}
+func (p *pager) beginRead() {
+	p.fileLock.RLock()
+}
 
-func (p *pager) flush() {
-	for _, fp := range pageCache {
+func (p *pager) endRead() {
+	p.fileLock.RUnlock()
+}
+
+func (p *pager) beginWrite() {
+	p.fileLock.Lock()
+	p.isWriting = true
+}
+
+func (p *pager) endWrite() {
+	// TODO copy file as roll back journal, remove journal before releasing
+	// write lock and handle hot journal on startup.
+	for _, fp := range p.dirtyPages {
 		p.writePage(fp)
 	}
-	pageCache = []*page{}
+	p.dirtyPages = []*page{}
+	p.writeMaxPageNumber()
+	p.isWriting = false
+	p.fileLock.Unlock()
 }
 
 func (p *pager) getPage(pageNumber uint16) *page {
@@ -81,7 +113,9 @@ func (p *pager) getPage(pageNumber uint16) *page {
 	// Page number subtracted by one since 0 is reserved as a pointer to nothing
 	p.file.ReadAt(page, int64(ROOT_PAGE_START+(pageNumber-1)*PAGE_SIZE))
 	ap := allocatePage(pageNumber, page)
-	pageCache = append(pageCache, ap)
+	if p.isWriting {
+		p.dirtyPages = append(p.dirtyPages, ap)
+	}
 	return ap
 }
 
@@ -94,14 +128,23 @@ func (p *pager) writePage(page *page) error {
 	return nil
 }
 
-func (p *pager) newPage() *page {
-	p.currentMaxPage += 1
+func (p *pager) writeMaxPageNumber() {
 	cmpb := make([]byte, FREE_PAGE_COUNTER_SIZE)
 	binary.LittleEndian.PutUint16(cmpb, p.currentMaxPage)
 	p.file.WriteAt(cmpb, FREE_PAGE_COUNTER_OFFSET)
-	return allocatePage(p.currentMaxPage, make([]byte, PAGE_SIZE))
 }
 
+func (p *pager) newPage() *page {
+	p.currentMaxPage += 1
+	np := allocatePage(p.currentMaxPage, make([]byte, PAGE_SIZE))
+	if p.isWriting {
+		p.dirtyPages = append(p.dirtyPages, np)
+	}
+	return np
+}
+
+// allocatePage not being a receiver allows for easy construction of a page
+// during unit testing.
 func allocatePage(pageNumber uint16, content []byte) *page {
 	np := &page{
 		content: content,
@@ -110,7 +153,6 @@ func allocatePage(pageNumber uint16, content []byte) *page {
 	if np.getType() == PAGE_TYPE_UNKNOWN {
 		np.setType(PAGE_TYPE_LEAF)
 	}
-	pageCache = append(pageCache, np)
 	return np
 }
 
