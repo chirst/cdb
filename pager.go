@@ -5,10 +5,14 @@ package main
 
 // TODO handle page caching
 // TODO probably make this it's own package or better define public api
+// TODO handle log fatal
+// TODO probably mock file creation with storage layer better
 
 import (
 	"bytes"
 	"encoding/binary"
+	"io"
+	"log"
 	"os"
 	"sort"
 	"sync"
@@ -33,6 +37,7 @@ const (
 	FREE_PAGE_COUNTER_SIZE   = 2
 	FREE_PAGE_COUNTER_OFFSET = 0
 	EMPTY_PARENT_PAGE_NUMBER = 0
+	JOURNAL_FILE_NAME        = "journal.db"
 )
 
 type pager struct {
@@ -60,11 +65,28 @@ func newPager(filename string) (*pager, error) {
 	if filename == "" {
 		f = newMemoryFile()
 	} else {
-		fl, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
-		if err != nil {
+		// Open journal file
+		jfl, err := os.OpenFile(JOURNAL_FILE_NAME, os.O_RDWR, 0644)
+		if err != nil && os.IsNotExist(err) {
+			// if journal file doesn't exist open normal db file
+			fl, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
+			if err != nil {
+				return nil, err
+			}
+			f = fl
+		} else if err != nil {
+			// if error opening journal fail
 			return nil, err
+		} else {
+			// if no error opening journal use journal as main file
+			fl, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
+			if err != nil {
+				return nil, err
+			}
+			io.Copy(fl, jfl)
+			os.Remove(JOURNAL_FILE_NAME)
+			f = fl
 		}
-		f = fl
 	}
 	cmpb := make([]byte, FREE_PAGE_COUNTER_SIZE)
 	f.ReadAt(cmpb, FREE_PAGE_COUNTER_OFFSET)
@@ -96,14 +118,29 @@ func (p *pager) beginWrite() {
 	p.isWriting = true
 }
 
+// endWrite creates a copy of the database called a journal. endWrite proceeds
+// to write pages to disk and removes the journal after all pages have been
+// written. If there is a crash while the pages are being written the journal
+// will be promoted to the main database file the next time the db is started.
 func (p *pager) endWrite() {
-	// TODO copy file as roll back journal, remove journal before releasing
-	// write lock and handle hot journal on startup.
+	f, err := os.OpenFile(JOURNAL_FILE_NAME, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if _, err = io.Copy(f, p.file); err != nil {
+		log.Fatal(err)
+	}
+	if f.Close() != nil {
+		log.Fatal(err)
+	}
 	for _, fp := range p.dirtyPages {
 		p.writePage(fp)
 	}
 	p.dirtyPages = []*page{}
 	p.writeMaxPageNumber()
+	if err = os.Remove(JOURNAL_FILE_NAME); err != nil {
+		log.Fatal(err)
+	}
 	p.isWriting = false
 	p.fileLock.Unlock()
 }
