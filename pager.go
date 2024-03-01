@@ -5,12 +5,10 @@ package main
 
 // TODO handle page caching
 // TODO probably make this it's own package or better define public api
-// TODO handle log fatal
 
 import (
 	"bytes"
 	"encoding/binary"
-	"log"
 	"sort"
 	"sync"
 )
@@ -101,9 +99,9 @@ func (p *pager) beginWrite() {
 // to write pages to disk and removes the journal after all pages have been
 // written. If there is a crash while the pages are being written the journal
 // will be promoted to the main database file the next time the db is started.
-func (p *pager) endWrite() {
+func (p *pager) endWrite() error {
 	if err := p.store.CreateJournal(); err != nil {
-		log.Fatal(err)
+		return err
 	}
 	for _, fp := range p.dirtyPages {
 		p.writePage(fp)
@@ -111,10 +109,11 @@ func (p *pager) endWrite() {
 	p.dirtyPages = []*page{}
 	p.writeMaxPageNumber()
 	if err := p.store.DeleteJournal(); err != nil {
-		log.Fatal(err)
+		return err
 	}
 	p.isWriting = false
 	p.fileLock.Unlock()
+	return nil
 }
 
 func (p *pager) getPage(pageNumber uint16) *page {

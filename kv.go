@@ -5,8 +5,10 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"log"
+	"errors"
 )
+
+var errorReservedPage = errors.New("specified a reserved page number")
 
 type kv struct {
 	pager *pager
@@ -25,11 +27,9 @@ func NewKv(useMemory bool) (*kv, error) {
 // Get returns a byte array corresponding to the key and a bool indicating if
 // the key was found. The pageNumber has to do with the root page of the
 // corresponding table. The system catalog uses the page number 1.
-func (kv *kv) Get(pageNumber uint16, key []byte) ([]byte, bool) {
+func (kv *kv) Get(pageNumber uint16, key []byte) ([]byte, bool, error) {
 	if pageNumber == EMPTY_PARENT_PAGE_NUMBER {
-		// TODO likely should be returning and handling errors and not just
-		// randomly failing.
-		log.Fatal("specified a reserved page number")
+		return nil, false, errorReservedPage
 	}
 	kv.pager.beginRead()
 	defer kv.pager.endRead()
@@ -42,11 +42,12 @@ func (kv *kv) Get(pageNumber uint16, key []byte) ([]byte, bool) {
 		//This can be determined by asking what the page type is.
 		if page.getType() == PAGE_TYPE_LEAF {
 			// 4. Find the value for the key and return.
-			return page.getValue(key)
+			b1, b2 := page.getValue(key)
+			return b1, b2, nil
 		}
 		v, found := page.getValue(key)
 		if !found {
-			return nil, false
+			return nil, false, nil
 		}
 		// Step 3. If the page is internal jump to the next page and go back to
 		// 2. This process guarantees that we are on a leaf page for step 4.
@@ -57,18 +58,15 @@ func (kv *kv) Get(pageNumber uint16, key []byte) ([]byte, bool) {
 // Set inserts or updates the value for the given key. The pageNumber has to do
 // with the root page of the corresponding table. The system catalog uses the
 // page number 1.
-func (kv *kv) Set(pageNumber uint16, key, value []byte) {
+func (kv *kv) Set(pageNumber uint16, key, value []byte) error {
 	if pageNumber == EMPTY_PARENT_PAGE_NUMBER {
-		// TODO likely should be returning and handling errors and not just
-		// randomly failing.
-		log.Fatal("specified a reserved page number")
+		return errorReservedPage
 	}
 	kv.pager.beginWrite()
-	defer kv.pager.endWrite()
 	leafPage := kv.getLeafPage(pageNumber, key)
 	if leafPage.canInsertTuple(key, value) {
 		leafPage.setValue(key, value)
-		return
+		return kv.pager.endWrite()
 	}
 	leftPage, rightPage := kv.splitPage(leafPage)
 	insertIntoOne(key, value, leftPage, rightPage)
@@ -76,7 +74,7 @@ func (kv *kv) Set(pageNumber uint16, key, value []byte) {
 	if hasParent {
 		parentPage := kv.pager.getPage(parentPageNumber)
 		kv.parentInsert(parentPage, leftPage, rightPage)
-		return
+		return kv.pager.endWrite()
 	}
 	leafPage.setType(PAGE_TYPE_INTERNAL)
 	leafPage.setEntries([]pageTuple{
@@ -91,6 +89,7 @@ func (kv *kv) Set(pageNumber uint16, key, value []byte) {
 	})
 	leftPage.setParentPageNumber(leafPage.getNumber())
 	rightPage.setParentPageNumber(leafPage.getNumber())
+	return kv.pager.endWrite()
 }
 
 // TODO this is really messy and is a symptom of internal pages using two keys

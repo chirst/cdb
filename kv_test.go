@@ -126,7 +126,10 @@ func TestKv(t *testing.T) {
 		k := []byte{1}
 		v := []byte{'n', 'e', 'd'}
 		kv.Set(1, k, v)
-		res, found := kv.Get(1, k)
+		res, found, err := kv.Get(1, k)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !found {
 			t.Errorf("expected value for %v to be found", k)
 		}
@@ -147,7 +150,10 @@ func TestKv(t *testing.T) {
 		k := []byte{byte(140), 0}
 		v := []byte{1, 1, 1, 1, 1}
 		kv.Set(1, k, v)
-		res, found := kv.Get(1, k)
+		res, found, err := kv.Get(1, k)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !found {
 			t.Errorf("expected value for %v to be found", k)
 		}
