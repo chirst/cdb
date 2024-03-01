@@ -12,8 +12,8 @@ type kv struct {
 	pager *pager
 }
 
-func NewKv(filename string) (*kv, error) {
-	pager, err := newPager(filename)
+func NewKv(useMemory bool) (*kv, error) {
+	pager, err := newPager(useMemory)
 	if err != nil {
 		return nil, err
 	}

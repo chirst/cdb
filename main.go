@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	kv, err := NewKv("db.db")
+	kv, err := NewKv(false)
 	if err != nil {
 		log.Fatal(err)
 	}

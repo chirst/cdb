@@ -6,14 +6,11 @@ package main
 // TODO handle page caching
 // TODO probably make this it's own package or better define public api
 // TODO handle log fatal
-// TODO probably mock file creation with storage layer better
 
 import (
 	"bytes"
 	"encoding/binary"
-	"io"
 	"log"
-	"os"
 	"sort"
 	"sync"
 )
@@ -37,12 +34,11 @@ const (
 	FREE_PAGE_COUNTER_SIZE   = 2
 	FREE_PAGE_COUNTER_OFFSET = 0
 	EMPTY_PARENT_PAGE_NUMBER = 0
-	JOURNAL_FILE_NAME        = "journal.db"
 )
 
 type pager struct {
-	// file implements storage
-	file storage
+	// store implements storage and is typically a file
+	store storage
 	// currentMaxPage is a counter that holds a free page number
 	currentMaxPage uint16
 	// fileLock enables read and writes to be in isolation. The RWMutex allows
@@ -60,43 +56,26 @@ type pager struct {
 	dirtyPages []*page
 }
 
-func newPager(filename string) (*pager, error) {
-	var f storage
-	if filename == "" {
-		f = newMemoryFile()
+func newPager(useMemory bool) (*pager, error) {
+	var s storage
+	var err error
+	if useMemory {
+		s = newMemoryStorage()
 	} else {
-		// Open journal file
-		jfl, err := os.OpenFile(JOURNAL_FILE_NAME, os.O_RDWR, 0644)
-		if err != nil && os.IsNotExist(err) {
-			// if journal file doesn't exist open normal db file
-			fl, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
-			if err != nil {
-				return nil, err
-			}
-			f = fl
-		} else if err != nil {
-			// if error opening journal fail
-			return nil, err
-		} else {
-			// if no error opening journal use journal as main file
-			fl, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
-			if err != nil {
-				return nil, err
-			}
-			io.Copy(fl, jfl)
-			os.Remove(JOURNAL_FILE_NAME)
-			f = fl
-		}
+		s, err = newFileStorage()
+	}
+	if err != nil {
+		return nil, err
 	}
 	cmpb := make([]byte, FREE_PAGE_COUNTER_SIZE)
-	f.ReadAt(cmpb, FREE_PAGE_COUNTER_OFFSET)
+	s.ReadAt(cmpb, FREE_PAGE_COUNTER_OFFSET)
 	cmpi := binary.LittleEndian.Uint16(cmpb)
 	if cmpi == EMPTY_PARENT_PAGE_NUMBER {
 		// The max page cannot be the reserved page number
 		cmpi = 1
 	}
 	p := &pager{
-		file:           f,
+		store:          s,
 		currentMaxPage: cmpi,
 		fileLock:       sync.RWMutex{},
 		dirtyPages:     []*page{},
@@ -123,14 +102,7 @@ func (p *pager) beginWrite() {
 // written. If there is a crash while the pages are being written the journal
 // will be promoted to the main database file the next time the db is started.
 func (p *pager) endWrite() {
-	f, err := os.OpenFile(JOURNAL_FILE_NAME, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if _, err = io.Copy(f, p.file); err != nil {
-		log.Fatal(err)
-	}
-	if f.Close() != nil {
+	if err := p.store.CreateJournal(); err != nil {
 		log.Fatal(err)
 	}
 	for _, fp := range p.dirtyPages {
@@ -138,7 +110,7 @@ func (p *pager) endWrite() {
 	}
 	p.dirtyPages = []*page{}
 	p.writeMaxPageNumber()
-	if err = os.Remove(JOURNAL_FILE_NAME); err != nil {
+	if err := p.store.DeleteJournal(); err != nil {
 		log.Fatal(err)
 	}
 	p.isWriting = false
@@ -148,7 +120,7 @@ func (p *pager) endWrite() {
 func (p *pager) getPage(pageNumber uint16) *page {
 	page := make([]byte, PAGE_SIZE)
 	// Page number subtracted by one since 0 is reserved as a pointer to nothing
-	p.file.ReadAt(page, int64(ROOT_PAGE_START+(pageNumber-1)*PAGE_SIZE))
+	p.store.ReadAt(page, int64(ROOT_PAGE_START+(pageNumber-1)*PAGE_SIZE))
 	ap := allocatePage(pageNumber, page)
 	if p.isWriting {
 		p.dirtyPages = append(p.dirtyPages, ap)
@@ -158,7 +130,7 @@ func (p *pager) getPage(pageNumber uint16) *page {
 
 func (p *pager) writePage(page *page) error {
 	// Page number subtracted by one since 0 is reserved as a pointer to nothing
-	_, err := p.file.WriteAt(page.content, int64(ROOT_PAGE_START+(page.getNumber()-1)*PAGE_SIZE))
+	_, err := p.store.WriteAt(page.content, int64(ROOT_PAGE_START+(page.getNumber()-1)*PAGE_SIZE))
 	if err != nil {
 		return err
 	}
@@ -168,7 +140,7 @@ func (p *pager) writePage(page *page) error {
 func (p *pager) writeMaxPageNumber() {
 	cmpb := make([]byte, FREE_PAGE_COUNTER_SIZE)
 	binary.LittleEndian.PutUint16(cmpb, p.currentMaxPage)
-	p.file.WriteAt(cmpb, FREE_PAGE_COUNTER_OFFSET)
+	p.store.WriteAt(cmpb, FREE_PAGE_COUNTER_OFFSET)
 }
 
 func (p *pager) newPage() *page {

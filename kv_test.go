@@ -122,7 +122,7 @@ func ExpectByteArray(t *testing.T, content []byte, start int, expeted []byte) {
 
 func TestKv(t *testing.T) {
 	t.Run("get", func(t *testing.T) {
-		kv, _ := NewKv("")
+		kv, _ := NewKv(true)
 		k := []byte{1}
 		v := []byte{'n', 'e', 'd'}
 		kv.Set(1, k, v)
@@ -136,7 +136,7 @@ func TestKv(t *testing.T) {
 	})
 
 	t.Run("set page split", func(t *testing.T) {
-		kv, _ := NewKv("")
+		kv, _ := NewKv(true)
 		for i := 0; i < 256; i += 1 {
 			kv.Set(1, []byte{byte(i)}, []byte{1, 2, 3, 4, 5})
 		}
