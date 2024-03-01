@@ -120,7 +120,7 @@ func (p *pager) getPage(pageNumber uint16) *page {
 	page := make([]byte, PAGE_SIZE)
 	// Page number subtracted by one since 0 is reserved as a pointer to nothing
 	p.store.ReadAt(page, int64(ROOT_PAGE_START+(pageNumber-1)*PAGE_SIZE))
-	ap := allocatePage(pageNumber, page)
+	ap := p.allocatePage(pageNumber, page)
 	if p.isWriting {
 		p.dirtyPages = append(p.dirtyPages, ap)
 	}
@@ -144,16 +144,14 @@ func (p *pager) writeMaxPageNumber() {
 
 func (p *pager) newPage() *page {
 	p.currentMaxPage += 1
-	np := allocatePage(p.currentMaxPage, make([]byte, PAGE_SIZE))
+	np := p.allocatePage(p.currentMaxPage, make([]byte, PAGE_SIZE))
 	if p.isWriting {
 		p.dirtyPages = append(p.dirtyPages, np)
 	}
 	return np
 }
 
-// allocatePage not being a receiver allows for easy construction of a page
-// during unit testing.
-func allocatePage(pageNumber uint16, content []byte) *page {
+func (p *pager) allocatePage(pageNumber uint16, content []byte) *page {
 	np := &page{
 		content: content,
 		number:  pageNumber,
