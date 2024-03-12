@@ -3,17 +3,28 @@
 // memory. It also handles locking.
 package main
 
-// TODO handle page caching
 // TODO probably make this it's own package or better define public api
+// TODO pageCache should have different implementations that can be swapped.
+// Should also have customizable cache size. Could also have command to clear
+// cache.
+// TODO think about the similarities and differences between pageCache and
+// dirtyPages. Think about why the pageCache stores raw bytes of a page and the
+// dirtyPages stores a pointer to a page. Think about how caching should be
+// handled during a write. For instance, newPage hits dirtyPages, but not
+// pageCache.
 
 import (
 	"bytes"
 	"encoding/binary"
+	"log"
 	"sort"
 	"sync"
+
+	"github.com/golang/groupcache/lru"
 )
 
 const (
+	PAGE_CACHE_SIZE          = 1000
 	PAGE_SIZE                = 4096
 	PAGE_TYPE_UNKNOWN        = 0
 	PAGE_TYPE_INTERNAL       = 1
@@ -52,6 +63,9 @@ type pager struct {
 	// dirtyPages is a list of pages that need to be flushed to disk in order
 	// for a write to be considered complete.
 	dirtyPages []*page
+	// pageCache caches frequently used pages to reduce expensive reads from
+	// the filesystem.
+	pageCache pageCache
 }
 
 func newPager(useMemory bool) (*pager, error) {
@@ -77,6 +91,7 @@ func newPager(useMemory bool) (*pager, error) {
 		currentMaxPage: cmpi,
 		fileLock:       sync.RWMutex{},
 		dirtyPages:     []*page{},
+		pageCache:      newLruPageCache(PAGE_CACHE_SIZE),
 	}
 	p.getPage(1)
 	return p, nil
@@ -105,6 +120,7 @@ func (p *pager) endWrite() error {
 	}
 	for _, fp := range p.dirtyPages {
 		p.writePage(fp)
+		p.pageCache.remove(fp.getNumber())
 	}
 	p.dirtyPages = []*page{}
 	p.writeMaxPageNumber()
@@ -117,6 +133,13 @@ func (p *pager) endWrite() error {
 }
 
 func (p *pager) getPage(pageNumber uint16) *page {
+	if v, hit := p.pageCache.get(pageNumber); hit {
+		ap := p.allocatePage(pageNumber, v)
+		if p.isWriting {
+			p.dirtyPages = append(p.dirtyPages, ap)
+		}
+		return ap
+	}
 	page := make([]byte, PAGE_SIZE)
 	// Page number subtracted by one since 0 is reserved as a pointer to nothing
 	p.store.ReadAt(page, int64(ROOT_PAGE_START+(pageNumber-1)*PAGE_SIZE))
@@ -124,6 +147,7 @@ func (p *pager) getPage(pageNumber uint16) *page {
 	if p.isWriting {
 		p.dirtyPages = append(p.dirtyPages, ap)
 	}
+	p.pageCache.add(pageNumber, page)
 	return ap
 }
 
@@ -368,4 +392,41 @@ func (p *page) getValue(key []byte) ([]byte, bool) {
 		return prevEntry.value, true
 	}
 	return []byte{}, false
+}
+
+type pageCache interface {
+	get(pageNumber uint16) ([]byte, bool)
+	add(key uint16, value []byte)
+	remove(key uint16)
+}
+
+// lruPageCache implements pageCache
+type lruPageCache struct {
+	cache *lru.Cache
+}
+
+func (c *lruPageCache) get(key uint16) (value []byte, hit bool) {
+	v, ok := c.cache.Get(key)
+	if !ok {
+		return nil, false
+	}
+	vb, ok := v.([]byte)
+	if !ok {
+		log.Fatal("lru cache is not byte array")
+	}
+	return vb, true
+}
+
+func (c *lruPageCache) add(key uint16, value []byte) {
+	c.cache.Add(key, value)
+}
+
+func (c *lruPageCache) remove(key uint16) {
+	c.cache.Remove(key)
+}
+
+func newLruPageCache(maxSize int) *lruPageCache {
+	return &lruPageCache{
+		cache: lru.New(maxSize),
+	}
 }
