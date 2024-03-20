@@ -34,6 +34,32 @@ func TestPageHelpers(t *testing.T) {
 			t.Errorf("want %d got %d", want, res)
 		}
 	})
+
+	t.Run("get page number", func(t *testing.T) {
+		var want uint16 = 1
+		res := p.getNumber()
+		if res != want {
+			t.Errorf("want %d got %d", want, res)
+		}
+	})
+
+	t.Run("get page number as bytes", func(t *testing.T) {
+		var want uint16 = 1
+		res := p.getNumberAsBytes()
+		ExpectUint16(t, res, 0, want)
+	})
+
+	t.Run("get set parent page number", func(t *testing.T) {
+		var wantPn uint16 = 12
+		p.setParentPageNumber(wantPn)
+		gotHas, gotPn := p.getParentPageNumber()
+		if gotHas != true {
+			t.Error("want true got false")
+		}
+		if gotPn != wantPn {
+			t.Errorf("got %d want %d", gotPn, wantPn)
+		}
+	})
 }
 
 func TestPageSet(t *testing.T) {
