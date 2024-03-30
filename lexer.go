@@ -18,6 +18,7 @@ const (
 	IDENTIFIER
 	SPACE
 	EOF
+	SEMI
 )
 
 func (*lexer) isKeyword(w string) bool {
@@ -57,6 +58,8 @@ func (l *lexer) getToken() token {
 		return l.scanAsterisk()
 	case l.isDigit(r):
 		return l.scanDigit()
+	case l.isSemi(r):
+		return l.scanSemi()
 	}
 	return token{EOF, ""}
 }
@@ -109,6 +112,11 @@ func (l *lexer) scanAsterisk() token {
 	return token{tokenType: ASTERISK, value: l.src[l.start:l.end]}
 }
 
+func (l *lexer) scanSemi() token {
+	l.next()
+	return token{tokenType: SEMI, value: l.src[l.start:l.end]}
+}
+
 func (*lexer) isEOF(r rune) bool {
 	return r == 0
 }
@@ -127,4 +135,8 @@ func (*lexer) isAsterisk(r rune) bool {
 
 func (*lexer) isDigit(r rune) bool {
 	return unicode.IsDigit(r)
+}
+
+func (*lexer) isSemi(r rune) bool {
+	return r == ';'
 }

@@ -40,6 +40,15 @@ func TestLexer(t *testing.T) {
 				{IDENTIFIER, "12"},
 			},
 		},
+		{
+			sql: "SELECT 1;",
+			expected: []token{
+				{KEYWORD, "SELECT"},
+				{SPACE, " "},
+				{IDENTIFIER, "1"},
+				{SEMI, ";"},
+			},
+		},
 	}
 	for _, c := range cases {
 		l := &lexer{
