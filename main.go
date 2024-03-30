@@ -25,3 +25,35 @@ func main() {
 	}
 	explain(cs)
 }
+
+// pager should have a catalogue in memory. When a write transaction is started
+// there should be a bit set by the opcode indicating whether or not the
+// transaction will update the catalogue. This means a write transaction started
+// and bit flipped. Right before the write transaction is closed the schema
+// cache will be repopulated. On startup the schema cache will also need to be
+// hydrated sometime soon after any pending journals are dealt with. This should
+// mean not having to make a bunch of stuff to create tables right away.
+
+// init
+// transaction for write
+// createBTree store root page number in p2
+// OpenWrite on schema table
+// NewRowid for schema table
+// String for 'table' r1
+// String for 'Foo' r2
+// String for 'Foo' r3
+// Copy btree page into r4
+// MakeRecord for r1..r4
+// Insert record
+// halt
+//
+// table, Foo, Foo, 2, CREATE TABLE Product (ProductID INTEGER PRIMARY KEY AUTOINCREMENT, Name TEXT)
+//
+// CREATE TABLE sqlite_schema(
+//   type text,
+//   name text,
+//   tbl_name text,
+//   rootpage integer,
+//   sql text
+// );
+//
