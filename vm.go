@@ -23,14 +23,34 @@ type cmd struct {
 	// p5 int
 }
 
-func execute(commands map[int]command) {
+type executeResult struct {
+	err  error
+	text string
+	// resultRows []resultRow
+}
+
+type executionPlan struct {
+	explain  bool
+	commands map[int]command
+}
+
+func run(plan executionPlan) executeResult {
+	if plan.explain {
+		return executeResult{
+			text: explain(plan),
+		}
+	}
+	return execute(plan)
+}
+
+func execute(plan executionPlan) executeResult {
 	i := 1
 	var currentCommand command
 	for {
-		if len(commands) < i {
+		if len(plan.commands) < i {
 			break
 		}
-		currentCommand = commands[i]
+		currentCommand = plan.commands[i]
 		res := currentCommand.execute()
 		if res.doHalt {
 			break
@@ -41,26 +61,29 @@ func execute(commands map[int]command) {
 			i = res.nextAddress
 		}
 	}
+	return executeResult{}
 }
 
 func formatExplain(c string, p1, p2, p3 int, comment string) string {
 	return fmt.Sprintf("%-13s %-4d %-4d %-4d %s", c, p1, p2, p3, comment)
 }
 
-func explain(commands map[int]command) {
+func explain(plan executionPlan) string {
+	ret := ""
 	i := 1
 	var currentCommand command
-	fmt.Println("addr opcode        p1   p2   p3   comment")
-	fmt.Println("---- ------------- ---- ---- ---- -------------")
+	ret = ret + fmt.Sprint("addr opcode        p1   p2   p3   comment\n")
+	ret = ret + fmt.Sprint("---- ------------- ---- ---- ---- -------------\n")
 	for {
-		if len(commands) < i {
+		if len(plan.commands) < i {
 			break
 		}
-		currentCommand = commands[i]
+		currentCommand = plan.commands[i]
 		currentCommand.explain()
-		fmt.Printf("%-4d %s\n", i, currentCommand.explain())
+		ret = ret + fmt.Sprintf("%-4d %s\n", i, currentCommand.explain())
 		i = i + 1
 	}
+	return ret
 }
 
 // initCmd jumps to the instruction at address p2.
@@ -188,6 +211,18 @@ func (c *nextCmd) execute() cmdRes {
 func (c *nextCmd) explain() string {
 	comment := fmt.Sprintf("Advance cursor %d. If there are items jump to addr[%d]", c.p1, c.p2)
 	return formatExplain("Next", c.p1, c.p2, c.p3, comment)
+}
+
+// integerCmd stores the integer in p1 in register p2.
+type integerCmd cmd
+
+func (c *integerCmd) execute() cmdRes {
+	return cmdRes{}
+}
+
+func (c *integerCmd) explain() string {
+	comment := fmt.Sprintf("Store integer %d in register[%d]", c.p1, c.p2)
+	return formatExplain("Integer", c.p1, c.p2, c.p3, comment)
 }
 
 /*

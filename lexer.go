@@ -35,8 +35,9 @@ const (
 
 func (*lexer) isKeyword(w string) bool {
 	ws := map[string]bool{
-		"SELECT": true,
-		"FROM":   true,
+		"EXPLAIN": true,
+		"SELECT":  true,
+		"FROM":    true,
 	}
 	return ws[w]
 }
@@ -120,7 +121,7 @@ func (l *lexer) scanDigit() token {
 	for l.isDigit(l.peek(l.end)) {
 		l.next()
 	}
-	return token{tokenType: IDENTIFIER, value: l.src[l.start:l.end]}
+	return token{tokenType: LITERAL, value: l.src[l.start:l.end]}
 }
 
 func (l *lexer) scanAsterisk() token {

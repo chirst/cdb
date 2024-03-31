@@ -3,6 +3,15 @@
 // Machine) to be ran.
 package main
 
-func getPlanFor(stmt selectStmt) map[int]command {
-	return map[int]command{}
+func (s *selectStmt) getPlan() executionPlan {
+	commands := map[int]command{
+		1: &initCmd{p2: 1},
+		2: &integerCmd{p1: 1, p2: 1},
+		3: &resultRowCmd{p1: 1, p2: 1},
+		4: &haltCmd{},
+	}
+	return executionPlan{
+		explain:  s.explain,
+		commands: commands,
+	}
 }

@@ -25,11 +25,13 @@ func TestLexer(t *testing.T) {
 			},
 		},
 		{
-			sql: "SELECT 1",
+			sql: "EXPLAIN SELECT 1",
 			expected: []token{
+				{KEYWORD, "EXPLAIN"},
+				{WHITESPACE, " "},
 				{KEYWORD, "SELECT"},
 				{WHITESPACE, " "},
-				{IDENTIFIER, "1"},
+				{LITERAL, "1"},
 			},
 		},
 		{
@@ -37,7 +39,7 @@ func TestLexer(t *testing.T) {
 			expected: []token{
 				{KEYWORD, "SELECT"},
 				{WHITESPACE, " "},
-				{IDENTIFIER, "12"},
+				{LITERAL, "12"},
 			},
 		},
 		{
@@ -45,7 +47,7 @@ func TestLexer(t *testing.T) {
 			expected: []token{
 				{KEYWORD, "SELECT"},
 				{WHITESPACE, " "},
-				{IDENTIFIER, "1"},
+				{LITERAL, "1"},
 				{SEPARATOR, ";"},
 			},
 		},

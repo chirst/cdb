@@ -1,30 +1,47 @@
 package main
 
+import (
+	"bufio"
+	"fmt"
+	"os"
+)
+
 func main() {
-	// kv, err := NewKv(false)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// kv.Set(1, []byte{1}, []byte{'c', 'a', 'r', 'l'})
-	// res, found, err := kv.Get(1, []byte{1})
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// fmt.Print(res, found)
-	cs := map[int]command{
-		1:  &initCmd{p2: 9},
-		2:  &openReadCmd{p1: 0, p2: 1},
-		3:  &rewindCmd{p1: 0, p2: 8},
-		4:  &rowIdCmd{p1: 0, p2: 1},
-		5:  &columnCmd{p1: 0, p2: 1, p3: 2},
-		6:  &resultRowCmd{p1: 1, p2: 2},
-		7:  &nextCmd{p1: 0, p2: 4},
-		8:  &haltCmd{},
-		9:  &transactionCmd{},
-		10: &gotoCmd{p2: 2},
+	db := newDb()
+	reader := bufio.NewScanner(os.Stdin)
+	for getInput(reader) {
+		input := reader.Text()
+		results := db.execute(input)
+		for _, result := range results {
+			if result.err != nil {
+				fmt.Printf("Err: %s", result.err.Error())
+				continue
+			}
+			if result.text != "" {
+				fmt.Print(result.text)
+			}
+		}
 	}
-	explain(cs)
 }
+
+func getInput(reader *bufio.Scanner) bool {
+	fmt.Printf("cdb > ")
+	return reader.Scan()
+}
+
+// cs := map[int]command{
+// 	1:  &initCmd{p2: 9},
+// 	2:  &openReadCmd{p1: 0, p2: 1},
+// 	3:  &rewindCmd{p1: 0, p2: 8},
+// 	4:  &rowIdCmd{p1: 0, p2: 1},
+// 	5:  &columnCmd{p1: 0, p2: 1, p3: 2},
+// 	6:  &resultRowCmd{p1: 1, p2: 2},
+// 	7:  &nextCmd{p1: 0, p2: 4},
+// 	8:  &haltCmd{},
+// 	9:  &transactionCmd{},
+// 	10: &gotoCmd{p2: 2},
+// }
+// explain(cs)
 
 // pager should have a catalogue in memory. When a write transaction is started
 // there should be a bit set by the opcode indicating whether or not the

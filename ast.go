@@ -3,11 +3,21 @@
 // structure is intended to be compiled into a execution plan.
 package main
 
-type stmtList []any
+type stmtList []stmt
+
+type stmt interface {
+	getPlan() executionPlan
+}
 
 const (
 	stmtTypeSelect = iota + 1
 )
+
+func newSelectStmt(explain bool) *selectStmt {
+	return &selectStmt{
+		explain: explain,
+	}
+}
 
 type selectStmt struct {
 	explain       bool
@@ -16,9 +26,18 @@ type selectStmt struct {
 }
 
 type resultColumn struct {
-	all bool // SELECT * FROM foo f;
+	all  bool // SELECT * FROM foo f;
+	expr *expr
 }
 
 type tableOrSubQuery struct {
 	tableName string
+}
+
+type expr struct {
+	literal *literal
+}
+
+type literal struct {
+	numericLiteral int
 }

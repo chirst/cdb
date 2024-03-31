@@ -3,12 +3,16 @@
 // Machine).
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 type parser struct {
-	tokens []token
-	start  int
-	end    int
+	tokens  []token
+	start   int
+	end     int
+	explain bool
 }
 
 func newParser(tokens []token) *parser {
@@ -30,8 +34,12 @@ func (p *parser) parse() (stmtList, error) {
 	}
 }
 
-func (p *parser) parseStmt() (any, error) {
+func (p *parser) parseStmt() (stmt, error) {
 	t := p.tokens[p.start]
+	if t.value == "EXPLAIN" {
+		p.explain = true
+		t = p.nextNonSpace()
+	}
 	switch t.value {
 	case "SELECT":
 		return p.parseSelect()
@@ -40,19 +48,34 @@ func (p *parser) parseStmt() (any, error) {
 }
 
 func (p *parser) parseSelect() (*selectStmt, error) {
-	stmt := &selectStmt{}
+	stmt := newSelectStmt(p.explain)
 	if p.tokens[p.end].value != "SELECT" {
 		return nil, fmt.Errorf("unexpected token %s", p.tokens[p.end].value)
 	}
 	r := p.nextNonSpace()
-	if r.tokenType != PUNCTUATOR {
+	if r.tokenType != PUNCTUATOR && r.tokenType != LITERAL {
 		return nil, fmt.Errorf("unexpected token %s", r.value)
 	}
-	stmt.resultColumns = append(stmt.resultColumns, resultColumn{
-		all: true,
-	})
+	resultCol := resultColumn{
+		all: r.value == "*",
+	}
+	if r.tokenType == LITERAL {
+		numericLiteral, err := strconv.Atoi(r.value)
+		if err != nil {
+			return nil, fmt.Errorf("cannot convert %s to numeric literal", r.value)
+		}
+		resultCol.expr = &expr{
+			literal: &literal{
+				numericLiteral: numericLiteral,
+			},
+		}
+	}
+	stmt.resultColumns = append(stmt.resultColumns, resultCol)
 
 	f := p.nextNonSpace()
+	if f.tokenType == EOF || f.value == ";" {
+		return stmt, nil
+	}
 	if f.tokenType != KEYWORD || f.value != "FROM" {
 		return nil, fmt.Errorf("unexpected token %s", f.value)
 	}
@@ -69,16 +92,28 @@ func (p *parser) parseSelect() (*selectStmt, error) {
 
 func (p *parser) nextNonSpace() token {
 	p.end = p.end + 1
+	if p.end > len(p.tokens)-1 {
+		return token{EOF, ""}
+	}
 	for p.tokens[p.end].tokenType == WHITESPACE {
 		p.end = p.end + 1
+		if p.end > len(p.tokens)-1 {
+			return token{EOF, ""}
+		}
 	}
 	return p.tokens[p.end]
 }
 
 func (p *parser) peekNextNonSpace() token {
 	tmpEnd := p.end
+	if tmpEnd > len(p.tokens)-1 {
+		return token{EOF, ""}
+	}
 	for p.tokens[tmpEnd].tokenType == WHITESPACE {
 		tmpEnd = tmpEnd + 1
+		if tmpEnd > len(p.tokens)-1 {
+			return token{EOF, ""}
+		}
 	}
 	return p.tokens[tmpEnd]
 }

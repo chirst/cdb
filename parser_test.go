@@ -14,6 +14,8 @@ func TestParseSelect(t *testing.T) {
 	cases := []selectTestCase{
 		{
 			input: []token{
+				{KEYWORD, "EXPLAIN"},
+				{WHITESPACE, " "},
 				{KEYWORD, "SELECT"},
 				{WHITESPACE, " "},
 				{PUNCTUATOR, "*"},
@@ -23,12 +25,35 @@ func TestParseSelect(t *testing.T) {
 				{IDENTIFIER, "foo"},
 			},
 			expect: stmtList{&selectStmt{
+				explain: true,
 				from: &tableOrSubQuery{
 					tableName: "foo",
 				},
 				resultColumns: []resultColumn{
 					{
 						all: true,
+					},
+				},
+			}},
+		},
+		{
+			input: []token{
+				{KEYWORD, "EXPLAIN"},
+				{WHITESPACE, " "},
+				{KEYWORD, "SELECT"},
+				{WHITESPACE, " "},
+				{LITERAL, "1"},
+			},
+			expect: stmtList{&selectStmt{
+				explain: true,
+				resultColumns: []resultColumn{
+					{
+						all: false,
+						expr: &expr{
+							literal: &literal{
+								numericLiteral: 1,
+							},
+						},
 					},
 				},
 			}},

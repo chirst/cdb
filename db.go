@@ -4,17 +4,11 @@
 // as http.
 package main
 
-import (
-	"fmt"
-)
-
 type db struct{}
 
 func newDb() *db {
 	return &db{}
 }
-
-type executeResult struct{}
 
 func (*db) execute(sql string) []executeResult {
 	l := newLexer(sql)
@@ -24,25 +18,14 @@ func (*db) execute(sql string) []executeResult {
 	if err != nil {
 		// bail
 	}
-	var plans []map[int]command
+	var plans []executionPlan
 	for _, s := range statements {
-		p, err := getPlanForStatement(s)
-		if err != nil {
-			// bail
-		}
+		p := s.getPlan()
 		plans = append(plans, p)
 	}
 	var executeResults []executeResult
 	for _, p := range plans {
-		execute(p)
-		// executeResults = append(executeResults, execute(p))
+		executeResults = append(executeResults, run(p))
 	}
 	return executeResults
-}
-
-func getPlanForStatement(s any) (map[int]command, error) {
-	if selectS, ok := s.(selectStmt); ok {
-		return getPlanFor(selectS), nil
-	}
-	return nil, fmt.Errorf("unexpected type %v", s)
 }
