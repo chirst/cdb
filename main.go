@@ -8,9 +8,18 @@ import (
 
 func main() {
 	db := newDb()
+	fmt.Println("Welcome to cdb. Type .exit to exit")
 	reader := bufio.NewScanner(os.Stdin)
 	for getInput(reader) {
 		input := reader.Text()
+		if len(input) == 0 {
+			continue
+		}
+		if input[0] == '.' {
+			if input == ".exit" {
+				os.Exit(0)
+			}
+		}
 		results := db.execute(input)
 		for _, result := range results {
 			if result.err != nil {
