@@ -15,14 +15,14 @@ func TestParseSelect(t *testing.T) {
 		{
 			input: []token{
 				{KEYWORD, "SELECT"},
-				{SPACE, " "},
-				{ASTERISK, "*"},
-				{SPACE, " "},
+				{WHITESPACE, " "},
+				{PUNCTUATOR, "*"},
+				{WHITESPACE, " "},
 				{KEYWORD, "FROM"},
-				{SPACE, " "},
+				{WHITESPACE, " "},
 				{IDENTIFIER, "foo"},
 			},
-			expect: stmtList{selectStmt{
+			expect: stmtList{&selectStmt{
 				from: &tableOrSubQuery{
 					tableName: "foo",
 				},
@@ -38,7 +38,10 @@ func TestParseSelect(t *testing.T) {
 		p := parser{
 			tokens: c.input,
 		}
-		ret := p.parse()
+		ret, err := p.parse()
+		if err != nil {
+			t.Errorf("want no err got err %s", err.Error())
+		}
 		if !reflect.DeepEqual(ret, c.expect) {
 			t.Errorf("got %#v want %#v", ret, c.expect)
 		}

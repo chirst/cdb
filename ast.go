@@ -1,8 +1,6 @@
 // ast (Abstract Syntax Tree) defines a data structure representing a SQL
-// program. This data structure is typically generated from a parser and lexer.
-// This data structure is intended to be compiled into a execution plan.
-//
-// This implementation is inspired by https://www.sqlite.org/lang.html
+// program. This data structure is generated from the parser. This data
+// structure is intended to be compiled into a execution plan.
 package main
 
 type stmtList []any

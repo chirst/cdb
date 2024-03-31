@@ -1,3 +1,4 @@
+// lexer creates tokens from a sql string. The tokens are fed into the parser.
 package main
 
 import (
@@ -13,12 +14,23 @@ type token struct {
 }
 
 const (
+	// KEYWORD is a reserved word. For example SELECT, FROM, or WHERE.
 	KEYWORD = iota + 1
-	ASTERISK
+	// IDENTIFIER is a name assigned by the programmer. For example a table
+	// or column name.
 	IDENTIFIER
-	SPACE
+	//  WHITESPACE is a space, tab, or newline.
+	WHITESPACE
+	// EOF (End of file) is the end of input.
 	EOF
-	SEMI
+	// SEPARATOR is punctuation such as "(", ",", ";".
+	SEPARATOR
+	// OPERATOR is a symbol that operates on arguments.
+	OPERATOR
+	// PUNCTUATOR is punctuation that is neither a separator or operator.
+	PUNCTUATOR
+	// LITERAL is a numeric or text value.
+	LITERAL
 )
 
 func (*lexer) isKeyword(w string) bool {
@@ -50,8 +62,8 @@ func (l *lexer) getToken() token {
 	l.start = l.end
 	r := l.peek(l.start)
 	switch {
-	case l.isSpace(r):
-		return l.scanSpace()
+	case l.isWhiteSpace(r):
+		return l.scanWhiteSpace()
 	case l.isLetter(r):
 		return l.scanWord()
 	case l.isAsterisk(r):
@@ -78,12 +90,12 @@ func (l *lexer) next() rune {
 	return r
 }
 
-func (l *lexer) scanSpace() token {
+func (l *lexer) scanWhiteSpace() token {
 	l.next()
-	for l.isSpace(l.peek(l.end)) {
+	for l.isWhiteSpace(l.peek(l.end)) {
 		l.next()
 	}
-	return token{tokenType: SPACE, value: l.src[l.start:l.end]}
+	return token{tokenType: WHITESPACE, value: l.src[l.start:l.end]}
 }
 
 func (l *lexer) scanWord() token {
@@ -109,19 +121,15 @@ func (l *lexer) scanDigit() token {
 
 func (l *lexer) scanAsterisk() token {
 	l.next()
-	return token{tokenType: ASTERISK, value: l.src[l.start:l.end]}
+	return token{tokenType: PUNCTUATOR, value: l.src[l.start:l.end]}
 }
 
 func (l *lexer) scanSemi() token {
 	l.next()
-	return token{tokenType: SEMI, value: l.src[l.start:l.end]}
+	return token{tokenType: SEPARATOR, value: l.src[l.start:l.end]}
 }
 
-func (*lexer) isEOF(r rune) bool {
-	return r == 0
-}
-
-func (*lexer) isSpace(r rune) bool {
+func (*lexer) isWhiteSpace(r rune) bool {
 	return r == ' ' || r == '\t' || r == '\n'
 }
 
