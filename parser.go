@@ -11,6 +11,10 @@ type parser struct {
 	end    int
 }
 
+func newParser(tokens []token) *parser {
+	return &parser{tokens: tokens}
+}
+
 func (p *parser) parse() (stmtList, error) {
 	ret := stmtList{}
 	for {

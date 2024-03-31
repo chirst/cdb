@@ -54,7 +54,7 @@ func TestLexer(t *testing.T) {
 		l := &lexer{
 			src: c.sql,
 		}
-		ret := l.Lex()
+		ret := l.lex()
 		if !reflect.DeepEqual(ret, c.expected) {
 			t.Errorf("expected %#v got %#v", c.expected, ret)
 		}

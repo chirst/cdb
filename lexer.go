@@ -47,7 +47,11 @@ type lexer struct {
 	end   int
 }
 
-func (l *lexer) Lex() []token {
+func newLexer(src string) *lexer {
+	return &lexer{src: src}
+}
+
+func (l *lexer) lex() []token {
 	ret := []token{}
 	for {
 		t := l.getToken()
