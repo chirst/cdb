@@ -29,6 +29,9 @@ func main() {
 			if result.text != "" {
 				fmt.Print(result.text)
 			}
+			if result.text == "" {
+				printRows(result.resultRows)
+			}
 		}
 	}
 }
@@ -36,6 +39,19 @@ func main() {
 func getInput(reader *bufio.Scanner) bool {
 	fmt.Printf("cdb > ")
 	return reader.Scan()
+}
+
+func printRows(resultRows [][]any) {
+	fmt.Println("| ? |")
+	fmt.Println("+---+")
+	for _, row := range resultRows {
+		sr := "|"
+		for _, col := range row {
+			sr = sr + fmt.Sprintf(" %v |", col)
+		}
+		sr = sr + "\n"
+		fmt.Print(sr)
+	}
 }
 
 // cs := map[int]command{

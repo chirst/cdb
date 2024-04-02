@@ -6,7 +6,7 @@ package main
 import "fmt"
 
 type command interface {
-	execute() cmdRes
+	execute(registers map[int]any, resultRows *[][]any) cmdRes
 	explain() string
 }
 
@@ -24,9 +24,9 @@ type cmd struct {
 }
 
 type executeResult struct {
-	err  error
-	text string
-	// resultRows []resultRow
+	err        error
+	text       string
+	resultRows [][]any
 }
 
 type executionPlan struct {
@@ -44,6 +44,8 @@ func run(plan executionPlan) executeResult {
 }
 
 func execute(plan executionPlan) executeResult {
+	registers := map[int]any{}
+	resultRows := &[][]any{}
 	i := 1
 	var currentCommand command
 	for {
@@ -51,7 +53,7 @@ func execute(plan executionPlan) executeResult {
 			break
 		}
 		currentCommand = plan.commands[i]
-		res := currentCommand.execute()
+		res := currentCommand.execute(registers, resultRows)
 		if res.doHalt {
 			break
 		}
@@ -61,7 +63,9 @@ func execute(plan executionPlan) executeResult {
 			i = res.nextAddress
 		}
 	}
-	return executeResult{}
+	return executeResult{
+		resultRows: *resultRows,
+	}
 }
 
 func formatExplain(c string, p1, p2, p3 int, comment string) string {
@@ -89,7 +93,7 @@ func explain(plan executionPlan) string {
 // initCmd jumps to the instruction at address p2.
 type initCmd cmd
 
-func (c *initCmd) execute() cmdRes {
+func (c *initCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
 	return cmdRes{
 		nextAddress: c.p2,
 	}
@@ -103,7 +107,7 @@ func (c *initCmd) explain() string {
 // haltCmd ends the routine.
 type haltCmd cmd
 
-func (c *haltCmd) execute() cmdRes {
+func (c *haltCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
 	return cmdRes{
 		doHalt: true,
 	}
@@ -116,7 +120,7 @@ func (c *haltCmd) explain() string {
 // transactionCmd starts a read or write transaction
 type transactionCmd cmd
 
-func (c *transactionCmd) execute() cmdRes {
+func (c *transactionCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
 	return cmdRes{}
 }
 
@@ -127,7 +131,7 @@ func (c *transactionCmd) explain() string {
 // gotoCmd goes to the address at p2
 type gotoCmd cmd
 
-func (c *gotoCmd) execute() cmdRes {
+func (c *gotoCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
 	return cmdRes{
 		nextAddress: c.p2,
 	}
@@ -141,7 +145,7 @@ func (c *gotoCmd) explain() string {
 // openReadCmd opens a read cursor at page p2 with the identifier p1
 type openReadCmd cmd
 
-func (c *openReadCmd) execute() cmdRes {
+func (c *openReadCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
 	return cmdRes{}
 }
 
@@ -154,7 +158,7 @@ func (c *openReadCmd) explain() string {
 // empty it jumps to p2.
 type rewindCmd cmd
 
-func (c *rewindCmd) execute() cmdRes {
+func (c *rewindCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
 	return cmdRes{}
 }
 
@@ -167,7 +171,7 @@ func (c *rewindCmd) explain() string {
 // cursor p1 is on
 type rowIdCmd cmd
 
-func (c *rowIdCmd) execute() cmdRes {
+func (c *rowIdCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
 	return cmdRes{}
 }
 
@@ -179,7 +183,7 @@ func (c *rowIdCmd) explain() string {
 // columnCmd stores in register p3 the value pointed to for the p2-th column.
 type columnCmd cmd
 
-func (c *columnCmd) execute() cmdRes {
+func (c *columnCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
 	return cmdRes{}
 }
 
@@ -188,10 +192,18 @@ func (c *columnCmd) explain() string {
 	return formatExplain("Column", c.p1, c.p2, c.p3, comment)
 }
 
-// resultRowCmd stores p1 through p1+p2 as a single row of results
+// resultRowCmd stores p1 through p1+p2-1 as a single row of results
 type resultRowCmd cmd
 
-func (c *resultRowCmd) execute() cmdRes {
+func (c *resultRowCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
+	row := []any{}
+	i := c.p1
+	end := c.p1 + c.p2 - 1
+	for i <= end {
+		row = append(row, registers[i])
+		i = i + 1
+	}
+	*resultRows = append(*resultRows, row)
 	return cmdRes{}
 }
 
@@ -204,7 +216,7 @@ func (c *resultRowCmd) explain() string {
 // through. If there is more for the cursor to process jump to p2.
 type nextCmd cmd
 
-func (c *nextCmd) execute() cmdRes {
+func (c *nextCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
 	return cmdRes{}
 }
 
@@ -216,7 +228,8 @@ func (c *nextCmd) explain() string {
 // integerCmd stores the integer in p1 in register p2.
 type integerCmd cmd
 
-func (c *integerCmd) execute() cmdRes {
+func (c *integerCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
+	registers[c.p2] = c.p1
 	return cmdRes{}
 }
 
