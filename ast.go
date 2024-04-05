@@ -9,19 +9,13 @@ type stmt interface {
 	getPlan() executionPlan
 }
 
-const (
-	stmtTypeSelect = iota + 1
-)
-
-func newSelectStmt(explain bool) *selectStmt {
-	return &selectStmt{
-		explain: explain,
-	}
+type stmtBase struct {
+	explain bool
 }
 
 type selectStmt struct {
-	explain       bool
-	from          *tableOrSubQuery
+	*stmtBase
+	from          *from
 	resultColumns []resultColumn
 }
 
@@ -30,7 +24,7 @@ type resultColumn struct {
 	expr *expr
 }
 
-type tableOrSubQuery struct {
+type from struct {
 	tableName string
 }
 

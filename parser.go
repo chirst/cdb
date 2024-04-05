@@ -9,10 +9,9 @@ import (
 )
 
 type parser struct {
-	tokens  []token
-	start   int
-	end     int
-	explain bool
+	tokens []token
+	start  int
+	end    int
 }
 
 func newParser(tokens []token) *parser {
@@ -36,19 +35,20 @@ func (p *parser) parse() (stmtList, error) {
 
 func (p *parser) parseStmt() (stmt, error) {
 	t := p.tokens[p.start]
+	sb := &stmtBase{}
 	if t.value == "EXPLAIN" {
-		p.explain = true
+		sb.explain = true
 		t = p.nextNonSpace()
 	}
 	switch t.value {
 	case "SELECT":
-		return p.parseSelect()
+		return p.parseSelect(sb)
 	}
 	return nil, fmt.Errorf("unexpected token %s", t.value)
 }
 
-func (p *parser) parseSelect() (*selectStmt, error) {
-	stmt := newSelectStmt(p.explain)
+func (p *parser) parseSelect(sb *stmtBase) (*selectStmt, error) {
+	stmt := &selectStmt{stmtBase: sb}
 	if p.tokens[p.end].value != "SELECT" {
 		return nil, fmt.Errorf("unexpected token %s", p.tokens[p.end].value)
 	}
@@ -84,7 +84,7 @@ func (p *parser) parseSelect() (*selectStmt, error) {
 	if t.tokenType != IDENTIFIER {
 		return nil, fmt.Errorf("unexpected token %s", t.value)
 	}
-	stmt.from = &tableOrSubQuery{
+	stmt.from = &from{
 		tableName: t.value,
 	}
 	return stmt, nil

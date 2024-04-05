@@ -25,8 +25,10 @@ func TestParseSelect(t *testing.T) {
 				{IDENTIFIER, "foo"},
 			},
 			expect: stmtList{&selectStmt{
-				explain: true,
-				from: &tableOrSubQuery{
+				stmtBase: &stmtBase{
+					explain: true,
+				},
+				from: &from{
 					tableName: "foo",
 				},
 				resultColumns: []resultColumn{
@@ -45,7 +47,9 @@ func TestParseSelect(t *testing.T) {
 				{LITERAL, "1"},
 			},
 			expect: stmtList{&selectStmt{
-				explain: true,
+				stmtBase: &stmtBase{
+					explain: true,
+				},
 				resultColumns: []resultColumn{
 					{
 						all: false,
