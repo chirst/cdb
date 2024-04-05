@@ -5,9 +5,7 @@ package main
 
 type stmtList []stmt
 
-type stmt interface {
-	getPlan() executionPlan
-}
+type stmt interface{}
 
 type stmtBase struct {
 	explain bool

@@ -20,8 +20,14 @@ func (*db) execute(sql string) []executeResult {
 	}
 	var plans []executionPlan
 	for _, s := range statements {
-		p := s.getPlan()
-		plans = append(plans, p)
+		var p *executionPlan
+		if ss, ok := s.(*selectStmt); ok {
+			p = getSelectPlan(ss)
+		}
+		if p == nil {
+			panic("statement not implemented")
+		}
+		plans = append(plans, *p)
 	}
 	var executeResults []executeResult
 	for _, p := range plans {
