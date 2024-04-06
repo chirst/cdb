@@ -12,6 +12,13 @@ package main
 // dirtyPages stores a pointer to a page. Think about how caching should be
 // handled during a write. For instance, newPage hits dirtyPages, but not
 // pageCache.
+// TODO pager should have a catalogue in memory. When a write transaction is
+// started there should be a bit set by the opcode indicating whether or not the
+// transaction will update the catalogue. This means a write transaction started
+// and bit flipped. Right before the write transaction is closed the schema
+// cache will be repopulated. On startup the schema cache will also need to be
+// hydrated sometime soon after any pending journals are dealt with. This should
+// mean not having to make a bunch of stuff to create tables right away.
 
 import (
 	"bytes"
