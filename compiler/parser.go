@@ -1,7 +1,7 @@
 // parser takes tokens from the lexer and produces an AST (Abstract Syntax
 // Tree). The AST is consumed to make a query plan ran by the vm (Virtual
 // Machine).
-package main
+package compiler
 
 import (
 	"fmt"
@@ -14,12 +14,12 @@ type parser struct {
 	end    int
 }
 
-func newParser(tokens []token) *parser {
+func NewParser(tokens []token) *parser {
 	return &parser{tokens: tokens}
 }
 
-func (p *parser) parse() (stmtList, error) {
-	ret := stmtList{}
+func (p *parser) Parse() (StmtList, error) {
+	ret := StmtList{}
 	for {
 		r, err := p.parseStmt()
 		if err != nil {
@@ -33,11 +33,11 @@ func (p *parser) parse() (stmtList, error) {
 	}
 }
 
-func (p *parser) parseStmt() (stmt, error) {
+func (p *parser) parseStmt() (Stmt, error) {
 	t := p.tokens[p.start]
-	sb := &stmtBase{}
+	sb := &StmtBase{}
 	if t.value == "EXPLAIN" {
-		sb.explain = true
+		sb.Explain = true
 		t = p.nextNonSpace()
 	}
 	switch t.value {
@@ -47,8 +47,8 @@ func (p *parser) parseStmt() (stmt, error) {
 	return nil, fmt.Errorf("unexpected token %s", t.value)
 }
 
-func (p *parser) parseSelect(sb *stmtBase) (*selectStmt, error) {
-	stmt := &selectStmt{stmtBase: sb}
+func (p *parser) parseSelect(sb *StmtBase) (*SelectStmt, error) {
+	stmt := &SelectStmt{StmtBase: sb}
 	if p.tokens[p.end].value != "SELECT" {
 		return nil, fmt.Errorf("unexpected token %s", p.tokens[p.end].value)
 	}
@@ -56,21 +56,21 @@ func (p *parser) parseSelect(sb *stmtBase) (*selectStmt, error) {
 	if r.tokenType != PUNCTUATOR && r.tokenType != LITERAL {
 		return nil, fmt.Errorf("unexpected token %s", r.value)
 	}
-	resultCol := resultColumn{
-		all: r.value == "*",
+	resultCol := ResultColumn{
+		All: r.value == "*",
 	}
 	if r.tokenType == LITERAL {
 		numericLiteral, err := strconv.Atoi(r.value)
 		if err != nil {
 			return nil, fmt.Errorf("cannot convert %s to numeric literal", r.value)
 		}
-		resultCol.expr = &expr{
-			literal: &literal{
-				numericLiteral: numericLiteral,
+		resultCol.Expr = &Expr{
+			Literal: &Literal{
+				NumericLiteral: numericLiteral,
 			},
 		}
 	}
-	stmt.resultColumns = append(stmt.resultColumns, resultCol)
+	stmt.ResultColumns = append(stmt.ResultColumns, resultCol)
 
 	f := p.nextNonSpace()
 	if f.tokenType == EOF || f.value == ";" {
@@ -84,8 +84,8 @@ func (p *parser) parseSelect(sb *stmtBase) (*selectStmt, error) {
 	if t.tokenType != IDENTIFIER {
 		return nil, fmt.Errorf("unexpected token %s", t.value)
 	}
-	stmt.from = &from{
-		tableName: t.value,
+	stmt.From = &From{
+		TableName: t.value,
 	}
 	return stmt, nil
 }

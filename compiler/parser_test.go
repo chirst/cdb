@@ -1,4 +1,4 @@
-package main
+package compiler
 
 import (
 	"reflect"
@@ -7,7 +7,7 @@ import (
 
 type selectTestCase struct {
 	input  []token
-	expect stmtList
+	expect StmtList
 }
 
 func TestParseSelect(t *testing.T) {
@@ -24,16 +24,16 @@ func TestParseSelect(t *testing.T) {
 				{WHITESPACE, " "},
 				{IDENTIFIER, "foo"},
 			},
-			expect: stmtList{&selectStmt{
-				stmtBase: &stmtBase{
-					explain: true,
+			expect: StmtList{&SelectStmt{
+				StmtBase: &StmtBase{
+					Explain: true,
 				},
-				from: &from{
-					tableName: "foo",
+				From: &From{
+					TableName: "foo",
 				},
-				resultColumns: []resultColumn{
+				ResultColumns: []ResultColumn{
 					{
-						all: true,
+						All: true,
 					},
 				},
 			}},
@@ -46,16 +46,16 @@ func TestParseSelect(t *testing.T) {
 				{WHITESPACE, " "},
 				{LITERAL, "1"},
 			},
-			expect: stmtList{&selectStmt{
-				stmtBase: &stmtBase{
-					explain: true,
+			expect: StmtList{&SelectStmt{
+				StmtBase: &StmtBase{
+					Explain: true,
 				},
-				resultColumns: []resultColumn{
+				ResultColumns: []ResultColumn{
 					{
-						all: false,
-						expr: &expr{
-							literal: &literal{
-								numericLiteral: 1,
+						All: false,
+						Expr: &Expr{
+							Literal: &Literal{
+								NumericLiteral: 1,
 							},
 						},
 					},
@@ -64,10 +64,8 @@ func TestParseSelect(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		p := parser{
-			tokens: c.input,
-		}
-		ret, err := p.parse()
+		p := NewParser(c.input)
+		ret, err := p.Parse()
 		if err != nil {
 			t.Errorf("want no err got err %s", err.Error())
 		}

@@ -1,4 +1,4 @@
-package main
+package compiler
 
 import (
 	"reflect"
@@ -53,10 +53,8 @@ func TestLexer(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		l := &lexer{
-			src: c.sql,
-		}
-		ret := l.lex()
+		l := NewLexer(c.sql)
+		ret := l.Lex()
 		if !reflect.DeepEqual(ret, c.expected) {
 			t.Errorf("expected %#v got %#v", c.expected, ret)
 		}

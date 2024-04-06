@@ -3,7 +3,83 @@
 // Machine) to be ran.
 package main
 
-func getSelectPlan(s *selectStmt) *executionPlan {
+import "github.com/chirst/cdb/compiler"
+
+func newLogicalPlanner() *logicalPlanner {
+	return &logicalPlanner{
+		catalog: newCatalog(),
+	}
+}
+
+func (l *logicalPlanner) forSelect(s *compiler.SelectStmt) *projection {
+	p := &projection{}
+	tablePageNumber := 0
+	var tableColumns []string
+	if s.From != nil && s.From.TableName != "" {
+		tpn, err := l.catalog.getPageNumber(s.From.TableName)
+		if err != nil {
+			// handle
+		}
+		tcs, err := l.catalog.getColumns(s.From.TableName)
+		if err != nil {
+			// handle
+		}
+		tablePageNumber = tpn
+		tableColumns = tcs
+	}
+	if tablePageNumber == 0 { // no table meaning this is a literal
+		var ls []literal
+		for _, rc := range s.ResultColumns {
+			ls = append(ls, literal{numeric: rc.Expr.Literal.NumericLiteral})
+		}
+		p.childSet = set{
+			literals: ls,
+		}
+	} else {
+		// only supports select * for now
+		for _, rc := range s.ResultColumns {
+			if rc.All {
+				p.fields = tableColumns
+			}
+		}
+		p.childSet = set{
+			rootPage: tablePageNumber,
+		}
+	}
+	return p
+}
+
+type logicalPlanner struct {
+	catalog *catalog
+}
+
+// Projection is the root of a logical query plan.
+type projection struct {
+	// Fields to project from the set.
+	fields []string
+	// Set that is being projected.
+	childSet set
+}
+
+type set struct {
+	// Page number of corresponding index or table.
+	rootPage int
+	// Literal values when no table is specified.
+	literals []literal
+}
+
+type literal struct {
+	numeric int
+	// text    string
+}
+
+type physicalPlanner struct{}
+
+func newPhysicalPlanner() *physicalPlanner {
+	return &physicalPlanner{}
+}
+
+func (*physicalPlanner) forSelect(projection *projection) *executionPlan {
 	commands := map[int]command{
 		1: &initCmd{p2: 2},
 		2: &integerCmd{p1: 1, p2: 1},
@@ -11,14 +87,7 @@ func getSelectPlan(s *selectStmt) *executionPlan {
 		4: &haltCmd{},
 	}
 	return &executionPlan{
-		explain:  s.explain,
+		explain:  true,
 		commands: commands,
 	}
-}
-
-type logicalPlan struct {
-}
-
-func getLogicalSelectPlan(s *selectStmt) *logicalPlan {
-	return &logicalPlan{}
 }

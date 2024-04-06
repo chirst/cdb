@@ -1,5 +1,5 @@
 // lexer creates tokens from a sql string. The tokens are fed into the parser.
-package main
+package compiler
 
 import (
 	"unicode"
@@ -48,11 +48,11 @@ type lexer struct {
 	end   int
 }
 
-func newLexer(src string) *lexer {
+func NewLexer(src string) *lexer {
 	return &lexer{src: src}
 }
 
-func (l *lexer) lex() []token {
+func (l *lexer) Lex() []token {
 	ret := []token{}
 	for {
 		t := l.getToken()

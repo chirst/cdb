@@ -4,6 +4,8 @@
 // as http.
 package main
 
+import "github.com/chirst/cdb/compiler"
+
 type db struct{}
 
 func newDb() *db {
@@ -11,23 +13,26 @@ func newDb() *db {
 }
 
 func (*db) execute(sql string) []executeResult {
-	l := newLexer(sql)
-	tokens := l.lex()
-	p := newParser(tokens)
-	statements, err := p.parse()
+	l := compiler.NewLexer(sql)
+	tokens := l.Lex()
+	p := compiler.NewParser(tokens)
+	statements, err := p.Parse()
 	if err != nil {
 		// bail
 	}
 	var plans []executionPlan
 	for _, s := range statements {
-		var p *executionPlan
-		if ss, ok := s.(*selectStmt); ok {
-			p = getSelectPlan(ss)
+		logicalPlanner := newLogicalPlanner()
+		physicalPlanner := newPhysicalPlanner()
+		var executionPlan *executionPlan
+		if ss, ok := s.(*compiler.SelectStmt); ok {
+			lp := logicalPlanner.forSelect(ss)
+			executionPlan = physicalPlanner.forSelect(lp)
 		}
-		if p == nil {
+		if executionPlan == nil {
 			panic("statement not implemented")
 		}
-		plans = append(plans, *p)
+		plans = append(plans, *executionPlan)
 	}
 	var executeResults []executeResult
 	for _, p := range plans {
