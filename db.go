@@ -27,7 +27,7 @@ func (*db) execute(sql string) []executeResult {
 		var executionPlan *executionPlan
 		if ss, ok := s.(*compiler.SelectStmt); ok {
 			lp := logicalPlanner.forSelect(ss)
-			executionPlan = physicalPlanner.forSelect(lp)
+			executionPlan = physicalPlanner.forSelect(lp, ss.Explain)
 		}
 		if executionPlan == nil {
 			panic("statement not implemented")
