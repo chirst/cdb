@@ -31,34 +31,8 @@ func TestParseSelect(t *testing.T) {
 				From: &From{
 					TableName: "foo",
 				},
-				ResultColumns: []ResultColumn{
-					{
-						All: true,
-					},
-				},
-			}},
-		},
-		{
-			input: []token{
-				{KEYWORD, "EXPLAIN"},
-				{WHITESPACE, " "},
-				{KEYWORD, "SELECT"},
-				{WHITESPACE, " "},
-				{LITERAL, "1"},
-			},
-			expect: StmtList{&SelectStmt{
-				StmtBase: &StmtBase{
-					Explain: true,
-				},
-				ResultColumns: []ResultColumn{
-					{
-						All: false,
-						Expr: &Expr{
-							Literal: &Literal{
-								NumericLiteral: 1,
-							},
-						},
-					},
+				ResultColumn: ResultColumn{
+					All: true,
 				},
 			}},
 		},

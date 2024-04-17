@@ -13,23 +13,14 @@ type StmtBase struct {
 
 type SelectStmt struct {
 	*StmtBase
-	From          *From
-	ResultColumns []ResultColumn
+	From         *From
+	ResultColumn ResultColumn
 }
 
 type ResultColumn struct {
-	All  bool // SELECT * FROM foo f;
-	Expr *Expr
+	All bool
 }
 
 type From struct {
 	TableName string
-}
-
-type Expr struct {
-	Literal *Literal
-}
-
-type Literal struct {
-	NumericLiteral int
 }

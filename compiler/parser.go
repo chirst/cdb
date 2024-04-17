@@ -5,7 +5,6 @@ package compiler
 
 import (
 	"fmt"
-	"strconv"
 )
 
 type parser struct {
@@ -56,21 +55,9 @@ func (p *parser) parseSelect(sb *StmtBase) (*SelectStmt, error) {
 	if r.tokenType != PUNCTUATOR && r.tokenType != LITERAL {
 		return nil, fmt.Errorf("unexpected token %s", r.value)
 	}
-	resultCol := ResultColumn{
+	stmt.ResultColumn = ResultColumn{
 		All: r.value == "*",
 	}
-	if r.tokenType == LITERAL {
-		numericLiteral, err := strconv.Atoi(r.value)
-		if err != nil {
-			return nil, fmt.Errorf("cannot convert %s to numeric literal", r.value)
-		}
-		resultCol.Expr = &Expr{
-			Literal: &Literal{
-				NumericLiteral: numericLiteral,
-			},
-		}
-	}
-	stmt.ResultColumns = append(stmt.ResultColumns, resultCol)
 
 	f := p.nextNonSpace()
 	if f.tokenType == EOF || f.value == ";" {
