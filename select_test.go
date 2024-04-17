@@ -35,16 +35,15 @@ func TestLogicalPlan(t *testing.T) {
 
 func TestPhysicalPlan(t *testing.T) {
 	expectedCommands := map[int]command{
-		1:  &initCmd{p2: 2},
-		2:  &transactionCmd{},
-		3:  &openReadCmd{p2: 2},
-		4:  &rewindCmd{},
-		5:  &rowIdCmd{},
-		6:  &columnCmd{},
-		7:  &columnCmd{},
-		8:  &resultRowCmd{},
-		9:  &nextCmd{},
-		10: &haltCmd{},
+		1: &initCmd{p2: 2},
+		2: &transactionCmd{},
+		3: &openReadCmd{p2: 2},
+		4: &rewindCmd{p2: 9},
+		5: &rowIdCmd{p2: 1},
+		6: &columnCmd{p2: 1, p3: 2},
+		7: &resultRowCmd{p1: 1, p2: 2},
+		8: &nextCmd{p2: 5},
+		9: &haltCmd{},
 	}
 	p := newPhysicalPlanner()
 	lp := &projection{

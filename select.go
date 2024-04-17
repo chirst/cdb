@@ -60,18 +60,16 @@ func newPhysicalPlanner() *physicalPlanner {
 }
 
 func (*physicalPlanner) forSelect(projection *projection, explain bool) *executionPlan {
-	commands := map[int]command{
-		1:  &initCmd{p2: 2},
-		2:  &transactionCmd{},
-		3:  &openReadCmd{p2: 2},
-		4:  &rewindCmd{},
-		5:  &rowIdCmd{},
-		6:  &columnCmd{},
-		7:  &columnCmd{},
-		8:  &resultRowCmd{},
-		9:  &nextCmd{},
-		10: &haltCmd{},
-	}
+	commands := map[int]command{}
+	commands[1] = &initCmd{p2: 2}
+	commands[2] = &transactionCmd{}
+	commands[3] = &openReadCmd{p2: 2}
+	commands[4] = &rewindCmd{p2: 9}
+	commands[5] = &rowIdCmd{p2: 1}
+	commands[6] = &columnCmd{p2: 1, p3: 2}
+	commands[7] = &resultRowCmd{p1: 1, p2: 2}
+	commands[8] = &nextCmd{p2: 5}
+	commands[9] = &haltCmd{}
 	return &executionPlan{
 		explain:  explain,
 		commands: commands,
