@@ -16,7 +16,7 @@ func newVm() *vm {
 
 type command interface {
 	execute(registers map[int]any, resultRows *[][]*string) cmdRes
-	explain() string
+	explain(addr int) []*string
 }
 
 type cmdRes struct {
@@ -28,8 +28,8 @@ type cmd struct {
 	p1 int
 	p2 int
 	p3 int
-	// p4 int
-	// p5 int
+	p4 int
+	p5 int
 }
 
 type executeResult struct {
@@ -43,7 +43,12 @@ type executionPlan struct {
 	commands map[int]command
 }
 
-func (*vm) execute(plan *executionPlan) *executeResult {
+func (v *vm) execute(plan *executionPlan) *executeResult {
+	if plan.explain {
+		return &executeResult{
+			resultRows: v.explain(plan),
+		}
+	}
 	registers := map[int]any{}
 	resultRows := &[][]*string{}
 	i := 1
@@ -68,26 +73,53 @@ func (*vm) execute(plan *executionPlan) *executeResult {
 	}
 }
 
-func formatExplain(c string, p1, p2, p3 int, comment string) string {
-	return fmt.Sprintf("%-13s %-4d %-4d %-4d %s", c, p1, p2, p3, comment)
+func formatExplain(addr int, c string, p1, p2, p3, p4, p5 int, comment string) []*string {
+	addra := strconv.Itoa(addr)
+	p1a := strconv.Itoa(p1)
+	p2a := strconv.Itoa(p2)
+	p3a := strconv.Itoa(p3)
+	p4a := strconv.Itoa(p4)
+	p5a := strconv.Itoa(p5)
+	return []*string{
+		&addra,
+		&c,
+		&p1a,
+		&p2a,
+		&p3a,
+		&p4a,
+		&p5a,
+		&comment,
+	}
 }
 
-func explain(plan executionPlan) string {
-	ret := ""
+func (*vm) makeStr(s string) *string {
+	return &s
+}
+
+func (v *vm) explain(plan *executionPlan) [][]*string {
+	resultRows := [][]*string{
+		{
+			v.makeStr("addr"),
+			v.makeStr("opcode"),
+			v.makeStr("p1"),
+			v.makeStr("p2"),
+			v.makeStr("p3"),
+			v.makeStr("p4"),
+			v.makeStr("p5"),
+			v.makeStr("comment"),
+		},
+	}
 	i := 1
 	var currentCommand command
-	ret = ret + fmt.Sprint("addr opcode        p1   p2   p3   comment\n")
-	ret = ret + fmt.Sprint("---- ------------- ---- ---- ---- -------------\n")
 	for {
 		if len(plan.commands) < i {
 			break
 		}
 		currentCommand = plan.commands[i]
-		currentCommand.explain()
-		ret = ret + fmt.Sprintf("%-4d %s\n", i, currentCommand.explain())
+		resultRows = append(resultRows, currentCommand.explain(i))
 		i = i + 1
 	}
-	return ret
+	return resultRows
 }
 
 // initCmd jumps to the instruction at address p2.
@@ -99,9 +131,9 @@ func (c *initCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes
 	}
 }
 
-func (c *initCmd) explain() string {
+func (c *initCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Start at addr[%d]", c.p2)
-	return formatExplain("Init", c.p1, c.p2, c.p3, comment)
+	return formatExplain(addr, "Init", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
 // haltCmd ends the routine.
@@ -113,8 +145,8 @@ func (c *haltCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes
 	}
 }
 
-func (c *haltCmd) explain() string {
-	return formatExplain("Halt", c.p1, c.p2, c.p3, "Exit")
+func (c *haltCmd) explain(addr int) []*string {
+	return formatExplain(addr, "Halt", c.p1, c.p2, c.p3, c.p4, c.p5, "Exit")
 }
 
 // transactionCmd starts a read or write transaction
@@ -124,8 +156,8 @@ func (c *transactionCmd) execute(registers map[int]any, resultRows *[][]*string)
 	return cmdRes{}
 }
 
-func (c *transactionCmd) explain() string {
-	return formatExplain("Transaction", c.p1, c.p2, c.p3, "Begin read transaction")
+func (c *transactionCmd) explain(addr int) []*string {
+	return formatExplain(addr, "Transaction", c.p1, c.p2, c.p3, c.p4, c.p5, "Begin read transaction")
 }
 
 // gotoCmd goes to the address at p2
@@ -137,9 +169,9 @@ func (c *gotoCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes
 	}
 }
 
-func (c *gotoCmd) explain() string {
+func (c *gotoCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Jump to addr[%d]", c.p2)
-	return formatExplain("Goto", c.p1, c.p2, c.p3, comment)
+	return formatExplain(addr, "Goto", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
 // openReadCmd opens a read cursor at page p2 with the identifier p1
@@ -149,9 +181,9 @@ func (c *openReadCmd) execute(registers map[int]any, resultRows *[][]*string) cm
 	return cmdRes{}
 }
 
-func (c *openReadCmd) explain() string {
+func (c *openReadCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Open read cursor with id %d at root page %d", c.p1, c.p2)
-	return formatExplain("OpenRead", c.p1, c.p2, c.p3, comment)
+	return formatExplain(addr, "OpenRead", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
 // rewindCmd goes to the first entry in the table for cursor p1. If the table is
@@ -162,9 +194,9 @@ func (c *rewindCmd) execute(registers map[int]any, resultRows *[][]*string) cmdR
 	return cmdRes{}
 }
 
-func (c *rewindCmd) explain() string {
+func (c *rewindCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Move cursor %d to the start of the table. If the table is empty jump to addr[%d]", c.p1, c.p2)
-	return formatExplain("Rewind", c.p1, c.p2, c.p3, comment)
+	return formatExplain(addr, "Rewind", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
 // rowId store in register p2 an integer which is the key of the entry the
@@ -175,9 +207,9 @@ func (c *rowIdCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRe
 	return cmdRes{}
 }
 
-func (c *rowIdCmd) explain() string {
+func (c *rowIdCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Store id cursor %d is currently pointing to in register[%d]", c.p1, c.p2)
-	return formatExplain("RowId", c.p1, c.p2, c.p3, comment)
+	return formatExplain(addr, "RowId", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
 // columnCmd stores in register p3 the value pointed to for the p2-th column.
@@ -187,9 +219,9 @@ func (c *columnCmd) execute(registers map[int]any, resultRows *[][]*string) cmdR
 	return cmdRes{}
 }
 
-func (c *columnCmd) explain() string {
+func (c *columnCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Store the value for the %d-th column in register[%d] for cursor %d", c.p2, c.p3, c.p1)
-	return formatExplain("Column", c.p1, c.p2, c.p3, comment)
+	return formatExplain(addr, "Column", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
 // resultRowCmd stores p1 through p1+p2-1 as a single row of results
@@ -216,9 +248,9 @@ func (c *resultRowCmd) execute(registers map[int]any, resultRows *[][]*string) c
 	return cmdRes{}
 }
 
-func (c *resultRowCmd) explain() string {
+func (c *resultRowCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Make a row from registers[%d..%d]", c.p1, c.p2)
-	return formatExplain("ResultRow", c.p1, c.p2, c.p3, comment)
+	return formatExplain(addr, "ResultRow", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
 // nextCmd advances the cursor p1. If the cursor has reached the end fall
@@ -229,9 +261,9 @@ func (c *nextCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes
 	return cmdRes{}
 }
 
-func (c *nextCmd) explain() string {
+func (c *nextCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Advance cursor %d. If there are items jump to addr[%d]", c.p1, c.p2)
-	return formatExplain("Next", c.p1, c.p2, c.p3, comment)
+	return formatExplain(addr, "Next", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
 // integerCmd stores the integer in p1 in register p2.
@@ -242,7 +274,7 @@ func (c *integerCmd) execute(registers map[int]any, resultRows *[][]*string) cmd
 	return cmdRes{}
 }
 
-func (c *integerCmd) explain() string {
+func (c *integerCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Store integer %d in register[%d]", c.p1, c.p2)
-	return formatExplain("Integer", c.p1, c.p2, c.p3, comment)
+	return formatExplain(addr, "Integer", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
