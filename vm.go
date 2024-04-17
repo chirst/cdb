@@ -3,10 +3,19 @@
 // Tree).
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
+
+type vm struct{}
+
+func newVm() *vm {
+	return &vm{}
+}
 
 type command interface {
-	execute(registers map[int]any, resultRows *[][]any) cmdRes
+	execute(registers map[int]any, resultRows *[][]*string) cmdRes
 	explain() string
 }
 
@@ -26,7 +35,7 @@ type cmd struct {
 type executeResult struct {
 	err        error
 	text       string
-	resultRows [][]any
+	resultRows [][]*string
 }
 
 type executionPlan struct {
@@ -34,18 +43,9 @@ type executionPlan struct {
 	commands map[int]command
 }
 
-func run(plan executionPlan) executeResult {
-	if plan.explain {
-		return executeResult{
-			text: explain(plan),
-		}
-	}
-	return execute(plan)
-}
-
-func execute(plan executionPlan) executeResult {
+func (*vm) execute(plan *executionPlan) *executeResult {
 	registers := map[int]any{}
-	resultRows := &[][]any{}
+	resultRows := &[][]*string{}
 	i := 1
 	var currentCommand command
 	for {
@@ -63,7 +63,7 @@ func execute(plan executionPlan) executeResult {
 			i = res.nextAddress
 		}
 	}
-	return executeResult{
+	return &executeResult{
 		resultRows: *resultRows,
 	}
 }
@@ -93,7 +93,7 @@ func explain(plan executionPlan) string {
 // initCmd jumps to the instruction at address p2.
 type initCmd cmd
 
-func (c *initCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
+func (c *initCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
 	return cmdRes{
 		nextAddress: c.p2,
 	}
@@ -107,7 +107,7 @@ func (c *initCmd) explain() string {
 // haltCmd ends the routine.
 type haltCmd cmd
 
-func (c *haltCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
+func (c *haltCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
 	return cmdRes{
 		doHalt: true,
 	}
@@ -120,7 +120,7 @@ func (c *haltCmd) explain() string {
 // transactionCmd starts a read or write transaction
 type transactionCmd cmd
 
-func (c *transactionCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
+func (c *transactionCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
 	return cmdRes{}
 }
 
@@ -131,7 +131,7 @@ func (c *transactionCmd) explain() string {
 // gotoCmd goes to the address at p2
 type gotoCmd cmd
 
-func (c *gotoCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
+func (c *gotoCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
 	return cmdRes{
 		nextAddress: c.p2,
 	}
@@ -145,7 +145,7 @@ func (c *gotoCmd) explain() string {
 // openReadCmd opens a read cursor at page p2 with the identifier p1
 type openReadCmd cmd
 
-func (c *openReadCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
+func (c *openReadCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
 	return cmdRes{}
 }
 
@@ -158,7 +158,7 @@ func (c *openReadCmd) explain() string {
 // empty it jumps to p2.
 type rewindCmd cmd
 
-func (c *rewindCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
+func (c *rewindCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
 	return cmdRes{}
 }
 
@@ -171,7 +171,7 @@ func (c *rewindCmd) explain() string {
 // cursor p1 is on
 type rowIdCmd cmd
 
-func (c *rowIdCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
+func (c *rowIdCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
 	return cmdRes{}
 }
 
@@ -183,7 +183,7 @@ func (c *rowIdCmd) explain() string {
 // columnCmd stores in register p3 the value pointed to for the p2-th column.
 type columnCmd cmd
 
-func (c *columnCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
+func (c *columnCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
 	return cmdRes{}
 }
 
@@ -195,12 +195,21 @@ func (c *columnCmd) explain() string {
 // resultRowCmd stores p1 through p1+p2-1 as a single row of results
 type resultRowCmd cmd
 
-func (c *resultRowCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
-	row := []any{}
+func (c *resultRowCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+	row := []*string{}
 	i := c.p1
 	end := c.p1 + c.p2 - 1
 	for i <= end {
-		row = append(row, registers[i])
+		switch v := registers[i].(type) {
+		case int:
+			vs := strconv.Itoa(v)
+			row = append(row, &vs)
+		case string:
+			row = append(row, &v)
+		default:
+			// TODO err
+			panic("unhandled result row")
+		}
 		i = i + 1
 	}
 	*resultRows = append(*resultRows, row)
@@ -216,7 +225,7 @@ func (c *resultRowCmd) explain() string {
 // through. If there is more for the cursor to process jump to p2.
 type nextCmd cmd
 
-func (c *nextCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
+func (c *nextCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
 	return cmdRes{}
 }
 
@@ -228,7 +237,7 @@ func (c *nextCmd) explain() string {
 // integerCmd stores the integer in p1 in register p2.
 type integerCmd cmd
 
-func (c *integerCmd) execute(registers map[int]any, resultRows *[][]any) cmdRes {
+func (c *integerCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
 	registers[c.p2] = c.p1
 	return cmdRes{}
 }

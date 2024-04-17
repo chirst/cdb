@@ -20,7 +20,7 @@ func (*db) execute(sql string) []executeResult {
 	if err != nil {
 		// bail
 	}
-	var plans []executionPlan
+	var plans []*executionPlan
 	for _, s := range statements {
 		logicalPlanner := newLogicalPlanner()
 		physicalPlanner := newPhysicalPlanner()
@@ -32,11 +32,12 @@ func (*db) execute(sql string) []executeResult {
 		if executionPlan == nil {
 			panic("statement not implemented")
 		}
-		plans = append(plans, *executionPlan)
+		plans = append(plans, executionPlan)
 	}
+	vm := newVm()
 	var executeResults []executeResult
 	for _, p := range plans {
-		executeResults = append(executeResults, run(p))
+		executeResults = append(executeResults, *vm.execute(p))
 	}
 	return executeResults
 }
