@@ -29,18 +29,16 @@ func (r *repl) run() {
 				os.Exit(0)
 			}
 		}
-		results := r.db.execute(input)
-		for _, result := range results {
-			if result.err != nil {
-				fmt.Printf("Err: %s", result.err.Error())
-				continue
-			}
-			if result.text != "" {
-				fmt.Print(result.text)
-			}
-			if result.text == "" {
-				fmt.Println(r.printRows(result.resultRows))
-			}
+		result := r.db.execute(input)
+		if result.err != nil {
+			fmt.Printf("Err: %s", result.err.Error())
+			continue
+		}
+		if result.text != "" {
+			fmt.Print(result.text)
+		}
+		if len(result.resultRows) != 0 {
+			fmt.Println(r.printRows(result.resultRows))
 		}
 	}
 }

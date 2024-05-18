@@ -4,7 +4,11 @@
 // as http.
 package main
 
-import "github.com/chirst/cdb/compiler"
+import (
+	"errors"
+
+	"github.com/chirst/cdb/compiler"
+)
 
 type db struct{}
 
@@ -12,32 +16,21 @@ func newDb() *db {
 	return &db{}
 }
 
-func (*db) execute(sql string) []executeResult {
-	l := compiler.NewLexer(sql)
-	tokens := l.Lex()
-	p := compiler.NewParser(tokens)
-	statements, err := p.Parse()
+func (*db) execute(sql string) executeResult {
+	tokens := compiler.NewLexer(sql).Lex()
+	statement, err := compiler.NewParser(tokens).Parse()
 	if err != nil {
-		// bail
+		return executeResult{err: err}
 	}
-	var plans []*executionPlan
-	for _, s := range statements {
-		logicalPlanner := newLogicalPlanner()
-		physicalPlanner := newPhysicalPlanner()
-		var executionPlan *executionPlan
-		if ss, ok := s.(*compiler.SelectStmt); ok {
-			lp := logicalPlanner.forSelect(ss)
-			executionPlan = physicalPlanner.forSelect(lp, ss.Explain)
-		}
-		if executionPlan == nil {
-			panic("statement not implemented")
-		}
-		plans = append(plans, executionPlan)
+	logicalPlanner := newLogicalPlanner()
+	physicalPlanner := newPhysicalPlanner()
+	var executionPlan *executionPlan
+	if ss, ok := statement.(*compiler.SelectStmt); ok {
+		lp := logicalPlanner.forSelect(ss)
+		executionPlan = physicalPlanner.forSelect(lp, ss.Explain)
 	}
-	vm := newVm()
-	var executeResults []executeResult
-	for _, p := range plans {
-		executeResults = append(executeResults, *vm.execute(p))
+	if executionPlan == nil {
+		return executeResult{err: errors.New("statement not supported")}
 	}
-	return executeResults
+	return *newVm().execute(executionPlan)
 }

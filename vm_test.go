@@ -1,6 +1,8 @@
 package main
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestExec(t *testing.T) {
 	vm := newVm()
@@ -18,5 +20,8 @@ func TestExec(t *testing.T) {
 		},
 		explain: false,
 	}
-	vm.execute(ep)
+	res := vm.execute(ep)
+	if res.err != nil {
+		t.Errorf("expected no err got %s", res.err.Error())
+	}
 }

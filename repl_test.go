@@ -31,7 +31,8 @@ func TestPrint(t *testing.T) {
 		},
 	}
 	result := repl.printRows(resultRows)
-	e := " id | name         \n" +
+	e := "" +
+		" id | name         \n" +
 		"----+--------------\n" +
 		" 1  | gud name     \n" +
 		" 2  | gudder name  \n" +

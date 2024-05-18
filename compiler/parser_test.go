@@ -7,7 +7,7 @@ import (
 
 type selectTestCase struct {
 	input  []token
-	expect StmtList
+	expect Stmt
 }
 
 func TestParseSelect(t *testing.T) {
@@ -24,7 +24,7 @@ func TestParseSelect(t *testing.T) {
 				{WHITESPACE, " "},
 				{IDENTIFIER, "foo"},
 			},
-			expect: StmtList{&SelectStmt{
+			expect: &SelectStmt{
 				StmtBase: &StmtBase{
 					Explain: true,
 				},
@@ -34,7 +34,7 @@ func TestParseSelect(t *testing.T) {
 				ResultColumn: ResultColumn{
 					All: true,
 				},
-			}},
+			},
 		},
 	}
 	for _, c := range cases {

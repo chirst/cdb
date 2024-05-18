@@ -3,8 +3,6 @@
 // structure is intended to be compiled into a execution plan.
 package compiler
 
-type StmtList []Stmt
-
 type Stmt interface{}
 
 type StmtBase struct {

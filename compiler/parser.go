@@ -17,19 +17,8 @@ func NewParser(tokens []token) *parser {
 	return &parser{tokens: tokens}
 }
 
-func (p *parser) Parse() (StmtList, error) {
-	ret := StmtList{}
-	for {
-		r, err := p.parseStmt()
-		if err != nil {
-			return nil, err
-		}
-		ret = append(ret, r)
-		p.start = p.end
-		if len(p.tokens)-1 <= p.end {
-			return ret, nil
-		}
-	}
+func (p *parser) Parse() (Stmt, error) {
+	return p.parseStmt()
 }
 
 func (p *parser) parseStmt() (Stmt, error) {

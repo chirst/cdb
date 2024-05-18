@@ -22,6 +22,7 @@ type command interface {
 type cmdRes struct {
 	doHalt      bool
 	nextAddress int
+	err         error
 }
 
 type cmd struct {
@@ -59,6 +60,9 @@ func (v *vm) execute(plan *executionPlan) *executeResult {
 		}
 		currentCommand = plan.commands[i]
 		res := currentCommand.execute(registers, resultRows)
+		if res.err != nil {
+			return &executeResult{err: res.err}
+		}
 		if res.doHalt {
 			break
 		}
@@ -238,9 +242,10 @@ func (c *resultRowCmd) execute(registers map[int]any, resultRows *[][]*string) c
 			row = append(row, &vs)
 		case string:
 			row = append(row, &v)
+		case nil:
+			row = append(row, nil)
 		default:
-			// TODO err
-			panic("unhandled result row")
+			return cmdRes{err: fmt.Errorf("unhandled result row %#v", v)}
 		}
 		i = i + 1
 	}
