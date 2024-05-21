@@ -16,8 +16,7 @@ type token struct {
 const (
 	// KEYWORD is a reserved word. For example SELECT, FROM, or WHERE.
 	KEYWORD = iota + 1
-	// IDENTIFIER is a name assigned by the programmer. For example a table
-	// or column name.
+	// IDENTIFIER is a word that is not a keyword like a table or column name.
 	IDENTIFIER
 	//  WHITESPACE is a space, tab, or newline.
 	WHITESPACE
@@ -29,8 +28,10 @@ const (
 	OPERATOR
 	// PUNCTUATOR is punctuation that is neither a separator or operator.
 	PUNCTUATOR
-	// LITERAL is a numeric or text value.
+	// LITERAL is a quoted text value like 'foo'.
 	LITERAL
+	// NUMERIC is a numeric value like 1, 1.2, or -3.
+	NUMERIC
 )
 
 func (*lexer) isKeyword(w string) bool {
@@ -38,6 +39,13 @@ func (*lexer) isKeyword(w string) bool {
 		"EXPLAIN": true,
 		"SELECT":  true,
 		"FROM":    true,
+		"CREATE":  true,
+		"INSERT":  true,
+		"INTO":    true,
+		"TABLE":   true,
+		"VALUES":  true,
+		"INTEGER": true,
+		"TEXT":    true,
 	}
 	return ws[w]
 }
@@ -71,12 +79,14 @@ func (l *lexer) getToken() token {
 		return l.scanWhiteSpace()
 	case l.isLetter(r):
 		return l.scanWord()
-	case l.isAsterisk(r):
-		return l.scanAsterisk()
 	case l.isDigit(r):
 		return l.scanDigit()
-	case l.isSemi(r):
-		return l.scanSemi()
+	case l.isAsterisk(r):
+		return l.scanAsterisk()
+	case l.isSeparator(r):
+		return l.scanSeparator()
+	case l.isSingleQuote(r):
+		return l.scanLiteral()
 	}
 	return token{EOF, ""}
 }
@@ -105,7 +115,7 @@ func (l *lexer) scanWhiteSpace() token {
 
 func (l *lexer) scanWord() token {
 	l.next()
-	for l.isLetter(l.peek(l.end)) {
+	for l.isLetter(l.peek(l.end)) || l.isUnderscore(l.peek(l.end)) {
 		l.next()
 	}
 	value := l.src[l.start:l.end]
@@ -121,7 +131,7 @@ func (l *lexer) scanDigit() token {
 	for l.isDigit(l.peek(l.end)) {
 		l.next()
 	}
-	return token{tokenType: LITERAL, value: l.src[l.start:l.end]}
+	return token{tokenType: NUMERIC, value: l.src[l.start:l.end]}
 }
 
 func (l *lexer) scanAsterisk() token {
@@ -129,9 +139,18 @@ func (l *lexer) scanAsterisk() token {
 	return token{tokenType: PUNCTUATOR, value: l.src[l.start:l.end]}
 }
 
-func (l *lexer) scanSemi() token {
+func (l *lexer) scanSeparator() token {
 	l.next()
 	return token{tokenType: SEPARATOR, value: l.src[l.start:l.end]}
+}
+
+func (l *lexer) scanLiteral() token {
+	l.next()
+	for !l.isSingleQuote(l.peek(l.end)) {
+		l.next()
+	}
+	l.next()
+	return token{tokenType: LITERAL, value: l.src[l.start:l.end]}
 }
 
 func (*lexer) isWhiteSpace(r rune) bool {
@@ -142,6 +161,10 @@ func (*lexer) isLetter(r rune) bool {
 	return unicode.IsLetter(r)
 }
 
+func (*lexer) isUnderscore(r rune) bool {
+	return r == '_'
+}
+
 func (*lexer) isAsterisk(r rune) bool {
 	return r == '*'
 }
@@ -150,6 +173,10 @@ func (*lexer) isDigit(r rune) bool {
 	return unicode.IsDigit(r)
 }
 
-func (*lexer) isSemi(r rune) bool {
-	return r == ';'
+func (*lexer) isSeparator(r rune) bool {
+	return r == ',' || r == '(' || r == ')' || r == ';'
+}
+
+func (*lexer) isSingleQuote(r rune) bool {
+	return r == '\''
 }
