@@ -31,6 +31,10 @@ func (p *parser) parseStmt() (Stmt, error) {
 	switch t.value {
 	case "SELECT":
 		return p.parseSelect(sb)
+	case "CREATE":
+		return p.parseCreate(sb)
+	case "INSERT":
+		return p.parseInsert(sb)
 	}
 	return nil, fmt.Errorf("unexpected token %s", t.value)
 }
@@ -63,6 +67,66 @@ func (p *parser) parseSelect(sb *StmtBase) (*SelectStmt, error) {
 	stmt.From = &From{
 		TableName: t.value,
 	}
+	return stmt, nil
+}
+
+func (p *parser) parseCreate(sb *StmtBase) (*CreateStmt, error) {
+	stmt := &CreateStmt{StmtBase: sb}
+	if p.tokens[p.end].value != "CREATE" {
+		return nil, fmt.Errorf("unexpected token %s", p.tokens[p.end].value)
+	}
+	t := p.nextNonSpace()
+	if t.value != "TABLE" {
+		return nil, fmt.Errorf("unexpected token %s", p.tokens[p.end].value)
+	}
+	tn := p.nextNonSpace()
+	if tn.tokenType != IDENTIFIER {
+		return nil, fmt.Errorf("expected identifier")
+	}
+	stmt.TableName = tn.value
+	lp := p.nextNonSpace()
+	if lp.value != "(" {
+		return nil, fmt.Errorf("unexpected token %s", p.tokens[p.end].value)
+	}
+	stmt.ColDefs = []ColDef{}
+	for {
+		colName := p.nextNonSpace()
+		if colName.tokenType != IDENTIFIER {
+			return nil, fmt.Errorf("expected identifier")
+		}
+		colType := p.nextNonSpace()
+		if colType.value != "INTEGER" && colType.value != "TEXT" {
+			return nil, fmt.Errorf("expected column type")
+		}
+		stmt.ColDefs = append(stmt.ColDefs, ColDef{
+			ColName: colName.value,
+			ColType: colType.value,
+		})
+		sep := p.nextNonSpace()
+		if sep.value != "," {
+			if sep.value == ")" {
+				break
+			} else {
+				return nil, fmt.Errorf("unexpected token %s", p.tokens[p.end].value)
+			}
+		}
+	}
+	return stmt, nil
+}
+
+func (p *parser) parseInsert(sb *StmtBase) (*InsertStmt, error) {
+	stmt := &InsertStmt{StmtBase: sb}
+	if p.tokens[p.end].value != "INSERT" {
+		return nil, fmt.Errorf("unexpected token %s", p.tokens[p.end].value)
+	}
+	if p.nextNonSpace().value != "INTO" {
+		return nil, fmt.Errorf("unexpected token %s", p.tokens[p.end].value)
+	}
+	tn := p.nextNonSpace()
+	if tn.tokenType != IDENTIFIER {
+		return nil, fmt.Errorf("expected identifier")
+	}
+	stmt.TableName = tn.value
 	return stmt, nil
 }
 

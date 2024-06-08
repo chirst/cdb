@@ -22,3 +22,19 @@ type ResultColumn struct {
 type From struct {
 	TableName string
 }
+
+type CreateStmt struct {
+	*StmtBase
+	TableName string
+	ColDefs   []ColDef
+}
+
+type ColDef struct {
+	ColName string
+	ColType string
+}
+
+type InsertStmt struct {
+	*StmtBase
+	TableName string
+}

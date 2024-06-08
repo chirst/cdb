@@ -6,14 +6,14 @@ import (
 )
 
 type selectTestCase struct {
-	input  []token
+	tokens []token
 	expect Stmt
 }
 
 func TestParseSelect(t *testing.T) {
 	cases := []selectTestCase{
 		{
-			input: []token{
+			tokens: []token{
 				{KEYWORD, "EXPLAIN"},
 				{WHITESPACE, " "},
 				{KEYWORD, "SELECT"},
@@ -38,13 +38,127 @@ func TestParseSelect(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		p := NewParser(c.input)
-		ret, err := p.Parse()
+		ret, err := NewParser(c.tokens).Parse()
 		if err != nil {
 			t.Errorf("want no err got err %s", err.Error())
 		}
 		if !reflect.DeepEqual(ret, c.expect) {
 			t.Errorf("got %#v want %#v", ret, c.expect)
+		}
+	}
+}
+
+type createTestCase struct {
+	tokens   []token
+	expected Stmt
+}
+
+func TestParseCreate(t *testing.T) {
+	cases := []createTestCase{
+		{
+			tokens: []token{
+				{KEYWORD, "CREATE"},
+				{WHITESPACE, " "},
+				{KEYWORD, "TABLE"},
+				{WHITESPACE, " "},
+				{IDENTIFIER, "foo"},
+				{WHITESPACE, " "},
+				{SEPARATOR, "("},
+				{IDENTIFIER, "id"},
+				{WHITESPACE, " "},
+				{KEYWORD, "INTEGER"},
+				{SEPARATOR, ","},
+				{WHITESPACE, " "},
+				{IDENTIFIER, "first_name"},
+				{WHITESPACE, " "},
+				{KEYWORD, "TEXT"},
+				{SEPARATOR, ","},
+				{WHITESPACE, " "},
+				{IDENTIFIER, "last_name"},
+				{WHITESPACE, " "},
+				{KEYWORD, "TEXT"},
+				{SEPARATOR, ")"},
+			},
+			expected: &CreateStmt{
+				StmtBase: &StmtBase{
+					Explain: false,
+				},
+				TableName: "foo",
+				ColDefs: []ColDef{
+					{
+						ColName: "id",
+						ColType: "INTEGER",
+					},
+					{
+						ColName: "first_name",
+						ColType: "TEXT",
+					},
+					{
+						ColName: "last_name",
+						ColType: "TEXT",
+					},
+				},
+			},
+		},
+	}
+	for _, c := range cases {
+		ret, err := NewParser(c.tokens).Parse()
+		if err != nil {
+			t.Errorf("expected no err got err %s", err.Error())
+		}
+		if !reflect.DeepEqual(ret, c.expected) {
+			t.Errorf("expected %#v got %#v", c.expected, ret)
+		}
+	}
+}
+
+type insertTestCase struct {
+	tokens   []token
+	expected InsertStmt
+}
+
+func TestParseInsert(t *testing.T) {
+	cases := []insertTestCase{
+		{
+			tokens: []token{
+				{KEYWORD, "INSERT"},
+				{WHITESPACE, " "},
+				{KEYWORD, "INTO"},
+				{WHITESPACE, " "},
+				{IDENTIFIER, "foo"},
+				{WHITESPACE, " "},
+				{SEPARATOR, "("},
+				{IDENTIFIER, "id"},
+				{SEPARATOR, ","},
+				{WHITESPACE, " "},
+				{IDENTIFIER, "first_name"},
+				{SEPARATOR, ","},
+				{WHITESPACE, " "},
+				{IDENTIFIER, "last_name"},
+				{SEPARATOR, ")"},
+				{WHITESPACE, " "},
+				{KEYWORD, "VALUES"},
+				{WHITESPACE, " "},
+				{SEPARATOR, "("},
+				{NUMERIC, "1"},
+				{SEPARATOR, ","},
+				{WHITESPACE, " "},
+				{LITERAL, "'gud'"},
+				{SEPARATOR, ","},
+				{WHITESPACE, " "},
+				{LITERAL, "'dude'"},
+				{SEPARATOR, ")"},
+			},
+			expected: InsertStmt{},
+		},
+	}
+	for _, c := range cases {
+		ret, err := NewParser(c.tokens).Parse()
+		if err != nil {
+			t.Errorf("expected no err got err %s", err.Error())
+		}
+		if !reflect.DeepEqual(ret, c.expected) {
+			t.Errorf("expected %#v got %#v", c.expected, ret)
 		}
 	}
 }
