@@ -37,4 +37,6 @@ type ColDef struct {
 type InsertStmt struct {
 	*StmtBase
 	TableName string
+	ColNames  []string
+	ColValues []string
 }

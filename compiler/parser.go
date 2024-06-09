@@ -106,9 +106,8 @@ func (p *parser) parseCreate(sb *StmtBase) (*CreateStmt, error) {
 		if sep.value != "," {
 			if sep.value == ")" {
 				break
-			} else {
-				return nil, fmt.Errorf("unexpected token %s", p.tokens[p.end].value)
 			}
+			return nil, fmt.Errorf("unexpected token %s", p.tokens[p.end].value)
 		}
 	}
 	return stmt, nil
@@ -127,6 +126,43 @@ func (p *parser) parseInsert(sb *StmtBase) (*InsertStmt, error) {
 		return nil, fmt.Errorf("expected identifier")
 	}
 	stmt.TableName = tn.value
+	if p.nextNonSpace().value != "(" {
+		return nil, fmt.Errorf("unexpected token %s", p.tokens[p.end].value)
+	}
+	for {
+		i := p.nextNonSpace()
+		if i.tokenType != IDENTIFIER {
+			return nil, fmt.Errorf("expected identifier")
+		}
+		stmt.ColNames = append(stmt.ColNames, i.value)
+		sep := p.nextNonSpace()
+		if sep.value != "," {
+			if sep.value == ")" {
+				break
+			}
+			return nil, fmt.Errorf("unexpected token %s", p.tokens[p.end].value)
+		}
+	}
+	if p.nextNonSpace().value != "VALUES" {
+		return nil, fmt.Errorf("unexpected token %s", p.tokens[p.end].value)
+	}
+	if p.nextNonSpace().value != "(" {
+		return nil, fmt.Errorf("unexpected token %s", p.tokens[p.end].value)
+	}
+	for {
+		v := p.nextNonSpace()
+		if v.tokenType != NUMERIC && v.tokenType != LITERAL {
+			return nil, fmt.Errorf("expected numeric or literal")
+		}
+		stmt.ColValues = append(stmt.ColValues, v.value)
+		sep := p.nextNonSpace()
+		if sep.value != "," {
+			if sep.value == ")" {
+				break
+			}
+			return nil, fmt.Errorf("unexpected token %s", p.tokens[p.end].value)
+		}
+	}
 	return stmt, nil
 }
 

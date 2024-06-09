@@ -114,7 +114,7 @@ func TestParseCreate(t *testing.T) {
 
 type insertTestCase struct {
 	tokens   []token
-	expected InsertStmt
+	expected Stmt
 }
 
 func TestParseInsert(t *testing.T) {
@@ -149,7 +149,22 @@ func TestParseInsert(t *testing.T) {
 				{LITERAL, "'dude'"},
 				{SEPARATOR, ")"},
 			},
-			expected: InsertStmt{},
+			expected: &InsertStmt{
+				StmtBase: &StmtBase{
+					Explain: false,
+				},
+				TableName: "foo",
+				ColNames: []string{
+					"id",
+					"first_name",
+					"last_name",
+				},
+				ColValues: []string{
+					"1",
+					"'gud'",
+					"'dude'",
+				},
+			},
 		},
 	}
 	for _, c := range cases {
