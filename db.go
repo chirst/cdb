@@ -5,7 +5,7 @@
 package main
 
 import (
-	"errors"
+	"fmt"
 
 	"github.com/chirst/cdb/compiler"
 )
@@ -16,21 +16,28 @@ func newDb() *db {
 	return &db{}
 }
 
-func (*db) execute(sql string) executeResult {
+func (db *db) execute(sql string) executeResult {
 	tokens := compiler.NewLexer(sql).Lex()
 	statement, err := compiler.NewParser(tokens).Parse()
 	if err != nil {
 		return executeResult{err: err}
 	}
-	logicalPlanner := newLogicalPlanner()
-	physicalPlanner := newPhysicalPlanner()
-	var executionPlan *executionPlan
-	if ss, ok := statement.(*compiler.SelectStmt); ok {
-		lp := logicalPlanner.forSelect(ss)
-		executionPlan = physicalPlanner.forSelect(lp, ss.Explain)
-	}
-	if executionPlan == nil {
-		return executeResult{err: errors.New("statement not supported")}
+	executionPlan, err := db.getExecutionPlanFor(statement)
+	if err != nil {
+		return executeResult{err: err}
 	}
 	return *newVm().execute(executionPlan)
+}
+
+func (*db) getExecutionPlanFor(statement compiler.Stmt) (*executionPlan, error) {
+	logicalPlanner := newLogicalPlanner()
+	physicalPlanner := newPhysicalPlanner()
+	switch s := statement.(type) {
+	case *compiler.SelectStmt:
+		lp := logicalPlanner.forSelect(s)
+		return physicalPlanner.forSelect(lp, s.Explain), nil
+	case *compiler.CreateStmt:
+	case *compiler.InsertStmt:
+	}
+	return nil, fmt.Errorf("statement not supported")
 }
