@@ -5,24 +5,36 @@ package main
 
 import "github.com/chirst/cdb/compiler"
 
-func newLogicalPlanner() *logicalPlanner {
-	return &logicalPlanner{
+type selectPlanner struct {
+	catalog *catalog
+}
+
+func newSelectPlanner() *selectPlanner {
+	return &selectPlanner{
 		catalog: newCatalog(),
 	}
 }
 
-func (l *logicalPlanner) forSelect(s *compiler.SelectStmt) *projection {
+func (p *selectPlanner) getPlan(s *compiler.SelectStmt) (*executionPlan, error) {
+	lp, err := p.getLogicalPlan(s)
+	if err != nil {
+		return nil, err
+	}
+	return p.getPhysicalPlan(lp, s.Explain)
+}
+
+func (l *selectPlanner) getLogicalPlan(s *compiler.SelectStmt) (*projection, error) {
 	p := &projection{}
 	tablePageNumber := 0
 	var tableColumns []string
 	if s.From != nil && s.From.TableName != "" {
 		tpn, err := l.catalog.getPageNumber(s.From.TableName)
 		if err != nil {
-			// handle
+			return nil, err
 		}
 		tcs, err := l.catalog.getColumns(s.From.TableName)
 		if err != nil {
-			// handle
+			return nil, err
 		}
 		tablePageNumber = tpn
 		tableColumns = tcs
@@ -33,11 +45,7 @@ func (l *logicalPlanner) forSelect(s *compiler.SelectStmt) *projection {
 	p.childSet = set{
 		rootPage: tablePageNumber,
 	}
-	return p
-}
-
-type logicalPlanner struct {
-	catalog *catalog
+	return p, nil
 }
 
 // Projection is the root of a logical query plan.
@@ -53,13 +61,7 @@ type set struct {
 	rootPage int
 }
 
-type physicalPlanner struct{}
-
-func newPhysicalPlanner() *physicalPlanner {
-	return &physicalPlanner{}
-}
-
-func (*physicalPlanner) forSelect(projection *projection, explain bool) *executionPlan {
+func (*selectPlanner) getPhysicalPlan(projection *projection, explain bool) (*executionPlan, error) {
 	commands := map[int]command{}
 	commands[1] = &initCmd{p2: 2}
 	commands[2] = &transactionCmd{}
@@ -73,5 +75,5 @@ func (*physicalPlanner) forSelect(projection *projection, explain bool) *executi
 	return &executionPlan{
 		explain:  explain,
 		commands: commands,
-	}
+	}, nil
 }

@@ -19,8 +19,10 @@ func TestLogicalPlan(t *testing.T) {
 			All: true,
 		},
 	}
-	lp := newLogicalPlanner()
-	logicalPlan := lp.forSelect(ast)
+	logicalPlan, err := newSelectPlanner().getLogicalPlan(ast)
+	if err != nil {
+		t.Errorf("expected no err got err %s", err.Error())
+	}
 	expectFields := []string{"id", "name"}
 	for i, ep := range expectFields {
 		if logicalPlan.fields[i] != ep {
@@ -45,14 +47,17 @@ func TestPhysicalPlan(t *testing.T) {
 		8: &nextCmd{p2: 5},
 		9: &haltCmd{},
 	}
-	p := newPhysicalPlanner()
+
 	lp := &projection{
 		fields: []string{"id", "name"},
 		childSet: set{
 			rootPage: 2,
 		},
 	}
-	physicalPlan := p.forSelect(lp, false)
+	physicalPlan, err := newSelectPlanner().getPhysicalPlan(lp, false)
+	if err != nil {
+		t.Errorf("expected no err got err %s", err.Error())
+	}
 	for i, c := range expectedCommands {
 		if !reflect.DeepEqual(c, physicalPlan.commands[i]) {
 			t.Errorf("got %#v want %#v", physicalPlan.commands[i], c)

@@ -30,14 +30,13 @@ func (db *db) execute(sql string) executeResult {
 }
 
 func (*db) getExecutionPlanFor(statement compiler.Stmt) (*executionPlan, error) {
-	logicalPlanner := newLogicalPlanner()
-	physicalPlanner := newPhysicalPlanner()
 	switch s := statement.(type) {
 	case *compiler.SelectStmt:
-		lp := logicalPlanner.forSelect(s)
-		return physicalPlanner.forSelect(lp, s.Explain), nil
+		return newSelectPlanner().getPlan(s)
 	case *compiler.CreateStmt:
+		return newCreatePlanner().getPlan(s)
 	case *compiler.InsertStmt:
+		return newInsertPlanner().getPlan(s)
 	}
 	return nil, fmt.Errorf("statement not supported")
 }
