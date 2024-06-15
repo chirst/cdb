@@ -29,7 +29,7 @@ type cmd struct {
 	p1 int
 	p2 int
 	p3 int
-	p4 int
+	p4 string
 	p5 int
 }
 
@@ -77,12 +77,11 @@ func (v *vm) execute(plan *executionPlan) *executeResult {
 	}
 }
 
-func formatExplain(addr int, c string, p1, p2, p3, p4, p5 int, comment string) []*string {
+func formatExplain(addr int, c string, p1, p2, p3 int, p4 string, p5 int, comment string) []*string {
 	addra := strconv.Itoa(addr)
 	p1a := strconv.Itoa(p1)
 	p2a := strconv.Itoa(p2)
 	p3a := strconv.Itoa(p3)
-	p4a := strconv.Itoa(p4)
 	p5a := strconv.Itoa(p5)
 	return []*string{
 		&addra,
@@ -90,7 +89,7 @@ func formatExplain(addr int, c string, p1, p2, p3, p4, p5 int, comment string) [
 		&p1a,
 		&p2a,
 		&p3a,
-		&p4a,
+		&p4,
 		&p5a,
 		&comment,
 	}
@@ -282,4 +281,101 @@ func (c *integerCmd) execute(registers map[int]any, resultRows *[][]*string) cmd
 func (c *integerCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Store integer %d in register[%d]", c.p1, c.p2)
 	return formatExplain(addr, "Integer", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
+}
+
+// makeRecordCmd makes a byte array record for registers p1 through p2 and
+// stores the record in register p3.
+type makeRecordCmd cmd
+
+func (c *makeRecordCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+	return cmdRes{}
+}
+
+func (c *makeRecordCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Convert register [%d..%d] to bytes and store in register[%d]", c.p1, c.p2, c.p3)
+	return formatExplain(addr, "MakeRecord", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
+}
+
+// createBTreeCmd creates a new btree and stores the root page number in p2
+type createBTreeCmd cmd
+
+func (c *createBTreeCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+	return cmdRes{}
+}
+
+func (c *createBTreeCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Create new btree and store root page number in register[%d]", c.p2)
+	return formatExplain(addr, "CreateBTree", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
+}
+
+// openWriteCmd opens a write cursor named p1 on table with root page p2
+type openWriteCmd cmd
+
+func (c *openWriteCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+	return cmdRes{}
+}
+
+func (c *openWriteCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Open write cursor named %d on table with root page %d", c.p1, c.p2)
+	return formatExplain(addr, "OpenWrite", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
+}
+
+// newRowIdCmd generate a new row id for table root page p1 and write to p2
+type newRowIdCmd cmd
+
+func (c *newRowIdCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+	return cmdRes{}
+}
+
+func (c *newRowIdCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Generate row id for table %d and store in register[%d]", c.p1, c.p2)
+	return formatExplain(addr, "NewRowID", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
+}
+
+// insertCmd write to cursor p1 with data in p2 and key in p3
+type insertCmd cmd
+
+func (c *insertCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+	return cmdRes{}
+}
+
+func (c *insertCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Insert cursor %d with value in register[%d] and key register[%d]", c.p1, c.p2, c.p3)
+	return formatExplain(addr, "Insert", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
+}
+
+// parseSchemaCmd refresh in memory schema
+type parseSchemaCmd cmd
+
+func (c *parseSchemaCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+	return cmdRes{}
+}
+
+func (c *parseSchemaCmd) explain(addr int) []*string {
+	comment := "Refresh in memory schema"
+	return formatExplain(addr, "ParseSchema", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
+}
+
+// stringCmd stores string in p4 in register p1
+type stringCmd cmd
+
+func (c *stringCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+	return cmdRes{}
+}
+
+func (c *stringCmd) explain(addr int) []*string {
+	comment := "Store string in p4 in p1"
+	return formatExplain(addr, "String", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
+}
+
+// copyCmd copies p1 into p2
+type copyCmd cmd
+
+func (c *copyCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+	return cmdRes{}
+}
+
+func (c *copyCmd) explain(addr int) []*string {
+	comment := "Copy p1 into p2"
+	return formatExplain(addr, "Copy", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
