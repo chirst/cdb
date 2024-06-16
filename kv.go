@@ -31,8 +31,6 @@ func (kv *kv) Get(pageNumber uint16, key []byte) ([]byte, bool, error) {
 	if pageNumber == EMPTY_PARENT_PAGE_NUMBER {
 		return nil, false, errorReservedPage
 	}
-	kv.pager.beginRead()
-	defer kv.pager.endRead()
 	// Step 1. Need a source page to start from. Will start from 1 if there is
 	// no source page specified. This source page has to do with a table. 1 has
 	// to be the system catalog.
@@ -62,11 +60,10 @@ func (kv *kv) Set(pageNumber uint16, key, value []byte) error {
 	if pageNumber == EMPTY_PARENT_PAGE_NUMBER {
 		return errorReservedPage
 	}
-	kv.pager.beginWrite()
 	leafPage := kv.getLeafPage(pageNumber, key)
 	if leafPage.canInsertTuple(key, value) {
 		leafPage.setValue(key, value)
-		return kv.pager.endWrite()
+		return nil
 	}
 	leftPage, rightPage := kv.splitPage(leafPage)
 	insertIntoOne(key, value, leftPage, rightPage)
@@ -74,7 +71,7 @@ func (kv *kv) Set(pageNumber uint16, key, value []byte) error {
 	if hasParent {
 		parentPage := kv.pager.getPage(parentPageNumber)
 		kv.parentInsert(parentPage, leftPage, rightPage)
-		return kv.pager.endWrite()
+		return nil
 	}
 	leafPage.setType(PAGE_TYPE_INTERNAL)
 	leafPage.setEntries([]pageTuple{
@@ -89,7 +86,7 @@ func (kv *kv) Set(pageNumber uint16, key, value []byte) error {
 	})
 	leftPage.setParentPageNumber(leafPage.getNumber())
 	rightPage.setParentPageNumber(leafPage.getNumber())
-	return kv.pager.endWrite()
+	return nil
 }
 
 // TODO this is really messy and is a symptom of internal pages using two keys
@@ -174,4 +171,26 @@ func (kv *kv) parentInsert(p, l, r *page) {
 	})
 	leftPage.setParentPageNumber(p.getNumber())
 	rightPage.setParentPageNumber(p.getNumber())
+}
+
+// NewBTree creates an empty BTree and returns the new tree's root page number.
+func (kv *kv) NewBTree() int {
+	np := kv.pager.newPage()
+	return int(np.number)
+}
+
+func (kv *kv) BeginReadTransaction() {
+	kv.pager.beginRead()
+}
+
+func (kv *kv) EndReadTransaction() {
+	kv.pager.endRead()
+}
+
+func (kv *kv) BeginWriteTransaction() {
+	kv.pager.beginWrite()
+}
+
+func (kv *kv) EndWriteTransaction() error {
+	return kv.pager.endWrite()
 }

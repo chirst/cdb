@@ -8,14 +8,18 @@ import (
 	"strconv"
 )
 
-type vm struct{}
+type vm struct {
+	kv *kv
+}
 
-func newVm() *vm {
-	return &vm{}
+func newVm(kv *kv) *vm {
+	return &vm{
+		kv: kv,
+	}
 }
 
 type command interface {
-	execute(registers map[int]any, resultRows *[][]*string) cmdRes
+	execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes
 	explain(addr int) []*string
 }
 
@@ -59,7 +63,7 @@ func (v *vm) execute(plan *executionPlan) *executeResult {
 			break
 		}
 		currentCommand = plan.commands[i]
-		res := currentCommand.execute(registers, resultRows)
+		res := currentCommand.execute(registers, resultRows, v)
 		if res.err != nil {
 			return &executeResult{err: res.err}
 		}
@@ -128,7 +132,7 @@ func (v *vm) explain(plan *executionPlan) [][]*string {
 // initCmd jumps to the instruction at address p2.
 type initCmd cmd
 
-func (c *initCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *initCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
 	return cmdRes{
 		nextAddress: c.p2,
 	}
@@ -142,9 +146,12 @@ func (c *initCmd) explain(addr int) []*string {
 // haltCmd ends the routine.
 type haltCmd cmd
 
-func (c *haltCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *haltCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
+	vm.kv.EndReadTransaction()
+	err := vm.kv.EndWriteTransaction()
 	return cmdRes{
 		doHalt: true,
+		err:    err,
 	}
 }
 
@@ -152,21 +159,31 @@ func (c *haltCmd) explain(addr int) []*string {
 	return formatExplain(addr, "Halt", c.p1, c.p2, c.p3, c.p4, c.p5, "Exit")
 }
 
-// transactionCmd starts a read or write transaction
+// transactionCmd if p2 is 0 starts a read transaction if p2 is 1 starts a write
+// transaction.
 type transactionCmd cmd
 
-func (c *transactionCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *transactionCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
+	if c.p2 == 1 {
+		vm.kv.pager.beginRead()
+		return cmdRes{}
+	}
+	vm.kv.pager.beginWrite()
 	return cmdRes{}
 }
 
 func (c *transactionCmd) explain(addr int) []*string {
-	return formatExplain(addr, "Transaction", c.p1, c.p2, c.p3, c.p4, c.p5, "Begin read transaction")
+	comment := "Begin a read transaction"
+	if c.p2 == 1 {
+		comment = "Begin a write transaction"
+	}
+	return formatExplain(addr, "Transaction", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
 // gotoCmd goes to the address at p2
 type gotoCmd cmd
 
-func (c *gotoCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *gotoCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
 	return cmdRes{
 		nextAddress: c.p2,
 	}
@@ -180,7 +197,7 @@ func (c *gotoCmd) explain(addr int) []*string {
 // openReadCmd opens a read cursor at page p2 with the identifier p1
 type openReadCmd cmd
 
-func (c *openReadCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *openReadCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
 	return cmdRes{}
 }
 
@@ -193,7 +210,7 @@ func (c *openReadCmd) explain(addr int) []*string {
 // empty it jumps to p2.
 type rewindCmd cmd
 
-func (c *rewindCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *rewindCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
 	return cmdRes{}
 }
 
@@ -206,7 +223,7 @@ func (c *rewindCmd) explain(addr int) []*string {
 // cursor p1 is on
 type rowIdCmd cmd
 
-func (c *rowIdCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *rowIdCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
 	return cmdRes{}
 }
 
@@ -218,7 +235,7 @@ func (c *rowIdCmd) explain(addr int) []*string {
 // columnCmd stores in register p3 the value pointed to for the p2-th column.
 type columnCmd cmd
 
-func (c *columnCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *columnCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
 	return cmdRes{}
 }
 
@@ -230,7 +247,7 @@ func (c *columnCmd) explain(addr int) []*string {
 // resultRowCmd stores p1 through p1+p2-1 as a single row of results
 type resultRowCmd cmd
 
-func (c *resultRowCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *resultRowCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
 	row := []*string{}
 	i := c.p1
 	end := c.p1 + c.p2 - 1
@@ -261,7 +278,7 @@ func (c *resultRowCmd) explain(addr int) []*string {
 // through. If there is more for the cursor to process jump to p2.
 type nextCmd cmd
 
-func (c *nextCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *nextCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
 	return cmdRes{}
 }
 
@@ -273,7 +290,7 @@ func (c *nextCmd) explain(addr int) []*string {
 // integerCmd stores the integer in p1 in register p2.
 type integerCmd cmd
 
-func (c *integerCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *integerCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
 	registers[c.p2] = c.p1
 	return cmdRes{}
 }
@@ -287,7 +304,7 @@ func (c *integerCmd) explain(addr int) []*string {
 // stores the record in register p3.
 type makeRecordCmd cmd
 
-func (c *makeRecordCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *makeRecordCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
 	return cmdRes{}
 }
 
@@ -299,7 +316,9 @@ func (c *makeRecordCmd) explain(addr int) []*string {
 // createBTreeCmd creates a new btree and stores the root page number in p2
 type createBTreeCmd cmd
 
-func (c *createBTreeCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *createBTreeCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
+	rootPageNumber := vm.kv.NewBTree()
+	registers[c.p2] = rootPageNumber
 	return cmdRes{}
 }
 
@@ -311,7 +330,7 @@ func (c *createBTreeCmd) explain(addr int) []*string {
 // openWriteCmd opens a write cursor named p1 on table with root page p2
 type openWriteCmd cmd
 
-func (c *openWriteCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *openWriteCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
 	return cmdRes{}
 }
 
@@ -323,7 +342,7 @@ func (c *openWriteCmd) explain(addr int) []*string {
 // newRowIdCmd generate a new row id for table root page p1 and write to p2
 type newRowIdCmd cmd
 
-func (c *newRowIdCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *newRowIdCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
 	return cmdRes{}
 }
 
@@ -335,7 +354,7 @@ func (c *newRowIdCmd) explain(addr int) []*string {
 // insertCmd write to cursor p1 with data in p2 and key in p3
 type insertCmd cmd
 
-func (c *insertCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *insertCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
 	return cmdRes{}
 }
 
@@ -347,7 +366,7 @@ func (c *insertCmd) explain(addr int) []*string {
 // parseSchemaCmd refresh in memory schema
 type parseSchemaCmd cmd
 
-func (c *parseSchemaCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *parseSchemaCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
 	return cmdRes{}
 }
 
@@ -359,7 +378,7 @@ func (c *parseSchemaCmd) explain(addr int) []*string {
 // stringCmd stores string in p4 in register p1
 type stringCmd cmd
 
-func (c *stringCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *stringCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
 	return cmdRes{}
 }
 
@@ -371,7 +390,7 @@ func (c *stringCmd) explain(addr int) []*string {
 // copyCmd copies p1 into p2
 type copyCmd cmd
 
-func (c *copyCmd) execute(registers map[int]any, resultRows *[][]*string) cmdRes {
+func (c *copyCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
 	return cmdRes{}
 }
 

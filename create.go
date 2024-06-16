@@ -32,10 +32,10 @@ func (*createPlanner) getPlan(s *compiler.CreateStmt) (*executionPlan, error) {
 		return nil, err
 	}
 	commands := map[int]command{}
-	commands[0] = &initCmd{p2: 2}
+	commands[0] = &initCmd{p2: 1}
 	commands[1] = &transactionCmd{}
-	commands[2] = &createBTreeCmd{p2: 1}
-	commands[3] = &openWriteCmd{p1: 1, p2: 1}
+	commands[2] = &createBTreeCmd{p2: 1}      // create b tree for the new table
+	commands[3] = &openWriteCmd{p1: 1, p2: 1} // write the new table to the catalog
 	commands[4] = &newRowIdCmd{p1: 1, p2: 2}
 	commands[5] = &stringCmd{p1: 3, p4: "table"}         // type
 	commands[5] = &stringCmd{p1: 3, p4: "foo"}           // name

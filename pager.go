@@ -122,6 +122,9 @@ func (p *pager) beginWrite() {
 // written. If there is a crash while the pages are being written the journal
 // will be promoted to the main database file the next time the db is started.
 func (p *pager) endWrite() error {
+	if !p.isWriting {
+		return nil
+	}
 	if err := p.store.CreateJournal(); err != nil {
 		return err
 	}

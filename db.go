@@ -10,10 +10,18 @@ import (
 	"github.com/chirst/cdb/compiler"
 )
 
-type db struct{}
+type db struct {
+	vm *vm
+}
 
-func newDb() *db {
-	return &db{}
+func newDb() (*db, error) {
+	kv, err := NewKv(false)
+	if err != nil {
+		return nil, err
+	}
+	return &db{
+		vm: newVm(kv),
+	}, nil
 }
 
 func (db *db) execute(sql string) executeResult {
@@ -26,7 +34,7 @@ func (db *db) execute(sql string) executeResult {
 	if err != nil {
 		return executeResult{err: err}
 	}
-	return *newVm().execute(executionPlan)
+	return *db.vm.execute(executionPlan)
 }
 
 func (*db) getExecutionPlanFor(statement compiler.Stmt) (*executionPlan, error) {
