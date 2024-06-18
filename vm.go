@@ -166,12 +166,17 @@ func (c *haltCmd) explain(addr int) []*string {
 type transactionCmd cmd
 
 func (c *transactionCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
-	if c.p2 == 1 {
+	if c.p2 == 0 {
 		vm.kv.pager.beginRead()
 		return cmdRes{}
 	}
-	vm.kv.pager.beginWrite()
-	return cmdRes{}
+	if c.p2 == 1 {
+		vm.kv.pager.beginWrite()
+		return cmdRes{}
+	}
+	return cmdRes{
+		err: fmt.Errorf("unhandled transactionCmd with p2: %d", c.p2),
+	}
 }
 
 func (c *transactionCmd) explain(addr int) []*string {
@@ -373,16 +378,18 @@ func (c *newRowIdCmd) explain(addr int) []*string {
 type insertCmd cmd
 
 func (c *insertCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
-	bp3, ok := registers[c.p3].([]byte)
+	bp3i, ok := registers[c.p3].(int)
 	if !ok {
 		return cmdRes{
-			err: fmt.Errorf("failed to convert bp3 %v to byte slice", bp3),
+			err: fmt.Errorf("failed to convert %v to int", bp3i),
 		}
 	}
+	bp3 := make([]byte, 4)
+	binary.LittleEndian.AppendUint16(bp3, uint16(bp3i))
 	bp2, ok := registers[c.p2].([]byte)
 	if !ok {
 		return cmdRes{
-			err: fmt.Errorf("failed to convert bp2 %v to byte slice", bp2),
+			err: fmt.Errorf("failed to convert %v to byte slice", bp2),
 		}
 	}
 	vm.kv.Set(uint16(c.p1), bp3, bp2)

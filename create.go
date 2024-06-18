@@ -32,7 +32,7 @@ func (*createPlanner) getPlan(s *compiler.CreateStmt) (*executionPlan, error) {
 		return nil, err
 	}
 	commands := map[int]command{}
-	commands[1] = &initCmd{p2: 1}                         // go to command 1.
+	commands[1] = &initCmd{p2: 2}                         // go to command 2.
 	commands[2] = &transactionCmd{p2: 1}                  // start write transaction
 	commands[3] = &createBTreeCmd{p2: 1}                  // create b tree for the new table and store root page number in register[1]
 	commands[4] = &openWriteCmd{p1: 1, p2: 1}             // open write cursor to write the new table to the catalog
