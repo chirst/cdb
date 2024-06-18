@@ -11,12 +11,14 @@ import (
 )
 
 type vm struct {
-	kv *kv
+	kv      *kv
+	cursors map[int]*cursor
 }
 
 func newVm(kv *kv) *vm {
 	return &vm{
-		kv: kv,
+		kv:      kv,
+		cursors: make(map[int]*cursor),
 	}
 }
 
@@ -205,6 +207,7 @@ func (c *gotoCmd) explain(addr int) []*string {
 type openReadCmd cmd
 
 func (c *openReadCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
+	vm.cursors[c.p1] = NewCursor(c.p2)
 	return cmdRes{}
 }
 
@@ -218,6 +221,7 @@ func (c *openReadCmd) explain(addr int) []*string {
 type rewindCmd cmd
 
 func (c *rewindCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
+	vm.cursors[c.p1].GotoFirstRecord()
 	return cmdRes{}
 }
 
@@ -231,6 +235,7 @@ func (c *rewindCmd) explain(addr int) []*string {
 type rowIdCmd cmd
 
 func (c *rowIdCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
+	registers[c.p2] = vm.cursors[c.p1].GetRowID()
 	return cmdRes{}
 }
 
@@ -239,10 +244,11 @@ func (c *rowIdCmd) explain(addr int) []*string {
 	return formatExplain(addr, "RowId", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
-// columnCmd stores in register p3 the value pointed to for the p2-th column.
+// columnCmd stores in register p3 the value pointed to for the p2-th column for the p1 cursor.
 type columnCmd cmd
 
 func (c *columnCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
+	registers[c.p3] = vm.cursors[c.p1].GetColumn(c.p2)
 	return cmdRes{}
 }
 
@@ -286,6 +292,11 @@ func (c *resultRowCmd) explain(addr int) []*string {
 type nextCmd cmd
 
 func (c *nextCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
+	if vm.cursors[c.p1].GotoNext() {
+		return cmdRes{
+			nextAddress: c.p2,
+		}
+	}
 	return cmdRes{}
 }
 

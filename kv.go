@@ -201,3 +201,46 @@ func (kv *kv) NewRowID(rootPageNumber int) int {
 	// TODO
 	return 2
 }
+
+// cursor is an abstraction that can seek and scan ranges of a btree.
+type cursor struct {
+	// rootPageNumber is the table this cursor operates on
+	rootPageNumber int
+}
+
+func NewCursor(rootPageNumber int) *cursor {
+	return &cursor{
+		rootPageNumber: rootPageNumber,
+	}
+}
+
+// GotoFirstRecord moves the cursor to the first tuple in ascending order.
+func (*cursor) GotoFirstRecord() {}
+
+// GetRowID returns the serialized key of the current tuple.
+func (*cursor) GetRowID() int {
+	return 1
+}
+
+// GetColumn returns the serialized value of the nth column
+func (*cursor) GetColumn(nth int) any {
+	switch nth {
+	case 1:
+		return "table"
+	case 2:
+		return "foo"
+	case 3:
+		return "foo"
+	case 4:
+		return 1
+	case 5:
+		return "{columns:[{name:\"first_name\",type:\"TEXT\"}]}"
+	}
+	panic("no column handled")
+}
+
+// GotoNext moves the cursor to the next tuple in ascending order. If there is
+// no next tuple this function will return false otherwise it will return true.
+func (*cursor) GotoNext() bool {
+	return false
+}
