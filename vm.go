@@ -4,7 +4,9 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
+	"log"
 	"strconv"
 )
 
@@ -305,6 +307,20 @@ func (c *integerCmd) explain(addr int) []*string {
 type makeRecordCmd cmd
 
 func (c *makeRecordCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
+	record := []byte{}
+	for i := c.p1; i <= c.p2; i += 1 {
+		switch chunk := registers[i].(type) {
+		case string:
+			record = append(record, []byte(chunk)...)
+		case uint16:
+			buf := make([]byte, 4)
+			binary.LittleEndian.AppendUint16(buf, chunk)
+			record = append(record, buf...)
+		default:
+			log.Fatalf("makeRecordCmd unhandled type %v", chunk)
+		}
+	}
+	registers[c.p3] = record
 	return cmdRes{}
 }
 
@@ -343,6 +359,8 @@ func (c *openWriteCmd) explain(addr int) []*string {
 type newRowIdCmd cmd
 
 func (c *newRowIdCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
+	rid := vm.kv.NewRowID(c.p1)
+	registers[c.p2] = rid
 	return cmdRes{}
 }
 
@@ -355,6 +373,19 @@ func (c *newRowIdCmd) explain(addr int) []*string {
 type insertCmd cmd
 
 func (c *insertCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
+	bp3, ok := registers[c.p3].([]byte)
+	if !ok {
+		return cmdRes{
+			err: fmt.Errorf("failed to convert bp3 %v to byte slice", bp3),
+		}
+	}
+	bp2, ok := registers[c.p2].([]byte)
+	if !ok {
+		return cmdRes{
+			err: fmt.Errorf("failed to convert bp2 %v to byte slice", bp2),
+		}
+	}
+	vm.kv.Set(uint16(c.p1), bp3, bp2)
 	return cmdRes{}
 }
 
@@ -379,6 +410,7 @@ func (c *parseSchemaCmd) explain(addr int) []*string {
 type stringCmd cmd
 
 func (c *stringCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
+	registers[c.p1] = c.p4
 	return cmdRes{}
 }
 
@@ -391,6 +423,7 @@ func (c *stringCmd) explain(addr int) []*string {
 type copyCmd cmd
 
 func (c *copyCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
+	registers[c.p1] = registers[c.p2]
 	return cmdRes{}
 }
 

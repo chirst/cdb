@@ -194,3 +194,10 @@ func (kv *kv) BeginWriteTransaction() {
 func (kv *kv) EndWriteTransaction() error {
 	return kv.pager.endWrite()
 }
+
+// NewRowID returns the highest unused key in a table for the rootPageNumber.
+// For a integer key it is the largest integer key plus one.
+func (kv *kv) NewRowID(rootPageNumber int) int {
+	// TODO
+	return 2
+}

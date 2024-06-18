@@ -32,20 +32,20 @@ func (*createPlanner) getPlan(s *compiler.CreateStmt) (*executionPlan, error) {
 		return nil, err
 	}
 	commands := map[int]command{}
-	commands[0] = &initCmd{p2: 1}
-	commands[1] = &transactionCmd{}
-	commands[2] = &createBTreeCmd{p2: 1}      // create b tree for the new table
-	commands[3] = &openWriteCmd{p1: 1, p2: 1} // write the new table to the catalog
-	commands[4] = &newRowIdCmd{p1: 1, p2: 2}
-	commands[5] = &stringCmd{p1: 3, p4: "table"}         // type
-	commands[5] = &stringCmd{p1: 3, p4: "foo"}           // name
-	commands[5] = &stringCmd{p1: 3, p4: "foo"}           // tablename
-	commands[6] = &copyCmd{p1: 21, p2: 2}                // rootpage
-	commands[5] = &stringCmd{p1: 3, p4: string(jSchema)} // schema
-	commands[5] = &makeRecordCmd{p1: 2, p2: 2, p3: 4}
-	commands[3] = &insertCmd{}
-	commands[4] = &parseSchemaCmd{}
-	commands[5] = &haltCmd{}
+	commands[1] = &initCmd{p2: 1}                         // go to command 1.
+	commands[2] = &transactionCmd{p2: 1}                  // start write transaction
+	commands[3] = &createBTreeCmd{p2: 1}                  // create b tree for the new table and store root page number in register[1]
+	commands[4] = &openWriteCmd{p1: 1, p2: 1}             // open write cursor to write the new table to the catalog
+	commands[5] = &newRowIdCmd{p1: 1, p2: 2}              // store new row id in register[2]
+	commands[6] = &stringCmd{p1: 3, p4: "table"}          // type store in register[3]
+	commands[7] = &stringCmd{p1: 4, p4: "foo"}            // name  store in register[4]
+	commands[8] = &stringCmd{p1: 5, p4: "foo"}            // tablename store in register[5]
+	commands[9] = &copyCmd{p1: 1, p2: 6}                  // rootpage store in register[6]
+	commands[10] = &stringCmd{p1: 7, p4: string(jSchema)} // schema store in register[7]
+	commands[11] = &makeRecordCmd{p1: 3, p2: 4, p3: 8}    // make record from register[3-3+4] and store in register[8]
+	commands[12] = &insertCmd{p1: 1, p2: 8, p3: 2}        // insert with cursor 1 with key register[2] and value register[8]
+	commands[13] = &parseSchemaCmd{}                      // refresh catalog cache with new values
+	commands[14] = &haltCmd{}                             // end transactions
 	return &executionPlan{
 		explain:  s.Explain,
 		commands: commands,
