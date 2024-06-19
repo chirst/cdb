@@ -12,12 +12,14 @@ import (
 type vm struct {
 	kv      *kv
 	cursors map[int]*cursor
+	catalog *catalog
 }
 
-func newVm(kv *kv) *vm {
+func newVm(kv *kv, catalog *catalog) *vm {
 	return &vm{
 		kv:      kv,
 		cursors: make(map[int]*cursor),
+		catalog: catalog,
 	}
 }
 

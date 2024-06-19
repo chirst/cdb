@@ -19,7 +19,7 @@ func TestLogicalPlan(t *testing.T) {
 			All: true,
 		},
 	}
-	logicalPlan, err := newSelectPlanner().getLogicalPlan(ast)
+	logicalPlan, err := newSelectPlanner(newCatalog()).getLogicalPlan(ast)
 	if err != nil {
 		t.Errorf("expected no err got err %s", err.Error())
 	}
@@ -54,7 +54,7 @@ func TestPhysicalPlan(t *testing.T) {
 			rootPage: 2,
 		},
 	}
-	physicalPlan, err := newSelectPlanner().getPhysicalPlan(lp, false)
+	physicalPlan, err := newSelectPlanner(newCatalog()).getPhysicalPlan(lp, false)
 	if err != nil {
 		t.Errorf("expected no err got err %s", err.Error())
 	}

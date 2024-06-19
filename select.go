@@ -9,9 +9,9 @@ type selectPlanner struct {
 	catalog *catalog
 }
 
-func newSelectPlanner() *selectPlanner {
+func newSelectPlanner(catalog *catalog) *selectPlanner {
 	return &selectPlanner{
-		catalog: newCatalog(),
+		catalog: catalog,
 	}
 }
 

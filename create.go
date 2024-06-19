@@ -8,9 +8,9 @@ type createPlanner struct {
 	catalog *catalog
 }
 
-func newCreatePlanner() *createPlanner {
+func newCreatePlanner(catalog *catalog) *createPlanner {
 	return &createPlanner{
-		catalog: newCatalog(),
+		catalog: catalog,
 	}
 }
 

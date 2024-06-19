@@ -5,7 +5,6 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/gob"
 	"errors"
 )
 
@@ -250,23 +249,4 @@ func (c *cursor) GetValue() []byte {
 // no next tuple this function will return false otherwise it will return true.
 func (*cursor) GotoNext() bool {
 	return false
-}
-
-func Encode(v []interface{}) ([]byte, error) {
-	var buf bytes.Buffer
-	err := gob.NewEncoder(&buf).Encode(&v)
-	if err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-func Decode(v []byte) ([]any, error) {
-	buf := bytes.NewBuffer(v)
-	var s []any
-	err := gob.NewDecoder(buf).Decode(&s)
-	if err != nil {
-		return nil, err
-	}
-	return s, nil
 }

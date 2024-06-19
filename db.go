@@ -11,7 +11,8 @@ import (
 )
 
 type db struct {
-	vm *vm
+	vm      *vm
+	catalog *catalog
 }
 
 func newDb() (*db, error) {
@@ -19,8 +20,10 @@ func newDb() (*db, error) {
 	if err != nil {
 		return nil, err
 	}
+	c := newCatalog()
 	return &db{
-		vm: newVm(kv),
+		vm:      newVm(kv, c),
+		catalog: c,
 	}, nil
 }
 
@@ -37,14 +40,14 @@ func (db *db) execute(sql string) executeResult {
 	return *db.vm.execute(executionPlan)
 }
 
-func (*db) getExecutionPlanFor(statement compiler.Stmt) (*executionPlan, error) {
+func (db *db) getExecutionPlanFor(statement compiler.Stmt) (*executionPlan, error) {
 	switch s := statement.(type) {
 	case *compiler.SelectStmt:
-		return newSelectPlanner().getPlan(s)
+		return newSelectPlanner(db.catalog).getPlan(s)
 	case *compiler.CreateStmt:
-		return newCreatePlanner().getPlan(s)
+		return newCreatePlanner(db.catalog).getPlan(s)
 	case *compiler.InsertStmt:
-		return newInsertPlanner().getPlan(s)
+		return newInsertPlanner(db.catalog).getPlan(s)
 	}
 	return nil, fmt.Errorf("statement not supported")
 }

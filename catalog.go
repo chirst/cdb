@@ -2,10 +2,18 @@ package main
 
 import "encoding/json"
 
-type catalog struct{}
+type catalog struct {
+	schema *schema
+}
 
+// TODO could have the kv make a catalog and potentially be the owner of the
+// object Catalog would pretty much be one to one in memory representation of
+// the schema table. Would be populated on start and refreshed by the vm parse
+// schema command.
 func newCatalog() *catalog {
-	return &catalog{}
+	return &catalog{
+		schema: &schema{},
+	}
 }
 
 func (*catalog) getPageNumber(tableOrIndexName string) (int, error) {
@@ -14,6 +22,10 @@ func (*catalog) getPageNumber(tableOrIndexName string) (int, error) {
 
 func (*catalog) getColumns(tableOrIndexName string) ([]string, error) {
 	return []string{"id", "name"}, nil
+}
+
+type schema struct {
+	tables []tableSchema
 }
 
 type tableColumn struct {
