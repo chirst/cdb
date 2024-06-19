@@ -45,7 +45,7 @@ func (*createPlanner) getPlan(s *compiler.CreateStmt) (*executionPlan, error) {
 	commands[11] = &makeRecordCmd{p1: 3, p2: 4, p3: 8}    // make record from register[3-3+4] and store in register[8]
 	commands[12] = &insertCmd{p1: 1, p2: 8, p3: 2}        // insert with cursor 1 with key register[2] and value register[8]
 	commands[13] = &parseSchemaCmd{}                      // refresh catalog cache with new values
-	commands[14] = &haltCmd{}                             // end transactions
+	commands[14] = &haltCmd{p2: 1}                        // end transactions
 	return &executionPlan{
 		explain:  s.Explain,
 		commands: commands,

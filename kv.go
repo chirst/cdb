@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/gob"
 	"errors"
 )
 
@@ -205,42 +206,67 @@ func (kv *kv) NewRowID(rootPageNumber int) int {
 // cursor is an abstraction that can seek and scan ranges of a btree.
 type cursor struct {
 	// rootPageNumber is the table this cursor operates on
-	rootPageNumber int
+	rootPageNumber     int
+	currentPageEntries []pageTuple
+	currentTupleIndex  int
+	pager              *pager
 }
 
-func NewCursor(rootPageNumber int) *cursor {
+func (kv *kv) NewCursor(rootPageNumber int) *cursor {
 	return &cursor{
 		rootPageNumber: rootPageNumber,
+		pager:          kv.pager,
 	}
 }
 
-// GotoFirstRecord moves the cursor to the first tuple in ascending order.
-func (*cursor) GotoFirstRecord() {}
+// GotoFirstRecord moves the cursor to the first tuple in ascending order. It
+// returns true if the table has values. It returns false if the table is empty.
+func (c *cursor) GotoFirstRecord() bool {
+	candidatePage := c.pager.getPage(uint16(c.rootPageNumber))
+	if len(candidatePage.getEntries()) == 0 {
+		return false
+	}
+	for candidatePage.getType() != PAGE_TYPE_LEAF {
+		pagePointers := candidatePage.getEntries()
+		ascendingPageNum := pagePointers[0].value
+		candidatePage = c.pager.getPage(binary.LittleEndian.Uint16(ascendingPageNum))
+	}
+	c.currentPageEntries = candidatePage.getEntries()
+	c.currentTupleIndex = 0
+	return true
+}
 
 // GetRowID returns the serialized key of the current tuple.
 func (*cursor) GetRowID() int {
 	return 1
 }
 
-// GetColumn returns the serialized value of the nth column
-func (*cursor) GetColumn(nth int) any {
-	switch nth {
-	case 1:
-		return "table"
-	case 2:
-		return "foo"
-	case 3:
-		return "foo"
-	case 4:
-		return 1
-	case 5:
-		return "{columns:[{name:\"first_name\",type:\"TEXT\"}]}"
-	}
-	panic("no column handled")
+// GetValue returns the values
+func (c *cursor) GetValue() []byte {
+	return c.currentPageEntries[c.currentTupleIndex].value
 }
 
 // GotoNext moves the cursor to the next tuple in ascending order. If there is
 // no next tuple this function will return false otherwise it will return true.
 func (*cursor) GotoNext() bool {
 	return false
+}
+
+func Encode(v []interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+	err := gob.NewEncoder(&buf).Encode(&v)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func Decode(v []byte) ([]any, error) {
+	buf := bytes.NewBuffer(v)
+	var s []any
+	err := gob.NewDecoder(buf).Decode(&s)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
 }

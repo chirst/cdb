@@ -6,7 +6,6 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
-	"log"
 	"strconv"
 )
 
@@ -147,15 +146,23 @@ func (c *initCmd) explain(addr int) []*string {
 	return formatExplain(addr, "Init", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
-// haltCmd ends the routine.
+// haltCmd ends the routine if p2 is 0 a read transaction is ended if p2 is 1 a
+// write transaction is ended.
 type haltCmd cmd
 
 func (c *haltCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
-	vm.kv.EndReadTransaction()
-	err := vm.kv.EndWriteTransaction()
+	if c.p2 == 0 {
+		vm.kv.EndReadTransaction()
+	}
+	if c.p2 == 1 {
+		err := vm.kv.EndWriteTransaction()
+		return cmdRes{
+			doHalt: true,
+			err:    err,
+		}
+	}
 	return cmdRes{
 		doHalt: true,
-		err:    err,
 	}
 }
 
@@ -207,7 +214,7 @@ func (c *gotoCmd) explain(addr int) []*string {
 type openReadCmd cmd
 
 func (c *openReadCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
-	vm.cursors[c.p1] = NewCursor(c.p2)
+	vm.cursors[c.p1] = vm.kv.NewCursor(c.p2)
 	return cmdRes{}
 }
 
@@ -221,7 +228,12 @@ func (c *openReadCmd) explain(addr int) []*string {
 type rewindCmd cmd
 
 func (c *rewindCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
-	vm.cursors[c.p1].GotoFirstRecord()
+	hasValues := vm.cursors[c.p1].GotoFirstRecord()
+	if !hasValues {
+		return cmdRes{
+			nextAddress: c.p2,
+		}
+	}
 	return cmdRes{}
 }
 
@@ -248,7 +260,12 @@ func (c *rowIdCmd) explain(addr int) []*string {
 type columnCmd cmd
 
 func (c *columnCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
-	registers[c.p3] = vm.cursors[c.p1].GetColumn(c.p2)
+	v := vm.cursors[c.p1].GetValue()
+	cols, err := Decode(v)
+	if err != nil {
+		return cmdRes{err: err}
+	}
+	registers[c.p3] = cols[c.p2]
 	return cmdRes{}
 }
 
@@ -323,20 +340,15 @@ func (c *integerCmd) explain(addr int) []*string {
 type makeRecordCmd cmd
 
 func (c *makeRecordCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
-	record := []byte{}
-	for i := c.p1; i <= c.p2; i += 1 {
-		switch chunk := registers[i].(type) {
-		case string:
-			record = append(record, []byte(chunk)...)
-		case uint16:
-			buf := make([]byte, 4)
-			binary.LittleEndian.AppendUint16(buf, chunk)
-			record = append(record, buf...)
-		default:
-			log.Fatalf("makeRecordCmd unhandled type %v", chunk)
-		}
+	span := []any{}
+	for i := c.p1; i <= c.p1+c.p2; i += 1 {
+		span = append(span, registers[i])
 	}
-	registers[c.p3] = record
+	v, err := Encode(span)
+	if err != nil {
+		return cmdRes{err: err}
+	}
+	registers[c.p3] = v
 	return cmdRes{}
 }
 
@@ -441,7 +453,7 @@ func (c *stringCmd) explain(addr int) []*string {
 type copyCmd cmd
 
 func (c *copyCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
-	registers[c.p1] = registers[c.p2]
+	registers[c.p2] = registers[c.p1]
 	return cmdRes{}
 }
 
