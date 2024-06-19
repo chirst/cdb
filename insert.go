@@ -1,8 +1,6 @@
 package main
 
 import (
-	"errors"
-
 	"github.com/chirst/cdb/compiler"
 )
 
@@ -17,7 +15,20 @@ func newInsertPlanner() *insertPlanner {
 }
 
 func (*insertPlanner) getPlan(s *compiler.InsertStmt) (*executionPlan, error) {
-	return nil, errors.New("insert planner not implemented")
+	commands := map[int]command{}
+	commands[1] = &initCmd{p2: 2}
+	commands[2] = &transactionCmd{p2: 1}
+	commands[3] = &openWriteCmd{p1: 1, p2: 2}
+	commands[4] = &newRowIdCmd{p1: 2, p2: 1}
+	commands[5] = &stringCmd{p1: 2, p4: "gud"}
+	commands[6] = &stringCmd{p1: 3, p4: "dude"}
+	commands[7] = &makeRecordCmd{p1: 2, p2: 1, p3: 4}
+	commands[8] = &insertCmd{p1: 1, p2: 4, p3: 1}
+	commands[9] = &haltCmd{p2: 1}
+	return &executionPlan{
+		explain:  s.Explain,
+		commands: commands,
+	}, nil
 }
 
 // EXPLAIN INSERT INTO foo (first) VALUES ('wat');
