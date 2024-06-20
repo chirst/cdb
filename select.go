@@ -95,7 +95,7 @@ func (*selectPlanner) getPhysicalPlan(projection *projection, explain bool) (*ex
 	commands[16] = &columnCmd{p1: 1, p2: 3, p3: 5} // store in register[5] the value of the 4th column
 	commands[17] = &columnCmd{p1: 1, p2: 4, p3: 6} // store in register[6] the value of the 5th column
 	commands[18] = &resultRowCmd{p1: 1, p2: 6}     // create result row from the 1-6 registers
-	commands[19] = &nextCmd{p2: 5}                 // advance cursor and go to command 5 if the cursor is empty fall through
+	commands[19] = &nextCmd{p1: 1, p2: 5}          // advance cursor and go to command 5 if the cursor is empty fall through
 	commands[20] = &haltCmd{p2: 0}                 // end transactions
 	return &executionPlan{
 		explain:  explain,

@@ -12,14 +12,12 @@ import (
 type vm struct {
 	kv      *kv
 	cursors map[int]*cursor
-	catalog *catalog
 }
 
-func newVm(kv *kv, catalog *catalog) *vm {
+func newVm(kv *kv) *vm {
 	return &vm{
 		kv:      kv,
 		cursors: make(map[int]*cursor),
-		catalog: catalog,
 	}
 }
 
@@ -430,7 +428,10 @@ func (c *insertCmd) explain(addr int) []*string {
 type parseSchemaCmd cmd
 
 func (c *parseSchemaCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
-	return cmdRes{}
+	err := vm.kv.ParseSchema()
+	return cmdRes{
+		err: err,
+	}
 }
 
 func (c *parseSchemaCmd) explain(addr int) []*string {

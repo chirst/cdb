@@ -10,7 +10,7 @@ func TestExec(t *testing.T) {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	vm := newVm(kv, newCatalog())
+	vm := newVm(kv)
 	ep := &executionPlan{
 		commands: map[int]command{
 			1: &initCmd{p2: 2},

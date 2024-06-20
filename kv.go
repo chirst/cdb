@@ -11,7 +11,8 @@ import (
 var errorReservedPage = errors.New("specified a reserved page number")
 
 type kv struct {
-	pager *pager
+	pager   *pager
+	catalog *catalog
 }
 
 func NewKv(useMemory bool) (*kv, error) {
@@ -19,9 +20,16 @@ func NewKv(useMemory bool) (*kv, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &kv{
-		pager: pager,
-	}, nil
+	catalog := newCatalog()
+	ret := &kv{
+		pager:   pager,
+		catalog: catalog,
+	}
+	err = ret.ParseSchema()
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
 }
 
 // Get returns a byte array corresponding to the key and a bool indicating if
@@ -202,6 +210,33 @@ func (kv *kv) NewRowID(rootPageNumber int) int {
 	return 2
 }
 
+func (kv *kv) ParseSchema() error {
+	c := kv.NewCursor(1)
+	exists := c.GotoFirstRecord()
+	if !exists {
+		return nil
+	}
+	var objs []object
+	for exists {
+		v := c.GetValue()
+		dv, err := Decode(v)
+		if err != nil {
+			return err
+		}
+		o := &object{
+			objectType:     dv[0].(string),
+			name:           dv[1].(string),
+			tableName:      dv[2].(string),
+			rootPageNumber: dv[3].(int),
+			jsonSchema:     dv[4].(string),
+		}
+		objs = append(objs, *o)
+		exists = c.GotoNext()
+	}
+	kv.catalog.schema.objects = objs
+	return nil
+}
+
 // cursor is an abstraction that can seek and scan ranges of a btree.
 type cursor struct {
 	// rootPageNumber is the table this cursor operates on
@@ -247,6 +282,10 @@ func (c *cursor) GetValue() []byte {
 
 // GotoNext moves the cursor to the next tuple in ascending order. If there is
 // no next tuple this function will return false otherwise it will return true.
-func (*cursor) GotoNext() bool {
+func (c *cursor) GotoNext() bool {
+	if c.currentTupleIndex+1 <= len(c.currentPageEntries)-1 {
+		c.currentTupleIndex += 1
+		return true
+	}
 	return false
 }
