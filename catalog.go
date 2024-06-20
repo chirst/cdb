@@ -1,6 +1,9 @@
 package main
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // catalog holds information about the database schema
 type catalog struct {
@@ -13,12 +16,33 @@ func newCatalog() *catalog {
 	}
 }
 
-func (*catalog) getPageNumber(tableOrIndexName string) (int, error) {
-	return 2, nil
+func (c *catalog) getRootPageNumber(tableOrIndexName string) (int, error) {
+	if tableOrIndexName == "cdb_schema" {
+		return 1, nil
+	}
+	for _, o := range c.schema.objects {
+		if o.name == tableOrIndexName {
+			return o.rootPageNumber, nil
+		}
+	}
+	return 0, fmt.Errorf("cannot get root of %s", tableOrIndexName)
 }
 
-func (*catalog) getColumns(tableOrIndexName string) ([]string, error) {
-	return []string{"id", "name"}, nil
+func (c *catalog) getColumns(tableName string) ([]string, error) {
+	if tableName == "cdb_schema" {
+		return []string{"id", "type", "name", "table_name", "rootpage", "sql"}, nil
+	}
+	for _, o := range c.schema.objects {
+		if o.name == tableName && o.tableName == tableName {
+			ts := TableSchemaFromString(o.jsonSchema)
+			ret := []string{}
+			for _, c := range ts.Columns {
+				ret = append(ret, c.Name)
+			}
+			return ret, nil
+		}
+	}
+	return nil, fmt.Errorf("cannot get columns for table %s", tableName)
 }
 
 // schema is a cached representation of the database schema
@@ -59,4 +83,10 @@ func (ts *tableSchema) ToJSON() ([]byte, error) {
 
 func (ts *tableSchema) FromJSON(j []byte) error {
 	return json.Unmarshal(j, ts)
+}
+
+func TableSchemaFromString(s string) *tableSchema {
+	v := &tableSchema{}
+	json.Unmarshal([]byte(s), &v)
+	return v
 }

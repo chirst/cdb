@@ -31,11 +31,11 @@ func (r *repl) run() {
 		}
 		result := r.db.execute(input)
 		if result.err != nil {
-			fmt.Printf("Err: %s", result.err.Error())
+			fmt.Printf("Err: %s\n", result.err.Error())
 			continue
 		}
 		if result.text != "" {
-			fmt.Print(result.text)
+			fmt.Println(result.text)
 		}
 		if len(result.resultRows) != 0 {
 			fmt.Println(r.printRows(result.resultRows))
@@ -58,6 +58,9 @@ func (r *repl) printRows(resultRows [][]*string) string {
 			ret += r.printRow(row, widths)
 		}
 		ret = ret + "\n"
+	}
+	if len(resultRows) == 1 {
+		ret = ret + "(0 rows)\n"
 	}
 	return ret
 }

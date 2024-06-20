@@ -46,8 +46,9 @@ type executeResult struct {
 }
 
 type executionPlan struct {
-	explain  bool
-	commands map[int]command
+	explain      bool
+	commands     []command
+	resultHeader []*string
 }
 
 func (v *vm) execute(plan *executionPlan) *executeResult {
@@ -58,7 +59,10 @@ func (v *vm) execute(plan *executionPlan) *executeResult {
 	}
 	registers := map[int]any{}
 	resultRows := &[][]*string{}
-	i := 1
+	if plan.resultHeader != nil {
+		*resultRows = append(*resultRows, plan.resultHeader)
+	}
+	i := 0
 	var currentCommand command
 	for {
 		if len(plan.commands) < i {
@@ -118,7 +122,7 @@ func (v *vm) explain(plan *executionPlan) [][]*string {
 			v.makeStr("comment"),
 		},
 	}
-	i := 1
+	i := 0
 	var currentCommand command
 	for {
 		if len(plan.commands) < i {

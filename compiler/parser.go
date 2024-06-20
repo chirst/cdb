@@ -154,7 +154,11 @@ func (p *parser) parseInsert(sb *StmtBase) (*InsertStmt, error) {
 		if v.tokenType != NUMERIC && v.tokenType != LITERAL {
 			return nil, fmt.Errorf("expected numeric or literal")
 		}
-		stmt.ColValues = append(stmt.ColValues, v.value)
+		if v.tokenType == LITERAL && v.value[0] == '\'' && v.value[len(v.value)-1] == '\'' {
+			stmt.ColValues = append(stmt.ColValues, v.value[1:len(v.value)-1])
+		} else {
+			stmt.ColValues = append(stmt.ColValues, v.value)
+		}
 		sep := p.nextNonSpace()
 		if sep.value != "," {
 			if sep.value == ")" {

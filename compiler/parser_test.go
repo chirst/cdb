@@ -161,8 +161,8 @@ func TestParseInsert(t *testing.T) {
 				},
 				ColValues: []string{
 					"1",
-					"'gud'",
-					"'dude'",
+					"gud",
+					"dude",
 				},
 			},
 		},
