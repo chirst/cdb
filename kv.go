@@ -205,9 +205,20 @@ func (kv *kv) EndWriteTransaction() error {
 
 // NewRowID returns the highest unused key in a table for the rootPageNumber.
 // For a integer key it is the largest integer key plus one.
-func (kv *kv) NewRowID(rootPageNumber int) int {
-	// TODO
-	return 2
+func (kv *kv) NewRowID(rootPageNumber int) (int, error) {
+	// TODO could possibly cache this in the catalog or something
+	candidate := kv.pager.getPage(uint16(rootPageNumber))
+	if len(candidate.getEntries()) == 0 {
+		return 1, nil
+	}
+	for candidate.getType() != PAGE_TYPE_LEAF {
+		pagePointers := candidate.getEntries()
+		descendingPageNum := pagePointers[len(pagePointers)-1].value
+		candidate = kv.pager.getPage(binary.LittleEndian.Uint16(descendingPageNum))
+	}
+	k := candidate.getEntries()[len(candidate.getEntries())-1].key
+	dk := DecodeKey(k)
+	return dk + 1, nil
 }
 
 func (kv *kv) ParseSchema() error {
@@ -270,9 +281,24 @@ func (c *cursor) GotoFirstRecord() bool {
 	return true
 }
 
-// GetRowID returns the serialized key of the current tuple.
-func (*cursor) GetRowID() int {
-	return 1
+func (c *cursor) GotoLastRecord() bool {
+	candidatePage := c.pager.getPage(uint16(c.rootPageNumber))
+	if len(candidatePage.getEntries()) == 0 {
+		return false
+	}
+	for candidatePage.getType() != PAGE_TYPE_LEAF {
+		pagePointers := candidatePage.getEntries()
+		descendingPageNum := pagePointers[len(pagePointers)-1].value
+		candidatePage = c.pager.getPage(binary.LittleEndian.Uint16(descendingPageNum))
+	}
+	c.currentPageEntries = candidatePage.getEntries()
+	c.currentTupleIndex = len(c.currentPageEntries) - 1
+	return true
+}
+
+// GetKey returns the key of the current tuple.
+func (c *cursor) GetKey() []byte {
+	return c.currentPageEntries[c.currentTupleIndex].key
 }
 
 // GetValue returns the values

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/gob"
 )
 
@@ -22,4 +23,14 @@ func Decode(v []byte) ([]any, error) {
 		return nil, err
 	}
 	return s, nil
+}
+
+func EncodeKey(v uint16) []byte {
+	bp3 := make([]byte, 4)
+	binary.LittleEndian.PutUint16(bp3, v)
+	return bp3
+}
+
+func DecodeKey(v []byte) int {
+	return int(binary.LittleEndian.Uint16(v))
 }

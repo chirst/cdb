@@ -4,7 +4,6 @@
 package main
 
 import (
-	"encoding/binary"
 	"fmt"
 	"strconv"
 )
@@ -247,7 +246,9 @@ func (c *rewindCmd) explain(addr int) []*string {
 type rowIdCmd cmd
 
 func (c *rowIdCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
-	registers[c.p2] = vm.cursors[c.p1].GetRowID()
+	ek := vm.cursors[c.p1].GetKey()
+	dk := DecodeKey(ek)
+	registers[c.p2] = dk
 	return cmdRes{}
 }
 
@@ -387,7 +388,10 @@ func (c *openWriteCmd) explain(addr int) []*string {
 type newRowIdCmd cmd
 
 func (c *newRowIdCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
-	rid := vm.kv.NewRowID(c.p1)
+	rid, err := vm.kv.NewRowID(c.p1)
+	if err != nil {
+		return cmdRes{err: err}
+	}
 	registers[c.p2] = rid
 	return cmdRes{}
 }
@@ -407,8 +411,7 @@ func (c *insertCmd) execute(registers map[int]any, resultRows *[][]*string, vm *
 			err: fmt.Errorf("failed to convert %v to int", bp3i),
 		}
 	}
-	bp3 := make([]byte, 4)
-	binary.LittleEndian.AppendUint16(bp3, uint16(bp3i))
+	bp3 := EncodeKey(uint16(bp3i))
 	bp2, ok := registers[c.p2].([]byte)
 	if !ok {
 		return cmdRes{
