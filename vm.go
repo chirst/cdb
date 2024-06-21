@@ -64,10 +64,7 @@ func (v *vm) execute(plan *executionPlan) *executeResult {
 	}
 	i := 0
 	var currentCommand command
-	for {
-		if len(plan.commands) < i {
-			break
-		}
+	for i < len(plan.commands) {
 		currentCommand = plan.commands[i]
 		res := currentCommand.execute(registers, resultRows, v)
 		if res.err != nil {
@@ -124,10 +121,7 @@ func (v *vm) explain(plan *executionPlan) [][]*string {
 	}
 	i := 0
 	var currentCommand command
-	for {
-		if len(plan.commands) < i {
-			break
-		}
+	for i < len(plan.commands) {
 		currentCommand = plan.commands[i]
 		resultRows = append(resultRows, currentCommand.explain(i))
 		i = i + 1
@@ -149,7 +143,7 @@ func (c *initCmd) explain(addr int) []*string {
 	return formatExplain(addr, "Init", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
-// haltCmd ends the routine if p2 is 0 a read transaction is ended if p2 is 1 a
+// haltCmd ends the routine. If p2 is 0 a read transaction is ended if p2 is 1 a
 // write transaction is ended.
 type haltCmd cmd
 
@@ -170,11 +164,15 @@ func (c *haltCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm
 }
 
 func (c *haltCmd) explain(addr int) []*string {
-	return formatExplain(addr, "Halt", c.p1, c.p2, c.p3, c.p4, c.p5, "Exit")
+	comment := "End read transaction and exit"
+	if c.p2 == 1 {
+		comment = "End write transaction and exit"
+	}
+	return formatExplain(addr, "Halt", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
-// transactionCmd if p2 is 0 starts a read transaction if p2 is 1 starts a write
-// transaction.
+// transactionCmd starts a read transaction if p2 is 0. If p2 is 1
+// transactionCmd starts a write transaction.
 type transactionCmd cmd
 
 func (c *transactionCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
@@ -199,7 +197,7 @@ func (c *transactionCmd) explain(addr int) []*string {
 	return formatExplain(addr, "Transaction", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
-// openReadCmd opens a read cursor at page p2 with the identifier p1
+// openReadCmd opens a read cursor with identifier p1 at page p2
 type openReadCmd cmd
 
 func (c *openReadCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
@@ -247,7 +245,8 @@ func (c *rowIdCmd) explain(addr int) []*string {
 	return formatExplain(addr, "RowId", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
-// columnCmd stores in register p3 the value pointed to for the p2-th column for the p1 cursor.
+// columnCmd stores in register p3 the value pointed to for the p2-th column for
+// the p1 cursor.
 type columnCmd cmd
 
 func (c *columnCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
@@ -265,6 +264,7 @@ func (c *columnCmd) explain(addr int) []*string {
 	return formatExplain(addr, "Column", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
+// TODO standardize range
 // resultRowCmd stores p1 through p1+p2-1 as a single row of results
 type resultRowCmd cmd
 
@@ -291,7 +291,7 @@ func (c *resultRowCmd) execute(registers map[int]any, resultRows *[][]*string, v
 }
 
 func (c *resultRowCmd) explain(addr int) []*string {
-	comment := fmt.Sprintf("Make a row from registers[%d..%d]", c.p1, c.p2)
+	comment := fmt.Sprintf("Make a row from registers[%d..%d]", c.p1, c.p1+c.p2-1)
 	return formatExplain(addr, "ResultRow", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
@@ -309,10 +309,11 @@ func (c *nextCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm
 }
 
 func (c *nextCmd) explain(addr int) []*string {
-	comment := fmt.Sprintf("Advance cursor %d. If there are items jump to addr[%d]", c.p1, c.p2)
+	comment := fmt.Sprintf("Advance cursor %d if there are items jump to addr[%d] else fall through", c.p1, c.p2)
 	return formatExplain(addr, "Next", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
+// TODO standardize range
 // makeRecordCmd makes a byte array record for registers p1 through p2 and
 // stores the record in register p3.
 type makeRecordCmd cmd
@@ -331,7 +332,7 @@ func (c *makeRecordCmd) execute(registers map[int]any, resultRows *[][]*string, 
 }
 
 func (c *makeRecordCmd) explain(addr int) []*string {
-	comment := fmt.Sprintf("Convert register [%d..%d] to bytes and store in register[%d]", c.p1, c.p2, c.p3)
+	comment := fmt.Sprintf("Convert register [%d..%d] to bytes and store in register[%d]", c.p1, c.p1+c.p2, c.p3)
 	return formatExplain(addr, "MakeRecord", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
@@ -361,7 +362,8 @@ func (c *openWriteCmd) explain(addr int) []*string {
 	return formatExplain(addr, "OpenWrite", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
-// newRowIdCmd generate a new row id for table root page p1 and write to p2
+// newRowIdCmd generates a new row id for table root page p1 and writes the new
+// id to register p2
 type newRowIdCmd cmd
 
 func (c *newRowIdCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
@@ -404,7 +406,7 @@ func (c *insertCmd) explain(addr int) []*string {
 	return formatExplain(addr, "Insert", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
-// parseSchemaCmd refresh in memory schema
+// parseSchemaCmd refreshes the catalog
 type parseSchemaCmd cmd
 
 func (c *parseSchemaCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
@@ -415,11 +417,11 @@ func (c *parseSchemaCmd) execute(registers map[int]any, resultRows *[][]*string,
 }
 
 func (c *parseSchemaCmd) explain(addr int) []*string {
-	comment := "Refresh in memory schema"
+	comment := "Refresh catalog"
 	return formatExplain(addr, "ParseSchema", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
-// stringCmd stores string in p4 in register p1
+// stringCmd stores string p4 in register p1
 type stringCmd cmd
 
 func (c *stringCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
@@ -428,7 +430,7 @@ func (c *stringCmd) execute(registers map[int]any, resultRows *[][]*string, vm *
 }
 
 func (c *stringCmd) explain(addr int) []*string {
-	comment := "Store string in p4 in p1"
+	comment := fmt.Sprintf("Store string \"%s\" in register[%d]", c.p4, c.p1)
 	return formatExplain(addr, "String", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
@@ -441,6 +443,6 @@ func (c *copyCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm
 }
 
 func (c *copyCmd) explain(addr int) []*string {
-	comment := "Copy p1 into p2"
+	comment := fmt.Sprintf("Copy register[%d] into register[%d]", c.p1, c.p2)
 	return formatExplain(addr, "Copy", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
