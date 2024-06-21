@@ -277,15 +277,12 @@ func (c *columnCmd) explain(addr int) []*string {
 	return formatExplain(addr, "Column", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
-// TODO standardize range
 // resultRowCmd stores p1 through p1+p2-1 as a single row of results
 type resultRowCmd cmd
 
 func (c *resultRowCmd) execute(vm *vm, routine *routine) cmdRes {
 	row := []*string{}
-	i := c.p1
-	end := c.p1 + c.p2 - 1
-	for i <= end {
+	for i := c.p1; i < c.p1+c.p2; i += 1 {
 		switch v := routine.registers[i].(type) {
 		case int:
 			vs := strconv.Itoa(v)
@@ -297,7 +294,6 @@ func (c *resultRowCmd) execute(vm *vm, routine *routine) cmdRes {
 		default:
 			return cmdRes{err: fmt.Errorf("unhandled result row %#v", v)}
 		}
-		i = i + 1
 	}
 	*routine.resultRows = append(*routine.resultRows, row)
 	return cmdRes{}
@@ -326,14 +322,13 @@ func (c *nextCmd) explain(addr int) []*string {
 	return formatExplain(addr, "Next", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
-// TODO standardize range
-// makeRecordCmd makes a byte array record for registers p1 through p2 and
+// makeRecordCmd makes a byte array record for registers p1 through p1+p2-1 and
 // stores the record in register p3.
 type makeRecordCmd cmd
 
 func (c *makeRecordCmd) execute(vm *vm, routine *routine) cmdRes {
 	span := []any{}
-	for i := c.p1; i <= c.p1+c.p2; i += 1 {
+	for i := c.p1; i < c.p1+c.p2; i += 1 {
 		span = append(span, routine.registers[i])
 	}
 	v, err := Encode(span)
@@ -345,7 +340,7 @@ func (c *makeRecordCmd) execute(vm *vm, routine *routine) cmdRes {
 }
 
 func (c *makeRecordCmd) explain(addr int) []*string {
-	comment := fmt.Sprintf("Convert register [%d..%d] to bytes and store in register[%d]", c.p1, c.p1+c.p2, c.p3)
+	comment := fmt.Sprintf("Convert registers[%d..%d] to bytes and store in register[%d]", c.p1, c.p1+c.p2-1, c.p3)
 	return formatExplain(addr, "MakeRecord", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 

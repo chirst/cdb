@@ -41,7 +41,7 @@ func (*createPlanner) getPlan(s *compiler.CreateStmt) (*executionPlan, error) {
 	commands = append(commands, &stringCmd{p1: 5, p4: tName})
 	commands = append(commands, &copyCmd{p1: 1, p2: 6})
 	commands = append(commands, &stringCmd{p1: 7, p4: string(jSchema)})
-	commands = append(commands, &makeRecordCmd{p1: 3, p2: 4, p3: 8})
+	commands = append(commands, &makeRecordCmd{p1: 3, p2: 5, p3: 8})
 	commands = append(commands, &insertCmd{p1: 1, p2: 8, p3: 2})
 	commands = append(commands, &parseSchemaCmd{})
 	commands = append(commands, &haltCmd{})

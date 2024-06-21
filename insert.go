@@ -31,7 +31,7 @@ func (p *insertPlanner) getPlan(s *compiler.InsertStmt) (*executionPlan, error) 
 	commands = append(commands, &transactionCmd{p2: 1})
 	commands = append(commands, &openWriteCmd{p1: cursorId, p2: rootPageNumber})
 	commands = append(commands, &newRowIdCmd{p1: rootPageNumber, p2: 1})
-	gap := -1
+	gap := 1
 	registerIdx := 2
 	for _, c := range cols {
 		if c == "id" {
