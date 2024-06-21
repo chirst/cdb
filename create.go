@@ -44,7 +44,7 @@ func (*createPlanner) getPlan(s *compiler.CreateStmt) (*executionPlan, error) {
 	commands = append(commands, &makeRecordCmd{p1: 3, p2: 4, p3: 8})
 	commands = append(commands, &insertCmd{p1: 1, p2: 8, p3: 2})
 	commands = append(commands, &parseSchemaCmd{})
-	commands = append(commands, &haltCmd{p2: 1})
+	commands = append(commands, &haltCmd{})
 	return &executionPlan{
 		explain:  s.Explain,
 		commands: commands,

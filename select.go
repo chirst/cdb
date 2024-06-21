@@ -70,7 +70,7 @@ func (p *selectPlanner) getPlan(s *compiler.SelectStmt) (*executionPlan, error) 
 	}
 	commands = append(commands, &resultRowCmd{p1: 1, p2: gap + 1})
 	commands = append(commands, &nextCmd{p1: cursorId, p2: 4})
-	commands = append(commands, &haltCmd{p2: 0})
+	commands = append(commands, &haltCmd{})
 	rwc.p2 = len(commands) - 1
 	return &executionPlan{
 		explain:      s.Explain,
