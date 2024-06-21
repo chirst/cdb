@@ -3,63 +3,35 @@
 // Machine) to be ran.
 package main
 
+// TODO
+// This planner will eventually consist of smaller parts.
+// 1. Something like a binder may be necessary which would validate the values
+//    in the statement make sense given the current schema.
+// 2. A logical query planner which would transform the ast into a relational
+//    algebra like structure. This structure would allow for optimizations like
+//    predicate push down.
+// 3. Perhaps a physical planner which would maybe take into account statistics
+//    and indexes.
+// Somewhere in these structures would be the ability to print a query plan that
+// is higher level than the bytecode operations. A typical explain tree.
+
 import "github.com/chirst/cdb/compiler"
 
-type selectPlanner struct {
-	catalog *catalog
+// selectCatalog defines the catalog methods needed by the select planner
+type selectCatalog interface {
+	getColumns(tableOrIndexName string) ([]string, error)
+	getRootPageNumber(tableOrIndexName string) (int, error)
 }
 
-func newSelectPlanner(catalog *catalog) *selectPlanner {
+type selectPlanner struct {
+	catalog selectCatalog
+}
+
+func newSelectPlanner(catalog selectCatalog) *selectPlanner {
 	return &selectPlanner{
 		catalog: catalog,
 	}
 }
-
-// func (p *selectPlanner) getPlan(s *compiler.SelectStmt) (*executionPlan, error) {
-// 	lp, err := p.getLogicalPlan(s)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return p.getPhysicalPlan(lp, s.Explain)
-// }
-
-// func (l *selectPlanner) getLogicalPlan(s *compiler.SelectStmt) (*projection, error) {
-// 	p := &projection{}
-// 	tablePageNumber := 0
-// 	var tableColumns []string
-// 	if s.From != nil && s.From.TableName != "" {
-// 		tpn, err := l.catalog.getPageNumber(s.From.TableName)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		tcs, err := l.catalog.getColumns(s.From.TableName)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		tablePageNumber = tpn
-// 		tableColumns = tcs
-// 	}
-// 	if s.ResultColumn.All {
-// 		p.fields = tableColumns
-// 	}
-// 	p.childSet = set{
-// 		rootPage: tablePageNumber,
-// 	}
-// 	return p, nil
-// }
-
-// // Projection is the root of a logical query plan.
-// type projection struct {
-// 	// Fields to project from the set.
-// 	fields []string
-// 	// Set that is being projected.
-// 	childSet set
-// }
-
-// type set struct {
-// 	// Page number of corresponding index or table.
-// 	rootPage int
-// }
 
 func (p *selectPlanner) getPlan(s *compiler.SelectStmt) (*executionPlan, error) {
 	resultHeader := []*string{}

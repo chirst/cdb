@@ -88,13 +88,13 @@ func (v *vm) execute(plan *executionPlan) *executeResult {
 }
 
 func formatExplain(addr int, c string, p1, p2, p3 int, p4 string, p5 int, comment string) []*string {
-	addra := strconv.Itoa(addr)
+	aa := strconv.Itoa(addr)
 	p1a := strconv.Itoa(p1)
 	p2a := strconv.Itoa(p2)
 	p3a := strconv.Itoa(p3)
 	p5a := strconv.Itoa(p5)
 	return []*string{
-		&addra,
+		&aa,
 		&c,
 		&p1a,
 		&p2a,
@@ -197,20 +197,6 @@ func (c *transactionCmd) explain(addr int) []*string {
 		comment = "Begin a write transaction"
 	}
 	return formatExplain(addr, "Transaction", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
-}
-
-// gotoCmd goes to the address at p2
-type gotoCmd cmd
-
-func (c *gotoCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
-	return cmdRes{
-		nextAddress: c.p2,
-	}
-}
-
-func (c *gotoCmd) explain(addr int) []*string {
-	comment := fmt.Sprintf("Jump to addr[%d]", c.p2)
-	return formatExplain(addr, "Goto", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
 // openReadCmd opens a read cursor at page p2 with the identifier p1
@@ -325,19 +311,6 @@ func (c *nextCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm
 func (c *nextCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Advance cursor %d. If there are items jump to addr[%d]", c.p1, c.p2)
 	return formatExplain(addr, "Next", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
-}
-
-// integerCmd stores the integer in p1 in register p2.
-type integerCmd cmd
-
-func (c *integerCmd) execute(registers map[int]any, resultRows *[][]*string, vm *vm) cmdRes {
-	registers[c.p2] = c.p1
-	return cmdRes{}
-}
-
-func (c *integerCmd) explain(addr int) []*string {
-	comment := fmt.Sprintf("Store integer %d in register[%d]", c.p1, c.p2)
-	return formatExplain(addr, "Integer", c.p1, c.p2, c.p3, c.p4, c.p5, comment)
 }
 
 // makeRecordCmd makes a byte array record for registers p1 through p2 and

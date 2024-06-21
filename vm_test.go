@@ -12,16 +12,16 @@ func TestExec(t *testing.T) {
 	}
 	vm := newVm(kv)
 	ep := &executionPlan{
-		commands: map[int]command{
-			1: &initCmd{p2: 2},
-			2: &transactionCmd{},
-			3: &openReadCmd{p2: 2},
-			4: &rewindCmd{p2: 9},
-			5: &rowIdCmd{p2: 1},
-			6: &columnCmd{p2: 1, p3: 2},
-			7: &resultRowCmd{p1: 1, p2: 2},
-			8: &nextCmd{p2: 5},
-			9: &haltCmd{},
+		commands: []command{
+			&initCmd{p2: 1},
+			&transactionCmd{},
+			&openReadCmd{p1: 1, p2: 2},
+			&rewindCmd{p1: 1, p2: 8},
+			&rowIdCmd{p1: 1, p2: 1},
+			&columnCmd{p1: 1, p2: 1, p3: 2},
+			&resultRowCmd{p1: 1, p2: 2},
+			&nextCmd{p1: 1, p2: 4},
+			&haltCmd{},
 		},
 		explain: false,
 	}
