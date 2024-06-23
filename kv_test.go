@@ -25,25 +25,37 @@ func TestKv(t *testing.T) {
 
 	t.Run("set page split", func(t *testing.T) {
 		kv, _ := NewKv(true)
-		for i := 0; i < 256; i += 1 {
-			kv.Set(1, []byte{byte(i)}, []byte{1, 2, 3, 4, 5})
+		var rk []byte
+		var rv []byte
+		ri := 178
+		// For a page 4096 a split is more than guaranteed here because
+		// 512*8=4096 not including the header of each page.
+		for i := 1; i < 512; i += 1 {
+			kv.BeginWriteTransaction()
+			k := EncodeKey(uint16(i))
+			v := []byte{1, 0, 0, 0}
+			if len(k) != 4 {
+				t.Fatal("need k to be len 4")
+			}
+			if len(v) != 4 {
+				t.Fatal("need v to be len 4")
+			}
+			kv.Set(1, k, v)
+			if ri == i {
+				rk = k
+				rv = v
+			}
+			kv.EndWriteTransaction()
 		}
-		for i := 0; i < 138; i += 1 {
-			kv.Set(1, []byte{byte(i), 0}, []byte{1, 2, 3, 4, 5})
-		}
-		// this value causes a split
-		k := []byte{byte(140), 0}
-		v := []byte{1, 1, 1, 1, 1}
-		kv.Set(1, k, v)
-		res, found, err := kv.Get(1, k)
+		res, found, err := kv.Get(1, rk)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if !found {
-			t.Errorf("expected value for %v to be found", k)
+			t.Fatalf("expected value for %v to be found", rk)
 		}
-		if !bytes.Equal(res, v) {
-			t.Errorf("expected value %v got %v", v, res)
+		if !bytes.Equal(rv, res) {
+			t.Errorf("expected value %v got %v", rv, res)
 		}
 	})
 }

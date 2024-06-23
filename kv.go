@@ -65,6 +65,11 @@ func (kv *kv) Get(pageNumber uint16, key []byte) ([]byte, bool, error) {
 // with the root page of the corresponding table. The system catalog uses the
 // page number 1.
 func (kv *kv) Set(pageNumber uint16, key, value []byte) error {
+	// TODO set has some issues. One being set doesn't differentiate between
+	// insert and update which isn't very intentional. Two being set cannot
+	// perform multiple insertions in the span of one transaction since page
+	// splits pull out stale pages on subsequent inserts which causes difficult
+	// bugs.
 	if pageNumber == EMPTY_PARENT_PAGE_NUMBER {
 		return errorReservedPage
 	}
@@ -97,24 +102,21 @@ func (kv *kv) Set(pageNumber uint16, key, value []byte) error {
 	return nil
 }
 
-// TODO this is really messy and is a symptom of internal pages using two keys
-// to represent two ranges where only one key is necessary.
-func insertIntoOne(key, value []byte, p1, p2 *page) {
-	p1k := p1.getEntries()[0].key
-	p2k := p2.getEntries()[0].key
-	if bytes.Equal(p1k, key) {
-		p1.setEntries(append(p1.getEntries(), pageTuple{key, value}))
+// a helper function to insert into a left or right page given the left and
+// right pages have space and the right page is greater than the left.
+func insertIntoOne(key, value []byte, lp, rp *page) {
+	rpk := rp.getEntries()[0].key
+	comp := bytes.Compare(key, rpk)
+	if comp == 0 { // key == rpk
+		rp.setEntries(append(rp.getEntries(), pageTuple{key, value}))
 		return
 	}
-	if bytes.Equal(p2k, key) {
-		p2.setEntries(append(p2.getEntries(), pageTuple{key, value}))
+	if comp == -1 { // key < rpk
+		lp.setEntries(append(lp.getEntries(), pageTuple{key, value}))
 		return
 	}
-	if bytes.Compare(p1k, key) == -1 && bytes.Compare(key, p2k) == -1 {
-		p1.setEntries(append(p1.getEntries(), pageTuple{key, value}))
-		return
-	}
-	p2.setEntries(append(p2.getEntries(), pageTuple{key, value}))
+	// key > rpk
+	rp.setEntries(append(rp.getEntries(), pageTuple{key, value}))
 }
 
 func (kv *kv) getLeafPage(nextPageNumber uint16, key []byte) *page {
