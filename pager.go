@@ -196,15 +196,22 @@ func (p *pager) allocatePage(pageNumber uint16, content []byte) *page {
 	return np
 }
 
-// page is structured as follows:
-// - 2 bytes for the page type.
-// - 4 bytes for the parent pointer.
-// - 4 bytes for the left pointer.
-// - 4 bytes for the right pointer.
-// - 2 bytes for the count of tuples.
-// - 4 bytes for the tuple offsets (2 bytes key 2 bytes value) multiplied by the
-// amount of tuples.
-// - Variable length key and value tuples filling the remaining space.
+// page is structured as follows where values accumulate start to end unless
+// otherwise specified:
+//   - 2 bytes for the page type. Which could be internal, leaf or overflow.
+//   - 4 bytes for the parent pointer (btree).
+//   - 4 bytes for the left pointer (btree).
+//   - 4 bytes for the right pointer (btree).
+//   - 2 bytes for the count of tuples stored on the page.
+//   - 4 bytes for the tuple offsets (2 bytes key 2 bytes value) multiplied by
+//     the count of tuples previously mentioned.
+//   - Variable length key and value tuples filling the remaining space. Which
+//     accumulates from the end of the page to the start.
+//
+// TODO could implement overflow pages in case a tuple is larger than some
+// threshold (say half the page). There would be another block that would
+// contain pointers to overflow pages or be empty. The overflow pages would
+// contain a pointer to the next overflow page and content of the overflow.
 //
 // Tuple offsets are sorted and listed in order. Tuples are stored in reverse
 // order starting at the end of the page. This is so the end of each tuple can

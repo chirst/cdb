@@ -3,7 +3,7 @@ package main
 import "log"
 
 func main() {
-	db, err := newDb()
+	db, err := newDb(false)
 	if err != nil {
 		log.Fatal(err)
 	}

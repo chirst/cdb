@@ -14,8 +14,8 @@ type db struct {
 	vm *vm
 }
 
-func newDb() (*db, error) {
-	kv, err := NewKv(false)
+func newDb(useMemory bool) (*db, error) {
+	kv, err := NewKv(useMemory)
 	if err != nil {
 		return nil, err
 	}

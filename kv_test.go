@@ -30,15 +30,17 @@ func TestKv(t *testing.T) {
 		ri := 178
 		// For a page 4096 a split is more than guaranteed here because
 		// 512*8=4096 not including the header of each page.
-		for i := 1; i < 512; i += 1 {
+		keyValueSize := 4
+		iters := PAGE_SIZE / 8
+		for i := 1; i <= iters; i += 1 {
 			kv.BeginWriteTransaction()
 			k := EncodeKey(uint16(i))
 			v := []byte{1, 0, 0, 0}
-			if len(k) != 4 {
-				t.Fatal("need k to be len 4")
+			if len(k) != keyValueSize {
+				t.Fatalf("need k to be len %d", keyValueSize)
 			}
-			if len(v) != 4 {
-				t.Fatal("need v to be len 4")
+			if len(v) != keyValueSize {
+				t.Fatalf("need v to be len %d", keyValueSize)
 			}
 			kv.Set(1, k, v)
 			if ri == i {
