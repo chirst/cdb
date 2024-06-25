@@ -1,4 +1,4 @@
-package main
+package kv
 
 import (
 	"encoding/json"
@@ -16,7 +16,7 @@ func newCatalog() *catalog {
 	}
 }
 
-func (c *catalog) getRootPageNumber(tableOrIndexName string) (int, error) {
+func (c *catalog) GetRootPageNumber(tableOrIndexName string) (int, error) {
 	if tableOrIndexName == "cdb_schema" {
 		return 1, nil
 	}
@@ -28,7 +28,7 @@ func (c *catalog) getRootPageNumber(tableOrIndexName string) (int, error) {
 	return 0, fmt.Errorf("cannot get root of %s", tableOrIndexName)
 }
 
-func (c *catalog) getColumns(tableName string) ([]string, error) {
+func (c *catalog) GetColumns(tableName string) ([]string, error) {
 	if tableName == "cdb_schema" {
 		return []string{"id", "type", "name", "table_name", "rootpage", "sql"}, nil
 	}
@@ -64,16 +64,16 @@ type object struct {
 	jsonSchema string
 }
 
-type tableSchema struct {
-	Columns []tableColumn `json:"columns"`
+type TableSchema struct {
+	Columns []TableColumn `json:"columns"`
 }
 
-type tableColumn struct {
+type TableColumn struct {
 	Name    string `json:"name"`
 	ColType string `json:"type"`
 }
 
-func (ts *tableSchema) ToJSON() ([]byte, error) {
+func (ts *TableSchema) ToJSON() ([]byte, error) {
 	j, err := json.Marshal(ts)
 	if err != nil {
 		return []byte{}, err
@@ -81,12 +81,12 @@ func (ts *tableSchema) ToJSON() ([]byte, error) {
 	return j, nil
 }
 
-func (ts *tableSchema) FromJSON(j []byte) error {
+func (ts *TableSchema) FromJSON(j []byte) error {
 	return json.Unmarshal(j, ts)
 }
 
-func TableSchemaFromString(s string) *tableSchema {
-	v := &tableSchema{}
+func TableSchemaFromString(s string) *TableSchema {
+	v := &TableSchema{}
 	json.Unmarshal([]byte(s), &v)
 	return v
 }

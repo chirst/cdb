@@ -1,4 +1,4 @@
-package main
+package repl
 
 import "testing"
 
@@ -7,7 +7,7 @@ func makeStr(s string) *string {
 }
 
 func TestPrint(t *testing.T) {
-	repl := newRepl(nil)
+	repl := New(nil)
 	resultRows := [][]*string{
 		{
 			makeStr("id"),

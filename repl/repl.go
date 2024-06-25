@@ -1,22 +1,24 @@
 // repl (read eval print loop) adapts db to the command line.
-package main
+package repl
 
 import (
 	"bufio"
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/chirst/cdb/db"
 )
 
 type repl struct {
-	db *db
+	db *db.DB
 }
 
-func newRepl(db *db) *repl {
+func New(db *db.DB) *repl {
 	return &repl{db: db}
 }
 
-func (r *repl) run() {
+func (r *repl) Run() {
 	fmt.Println("Welcome to cdb. Type .exit to exit")
 	reader := bufio.NewScanner(os.Stdin)
 	for r.getInput(reader) {
@@ -29,16 +31,16 @@ func (r *repl) run() {
 				os.Exit(0)
 			}
 		}
-		result := r.db.execute(input)
-		if result.err != nil {
-			fmt.Printf("Err: %s\n", result.err.Error())
+		result := r.db.Execute(input)
+		if result.Err != nil {
+			fmt.Printf("Err: %s\n", result.Err.Error())
 			continue
 		}
-		if result.text != "" {
-			fmt.Println(result.text)
+		if result.Text != "" {
+			fmt.Println(result.Text)
 		}
-		if len(result.resultRows) != 0 {
-			fmt.Println(r.printRows(result.resultRows))
+		if len(result.ResultRows) != 0 {
+			fmt.Println(r.printRows(result.ResultRows))
 		}
 	}
 }

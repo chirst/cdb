@@ -1,23 +1,23 @@
-package main
+package db
 
 import (
 	"testing"
 )
 
 func TestExecute(t *testing.T) {
-	db, err := newDb(true)
+	db, err := New(true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	createSql := "CREATE TABLE person (id INTEGER, first_name TEXT, last_name TEXT, age INTEGER)"
-	createRes := db.execute(createSql)
-	if createRes.err != nil {
-		t.Fatal(err.Error())
+	createRes := db.Execute(createSql)
+	if createRes.Err != nil {
+		t.Fatal(createRes.Err.Error())
 	}
 	selectSchemaSql := "SELECT * FROM cdb_schema"
-	schemaRes := db.execute(selectSchemaSql)
-	if schemaRes.err != nil {
-		t.Fatal(schemaRes.err.Error())
+	schemaRes := db.Execute(selectSchemaSql)
+	if schemaRes.Err != nil {
+		t.Fatal(schemaRes.Err.Error())
 	}
 	schemaSelectExpectations := []string{
 		"1",
@@ -28,19 +28,19 @@ func TestExecute(t *testing.T) {
 		"{\"columns\":[{\"name\":\"id\",\"type\":\"INTEGER\"},{\"name\":\"first_name\",\"type\":\"TEXT\"},{\"name\":\"last_name\",\"type\":\"TEXT\"},{\"name\":\"age\",\"type\":\"INTEGER\"}]}",
 	}
 	for i, s := range schemaSelectExpectations {
-		if c := *schemaRes.resultRows[1][i]; c != s {
+		if c := *schemaRes.ResultRows[1][i]; c != s {
 			t.Fatalf("expected %s got %s", s, c)
 		}
 	}
 	insertSql := "INSERT INTO person (first_name, last_name, age) VALUES ('John', 'Smith', 50)"
-	insertRes := db.execute(insertSql)
-	if insertRes.err != nil {
-		t.Fatal(err.Error())
+	insertRes := db.Execute(insertSql)
+	if insertRes.Err != nil {
+		t.Fatal(insertRes.Err.Error())
 	}
 	selectPersonSql := "SELECT * FROM person"
-	selectPersonRes := db.execute(selectPersonSql)
-	if selectPersonRes.err != nil {
-		t.Fatal(err.Error())
+	selectPersonRes := db.Execute(selectPersonSql)
+	if selectPersonRes.Err != nil {
+		t.Fatal(selectPersonRes.Err.Error())
 	}
 	selectPersonExpectations := []string{
 		"1",
@@ -49,7 +49,7 @@ func TestExecute(t *testing.T) {
 		"50",
 	}
 	for i, s := range selectPersonExpectations {
-		if c := *selectPersonRes.resultRows[1][i]; c != s {
+		if c := *selectPersonRes.ResultRows[1][i]; c != s {
 			t.Fatalf("expected %s got %s", s, c)
 		}
 	}

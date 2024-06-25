@@ -1,4 +1,4 @@
-package main
+package pager
 
 import (
 	"bytes"
@@ -7,22 +7,22 @@ import (
 )
 
 func TestPageHelpers(t *testing.T) {
-	pager, err := newPager(true)
+	pager, err := New(true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := pager.getPage(1)
+	p := pager.GetPage(1)
 
 	t.Run("get set internal", func(t *testing.T) {
-		p.setType(PAGE_TYPE_INTERNAL)
-		if res := p.getType(); res != PAGE_TYPE_INTERNAL {
+		p.SetType(PAGE_TYPE_INTERNAL)
+		if res := p.GetType(); res != PAGE_TYPE_INTERNAL {
 			t.Errorf("want %d got %d", PAGE_TYPE_INTERNAL, res)
 		}
 	})
 
 	t.Run("get set leaf", func(t *testing.T) {
-		p.setType(PAGE_TYPE_LEAF)
-		if res := p.getType(); res != PAGE_TYPE_LEAF {
+		p.SetType(PAGE_TYPE_LEAF)
+		if res := p.GetType(); res != PAGE_TYPE_LEAF {
 			t.Errorf("want %d got %d", PAGE_TYPE_LEAF, res)
 		}
 	})
@@ -37,7 +37,7 @@ func TestPageHelpers(t *testing.T) {
 
 	t.Run("get page number", func(t *testing.T) {
 		var want uint16 = 1
-		res := p.getNumber()
+		res := p.GetNumber()
 		if res != want {
 			t.Errorf("want %d got %d", want, res)
 		}
@@ -45,14 +45,14 @@ func TestPageHelpers(t *testing.T) {
 
 	t.Run("get page number as bytes", func(t *testing.T) {
 		var want uint16 = 1
-		res := p.getNumberAsBytes()
+		res := p.GetNumberAsBytes()
 		ExpectUint16(t, res, 0, want)
 	})
 
 	t.Run("get set parent page number", func(t *testing.T) {
 		var wantPn uint16 = 12
-		p.setParentPageNumber(wantPn)
-		gotHas, gotPn := p.getParentPageNumber()
+		p.SetParentPageNumber(wantPn)
+		gotHas, gotPn := p.GetParentPageNumber()
 		if gotHas != true {
 			t.Error("want true got false")
 		}
@@ -64,15 +64,15 @@ func TestPageHelpers(t *testing.T) {
 
 func TestPageSet(t *testing.T) {
 	t.Run("set", func(t *testing.T) {
-		pager, err := newPager(true)
+		pager, err := New(true)
 		if err != nil {
 			t.Fatal(err)
 		}
-		p := pager.getPage(1)
+		p := pager.GetPage(1)
 
-		p.setValue([]byte{2}, []byte{'g', 'r', 'e', 'g'})
-		p.setValue([]byte{1}, []byte{'c', 'a', 'r', 'l'})
-		p.setValue([]byte{3}, []byte{'j', 'i', 'l', 'l', 'i', 'a', 'n'})
+		p.SetValue([]byte{2}, []byte{'g', 'r', 'e', 'g'})
+		p.SetValue([]byte{1}, []byte{'c', 'a', 'r', 'l'})
+		p.SetValue([]byte{3}, []byte{'j', 'i', 'l', 'l', 'i', 'a', 'n'})
 
 		ExpectUint16(t, p.content, 14, 3)
 		ExpectUint16(t, p.content, 16, 4091)
@@ -91,14 +91,14 @@ func TestPageSet(t *testing.T) {
 	})
 
 	t.Run("set update", func(t *testing.T) {
-		pager, err := newPager(true)
+		pager, err := New(true)
 		if err != nil {
 			t.Fatal(err)
 		}
-		p := pager.getPage(1)
+		p := pager.GetPage(1)
 
-		p.setValue([]byte{1}, []byte{'c', 'a', 'r', 'l'})
-		p.setValue([]byte{1}, []byte{'r', 'o', 'l', 'f'})
+		p.SetValue([]byte{1}, []byte{'c', 'a', 'r', 'l'})
+		p.SetValue([]byte{1}, []byte{'r', 'o', 'l', 'f'})
 
 		ExpectUint16(t, p.content, 14, 1)
 		ExpectUint16(t, p.content, 16, 4091)
@@ -112,17 +112,17 @@ func TestPageSet(t *testing.T) {
 func TestGet(t *testing.T) {
 
 	t.Run("get", func(t *testing.T) {
-		pager, err := newPager(true)
+		pager, err := New(true)
 		if err != nil {
 			t.Fatal(err)
 		}
-		p := pager.getPage(1)
+		p := pager.GetPage(1)
 		n := []byte{'o', 'k', 'i', 'e'}
-		p.setValue([]byte{3}, []byte{'j', 'a', 'n', 'i', 'c', 'e'})
-		p.setValue([]byte{1}, n)
-		p.setValue([]byte{5}, []byte{'m', 'a', 't', 'i', 'l', 'd', 'a'})
+		p.SetValue([]byte{3}, []byte{'j', 'a', 'n', 'i', 'c', 'e'})
+		p.SetValue([]byte{1}, n)
+		p.SetValue([]byte{5}, []byte{'m', 'a', 't', 'i', 'l', 'd', 'a'})
 
-		ret, found := p.getValue([]byte{1})
+		ret, found := p.GetValue([]byte{1})
 
 		if !bytes.Equal(ret, n) {
 			t.Errorf("expected %v got %v", n, ret)
@@ -133,13 +133,13 @@ func TestGet(t *testing.T) {
 	})
 
 	t.Run("get not found", func(t *testing.T) {
-		pager, err := newPager(true)
+		pager, err := New(true)
 		if err != nil {
 			t.Fatal(err)
 		}
-		p := pager.getPage(1)
+		p := pager.GetPage(1)
 
-		_, found := p.getValue([]byte{1})
+		_, found := p.GetValue([]byte{1})
 
 		if found {
 			t.Error("expected not found")

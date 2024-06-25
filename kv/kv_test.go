@@ -1,13 +1,15 @@
-package main
+package kv
 
 import (
 	"bytes"
 	"testing"
+
+	"github.com/chirst/cdb/pager"
 )
 
 func TestKv(t *testing.T) {
 	t.Run("get", func(t *testing.T) {
-		kv, _ := NewKv(true)
+		kv, _ := New(true)
 		k := []byte{1}
 		v := []byte{'n', 'e', 'd'}
 		kv.Set(1, k, v)
@@ -24,14 +26,14 @@ func TestKv(t *testing.T) {
 	})
 
 	t.Run("set page split", func(t *testing.T) {
-		kv, _ := NewKv(true)
+		kv, _ := New(true)
 		var rk []byte
 		var rv []byte
 		ri := 178
 		// For a page 4096 a split is more than guaranteed here because
 		// 512*8=4096 not including the header of each page.
 		keyValueSize := 4
-		iters := PAGE_SIZE / 8
+		iters := pager.PAGE_SIZE / 8
 		for i := 1; i <= iters; i += 1 {
 			kv.BeginWriteTransaction()
 			k := EncodeKey(uint16(i))
