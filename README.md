@@ -1,5 +1,9 @@
 # CDB
-cdb is a database built for learning about the inner workings of databases. cdb was heavily inspired by SQLite, Cockroach database, and the CMU database lectures. cdb implments a subset of SQL described below.
+CDB is a SQL database built for learning about the inner workings of databases. CDB
+was heavily inspired by [SQLite](https://www.sqlite.org/),
+[CockroachDB](https://github.com/cockroachdb/cockroach), and the
+[CMU Database Group](https://www.youtube.com/c/cmudatabasegroup). CDB implements
+a subset of SQL described below.
 
 ## Language reference
 
