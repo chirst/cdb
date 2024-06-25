@@ -15,38 +15,53 @@ type token struct {
 	value     string
 }
 
+// TokenTypes where tk is token
 const (
-	// KEYWORD is a reserved word. For example SELECT, FROM, or WHERE.
-	KEYWORD = iota + 1
-	// IDENTIFIER is a word that is not a keyword like a table or column name.
-	IDENTIFIER
-	//  WHITESPACE is a space, tab, or newline.
-	WHITESPACE
-	// EOF (End of file) is the end of input.
-	EOF
-	// SEPARATOR is punctuation such as "(", ",", ";".
-	SEPARATOR
-	// OPERATOR is a symbol that operates on arguments.
-	OPERATOR
-	// PUNCTUATOR is punctuation that is neither a separator or operator.
-	PUNCTUATOR
-	// LITERAL is a quoted text value like 'foo'.
-	LITERAL
-	// NUMERIC is a numeric value like 1, 1.2, or -3.
-	NUMERIC
+	// tkKeyword is a reserved word. For example SELECT, FROM, or WHERE.
+	tkKeyword = iota + 1
+	// tkIdentifier is a word that is not a keyword like a table or column name.
+	tkIdentifier
+	//  tkWhitespace is a space, tab, or newline.
+	tkWhitespace
+	// tkEOF (End of file) is the end of input.
+	tkEOF
+	// tkSeparator is punctuation such as "(", ",", ";".
+	tkSeparator
+	// tkOperator is a symbol that operates on arguments.
+	tkOperator
+	// tkPunctuator is punctuation that is neither a separator or operator.
+	tkPunctuator
+	// tkLiteral is a quoted text value like 'foo'.
+	tkLiteral
+	// tkNumeric is a numeric value like 1, 1.2, or -3.
+	tkNumeric
+)
+
+// Keywords where kw is keyword
+const (
+	kwExplain = "EXPLAIN"
+	kwSelect  = "SELECT"
+	kwFrom    = "FROM"
+	kwCreate  = "CREATE"
+	kwInsert  = "INSERT"
+	kwInto    = "INTO"
+	kwTable   = "TABLE"
+	kwValues  = "VALUES"
+	kwInteger = "INTEGER"
+	kwText    = "TEXT"
 )
 
 var keywords = []string{
-	"EXPLAIN",
-	"SELECT",
-	"FROM",
-	"CREATE",
-	"INSERT",
-	"INTO",
-	"TABLE",
-	"VALUES",
-	"INTEGER",
-	"TEXT",
+	kwExplain,
+	kwSelect,
+	kwFrom,
+	kwCreate,
+	kwInsert,
+	kwInto,
+	kwTable,
+	kwValues,
+	kwInteger,
+	kwText,
 }
 
 func (*lexer) isKeyword(w string) bool {
@@ -69,7 +84,7 @@ func (l *lexer) Lex() []token {
 	ret := []token{}
 	for {
 		t := l.getToken()
-		if t.tokenType == EOF {
+		if t.tokenType == tkEOF {
 			return ret
 		}
 		ret = append(ret, t)
@@ -93,7 +108,7 @@ func (l *lexer) getToken() token {
 	case l.isSingleQuote(r):
 		return l.scanLiteral()
 	}
-	return token{EOF, ""}
+	return token{tkEOF, ""}
 }
 
 func (l *lexer) peek(pos int) rune {
@@ -115,7 +130,7 @@ func (l *lexer) scanWhiteSpace() token {
 	for l.isWhiteSpace(l.peek(l.end)) {
 		l.next()
 	}
-	return token{tokenType: WHITESPACE, value: " "}
+	return token{tokenType: tkWhitespace, value: " "}
 }
 
 func (l *lexer) scanWord() token {
@@ -125,9 +140,9 @@ func (l *lexer) scanWord() token {
 	}
 	value := l.src[l.start:l.end]
 	if l.isKeyword(value) {
-		return token{tokenType: KEYWORD, value: strings.ToUpper(value)}
+		return token{tokenType: tkKeyword, value: strings.ToUpper(value)}
 	}
-	return token{tokenType: IDENTIFIER, value: value}
+	return token{tokenType: tkIdentifier, value: value}
 }
 
 func (l *lexer) scanDigit() token {
@@ -135,17 +150,17 @@ func (l *lexer) scanDigit() token {
 	for l.isDigit(l.peek(l.end)) {
 		l.next()
 	}
-	return token{tokenType: NUMERIC, value: l.src[l.start:l.end]}
+	return token{tokenType: tkNumeric, value: l.src[l.start:l.end]}
 }
 
 func (l *lexer) scanAsterisk() token {
 	l.next()
-	return token{tokenType: PUNCTUATOR, value: l.src[l.start:l.end]}
+	return token{tokenType: tkPunctuator, value: l.src[l.start:l.end]}
 }
 
 func (l *lexer) scanSeparator() token {
 	l.next()
-	return token{tokenType: SEPARATOR, value: l.src[l.start:l.end]}
+	return token{tokenType: tkSeparator, value: l.src[l.start:l.end]}
 }
 
 func (l *lexer) scanLiteral() token {
@@ -154,7 +169,7 @@ func (l *lexer) scanLiteral() token {
 		l.next()
 	}
 	l.next()
-	return token{tokenType: LITERAL, value: l.src[l.start:l.end]}
+	return token{tokenType: tkLiteral, value: l.src[l.start:l.end]}
 }
 
 func (*lexer) isWhiteSpace(r rune) bool {
