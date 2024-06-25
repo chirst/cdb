@@ -2,6 +2,8 @@
 package compiler
 
 import (
+	"slices"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 )
@@ -34,20 +36,22 @@ const (
 	NUMERIC
 )
 
+var keywords = []string{
+	"EXPLAIN",
+	"SELECT",
+	"FROM",
+	"CREATE",
+	"INSERT",
+	"INTO",
+	"TABLE",
+	"VALUES",
+	"INTEGER",
+	"TEXT",
+}
+
 func (*lexer) isKeyword(w string) bool {
-	ws := map[string]bool{
-		"EXPLAIN": true,
-		"SELECT":  true,
-		"FROM":    true,
-		"CREATE":  true,
-		"INSERT":  true,
-		"INTO":    true,
-		"TABLE":   true,
-		"VALUES":  true,
-		"INTEGER": true,
-		"TEXT":    true,
-	}
-	return ws[w]
+	uw := strings.ToUpper(w)
+	return slices.Contains(keywords, uw)
 }
 
 type lexer struct {
@@ -57,7 +61,8 @@ type lexer struct {
 }
 
 func NewLexer(src string) *lexer {
-	return &lexer{src: src}
+	ts := strings.Trim(src, " \t\n")
+	return &lexer{src: ts}
 }
 
 func (l *lexer) Lex() []token {
@@ -110,7 +115,7 @@ func (l *lexer) scanWhiteSpace() token {
 	for l.isWhiteSpace(l.peek(l.end)) {
 		l.next()
 	}
-	return token{tokenType: WHITESPACE, value: l.src[l.start:l.end]}
+	return token{tokenType: WHITESPACE, value: " "}
 }
 
 func (l *lexer) scanWord() token {
@@ -119,11 +124,10 @@ func (l *lexer) scanWord() token {
 		l.next()
 	}
 	value := l.src[l.start:l.end]
-	var tokenType tokenType = IDENTIFIER
 	if l.isKeyword(value) {
-		tokenType = KEYWORD
+		return token{tokenType: KEYWORD, value: strings.ToUpper(value)}
 	}
-	return token{tokenType: tokenType, value: value}
+	return token{tokenType: IDENTIFIER, value: value}
 }
 
 func (l *lexer) scanDigit() token {

@@ -25,6 +25,33 @@ func TestLexSelect(t *testing.T) {
 			},
 		},
 		{
+			sql: "select * from foo",
+			expected: []token{
+				{KEYWORD, "SELECT"},
+				{WHITESPACE, " "},
+				{PUNCTUATOR, "*"},
+				{WHITESPACE, " "},
+				{KEYWORD, "FROM"},
+				{WHITESPACE, " "},
+				{IDENTIFIER, "foo"},
+			},
+		},
+		{
+			sql: `
+				select *
+				from foo
+			`,
+			expected: []token{
+				{KEYWORD, "SELECT"},
+				{WHITESPACE, " "},
+				{PUNCTUATOR, "*"},
+				{WHITESPACE, " "},
+				{KEYWORD, "FROM"},
+				{WHITESPACE, " "},
+				{IDENTIFIER, "foo"},
+			},
+		},
+		{
 			sql: "EXPLAIN SELECT 1",
 			expected: []token{
 				{KEYWORD, "EXPLAIN"},
