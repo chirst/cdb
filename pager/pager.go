@@ -3,31 +3,20 @@
 // memory. It also handles locking.
 package pager
 
-// TODO probably make this it's own package or better define public api
-// TODO pageCache should have different implementations that can be swapped.
-// Should also have customizable cache size. Could also have command to clear
-// cache.
 // TODO think about the similarities and differences between pageCache and
 // dirtyPages. Think about why the pageCache stores raw bytes of a page and the
 // dirtyPages stores a pointer to a page. Think about how caching should be
 // handled during a write. For instance, newPage hits dirtyPages, but not
 // pageCache.
-// TODO pager should have a catalogue in memory. When a write transaction is
-// started there should be a bit set by the opcode indicating whether or not the
-// transaction will update the catalogue. This means a write transaction started
-// and bit flipped. Right before the write transaction is closed the schema
-// cache will be repopulated. On startup the schema cache will also need to be
-// hydrated sometime soon after any pending journals are dealt with. This should
-// mean not having to make a bunch of stuff to create tables right away.
+// TODO try and remove specific integer types in favor of just int.
 
 import (
 	"bytes"
 	"encoding/binary"
-	"log"
 	"sort"
 	"sync"
 
-	"github.com/golang/groupcache/lru"
+	"github.com/chirst/cdb/pager/cache"
 )
 
 const (
@@ -52,6 +41,16 @@ const (
 	EMPTY_PARENT_PAGE_NUMBER = 0
 )
 
+// pageCache defines the page caching interface.
+type pageCache interface {
+	Get(pageNumber int) ([]byte, bool)
+	Add(key int, value []byte)
+	Remove(key int)
+}
+
+// Pager is an abstraction of the database file. Pager handles efficiently
+// accessing the file in a thread safe manner and atomically writing to the
+// file.
 type Pager struct {
 	// store implements storage and is typically a file
 	store storage
@@ -89,8 +88,9 @@ func New(useMemory bool) (*Pager, error) {
 	cmpb := make([]byte, FREE_PAGE_COUNTER_SIZE)
 	s.ReadAt(cmpb, FREE_PAGE_COUNTER_OFFSET)
 	cmpi := binary.LittleEndian.Uint16(cmpb)
+	// If the max page is the reserved page number the free page counter has not
+	// yet been set. Meaning the max page should probably be 1.
 	if cmpi == EMPTY_PARENT_PAGE_NUMBER {
-		// The max page cannot be the reserved page number
 		cmpi = 1
 	}
 	p := &Pager{
@@ -98,7 +98,7 @@ func New(useMemory bool) (*Pager, error) {
 		currentMaxPage: cmpi,
 		fileLock:       sync.RWMutex{},
 		dirtyPages:     []*Page{},
-		pageCache:      newLruPageCache(PAGE_CACHE_SIZE),
+		pageCache:      cache.NewLRU(PAGE_CACHE_SIZE),
 	}
 	p.GetPage(1)
 	return p, nil
@@ -130,7 +130,7 @@ func (p *Pager) EndWrite() error {
 	}
 	for _, fp := range p.dirtyPages {
 		p.WritePage(fp)
-		p.pageCache.remove(fp.GetNumber())
+		p.pageCache.Remove(int(fp.GetNumber()))
 	}
 	p.dirtyPages = []*Page{}
 	p.writeMaxPageNumber()
@@ -143,7 +143,7 @@ func (p *Pager) EndWrite() error {
 }
 
 func (p *Pager) GetPage(pageNumber uint16) *Page {
-	if v, hit := p.pageCache.get(pageNumber); hit {
+	if v, hit := p.pageCache.Get(int(pageNumber)); hit {
 		ap := p.allocatePage(pageNumber, v)
 		if p.isWriting {
 			p.dirtyPages = append(p.dirtyPages, ap)
@@ -157,7 +157,7 @@ func (p *Pager) GetPage(pageNumber uint16) *Page {
 	if p.isWriting {
 		p.dirtyPages = append(p.dirtyPages, ap)
 	}
-	p.pageCache.add(pageNumber, page)
+	p.pageCache.Add(int(pageNumber), page)
 	return ap
 }
 
@@ -409,41 +409,4 @@ func (p *Page) GetValue(key []byte) ([]byte, bool) {
 		return prevEntry.Value, true
 	}
 	return []byte{}, false
-}
-
-type pageCache interface {
-	get(pageNumber uint16) ([]byte, bool)
-	add(key uint16, value []byte)
-	remove(key uint16)
-}
-
-// lruPageCache implements pageCache
-type lruPageCache struct {
-	cache *lru.Cache
-}
-
-func (c *lruPageCache) get(key uint16) (value []byte, hit bool) {
-	v, ok := c.cache.Get(key)
-	if !ok {
-		return nil, false
-	}
-	vb, ok := v.([]byte)
-	if !ok {
-		log.Fatal("lru cache is not byte array")
-	}
-	return vb, true
-}
-
-func (c *lruPageCache) add(key uint16, value []byte) {
-	c.cache.Add(key, value)
-}
-
-func (c *lruPageCache) remove(key uint16) {
-	c.cache.Remove(key)
-}
-
-func newLruPageCache(maxSize int) *lruPageCache {
-	return &lruPageCache{
-		cache: lru.New(maxSize),
-	}
 }
