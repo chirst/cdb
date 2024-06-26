@@ -244,6 +244,8 @@ func (p *Page) SetParentPageNumber(pageNumber uint16) {
 	copy(p.content[PARENT_POINTER_OFFSET:PARENT_POINTER_OFFSET+PAGE_POINTER_SIZE], bpn)
 }
 
+// TODO consider just removing the boolean return from all these page pointers
+// since 0 means the same thing
 func (p *Page) GetLeftPageNumber() (hasLeft bool, pageNumber uint16) {
 	pn := binary.LittleEndian.Uint16(p.content[LEFT_POINTER_OFFSET : LEFT_POINTER_OFFSET+PAGE_POINTER_SIZE])
 	if pn == EMPTY_PARENT_PAGE_NUMBER {
