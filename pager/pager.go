@@ -3,16 +3,12 @@
 // memory. It also handles locking.
 package pager
 
-// TODO think about the similarities and differences between pageCache and
-// dirtyPages. Think about why the pageCache stores raw bytes of a page and the
-// dirtyPages stores a pointer to a page. Think about how caching should be
-// handled during a write. For instance, newPage hits dirtyPages, but not
-// pageCache.
 // TODO try and remove specific integer types in favor of just int.
 
 import (
 	"bytes"
 	"encoding/binary"
+	"slices"
 	"sort"
 	"sync"
 
@@ -143,15 +139,23 @@ func (p *Pager) EndWrite() error {
 }
 
 func (p *Pager) GetPage(pageNumber uint16) *Page {
-	if v, hit := p.pageCache.Get(int(pageNumber)); hit {
-		ap := p.allocatePage(pageNumber, v)
-		if p.isWriting {
-			p.dirtyPages = append(p.dirtyPages, ap)
+	// During a write pages are collected in the dirtyPages buffer. These pages
+	// must be retrieved from the buffer as they are modified because the file
+	// is becoming outdated.
+	if p.isWriting {
+		dpn := slices.IndexFunc(p.dirtyPages, func(dp *Page) bool {
+			return dp.number == pageNumber
+		})
+		if dpn != -1 {
+			return p.dirtyPages[dpn]
 		}
-		return ap
+	} else {
+		if v, hit := p.pageCache.Get(int(pageNumber)); hit {
+			return p.allocatePage(pageNumber, v)
+		}
 	}
 	page := make([]byte, PAGE_SIZE)
-	// Page number subtracted by one since 0 is reserved as a pointer to nothing
+	// Page number subtracted by 1 since 0 is reserved as a pointer to nothing.
 	p.store.ReadAt(page, int64(ROOT_PAGE_START+(pageNumber-1)*PAGE_SIZE))
 	ap := p.allocatePage(pageNumber, page)
 	if p.isWriting {
@@ -164,10 +168,7 @@ func (p *Pager) GetPage(pageNumber uint16) *Page {
 func (p *Pager) WritePage(page *Page) error {
 	// Page number subtracted by one since 0 is reserved as a pointer to nothing
 	_, err := p.store.WriteAt(page.content, int64(ROOT_PAGE_START+(page.GetNumber()-1)*PAGE_SIZE))
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func (p *Pager) writeMaxPageNumber() {
