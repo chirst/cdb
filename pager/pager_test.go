@@ -60,6 +60,30 @@ func TestPageHelpers(t *testing.T) {
 			t.Errorf("got %d want %d", gotPn, wantPn)
 		}
 	})
+
+	t.Run("get set left page number", func(t *testing.T) {
+		var wantPn uint16 = 21
+		p.SetLeftPageNumber(wantPn)
+		gotHas, gotPn := p.GetLeftPageNumber()
+		if gotHas != true {
+			t.Error("want true got false")
+		}
+		if gotPn != wantPn {
+			t.Errorf("got %d want %d", gotPn, wantPn)
+		}
+	})
+
+	t.Run("get set right page number", func(t *testing.T) {
+		var wantPn uint16 = 33
+		p.SetRightPageNumber(wantPn)
+		gotHas, gotPn := p.GetRightPageNumber()
+		if gotHas != true {
+			t.Error("want true got false")
+		}
+		if gotPn != wantPn {
+			t.Errorf("got %d want %d", gotPn, wantPn)
+		}
+	})
 }
 
 func TestPageSet(t *testing.T) {

@@ -73,9 +73,9 @@ func (kv *KV) Get(pageNumber uint16, key []byte) ([]byte, bool, error) {
 func (kv *KV) Set(pageNumber uint16, key, value []byte) error {
 	// TODO set has some issues. One being set doesn't differentiate between
 	// insert and update which isn't very intentional. Two being set cannot
-	// perform multiple insertions in the span of one transaction since page
-	// splits pull out stale pages on subsequent inserts which causes difficult
-	// bugs.
+	// perform multiple insertions in the span of one transaction. This is
+	// because page splits pull out stale pages on subsequent inserts which
+	// causes difficult to diagnose bugs.
 	if pageNumber == pager.EMPTY_PARENT_PAGE_NUMBER {
 		return errorReservedPage
 	}
@@ -146,6 +146,8 @@ func (kv *KV) splitPage(page *pager.Page) (left, right *pager.Page) {
 	rightPage := kv.pager.NewPage()
 	rightEntries := entries[len(entries)/2:]
 	rightPage.SetEntries(rightEntries)
+	leftPage.SetRightPageNumber(rightPage.GetNumber())
+	rightPage.SetLeftPageNumber(leftPage.GetNumber())
 	return leftPage, rightPage
 }
 
@@ -262,6 +264,8 @@ type Cursor struct {
 	rootPageNumber     int
 	currentPageEntries []pager.PageTuple
 	currentTupleIndex  int
+	currentLeftPage    uint16
+	currentRightPage   uint16
 	pager              *pager.Pager
 }
 
@@ -286,6 +290,8 @@ func (c *Cursor) GotoFirstRecord() bool {
 	}
 	c.currentPageEntries = candidatePage.GetEntries()
 	c.currentTupleIndex = 0
+	_, c.currentLeftPage = candidatePage.GetLeftPageNumber()
+	_, c.currentRightPage = candidatePage.GetRightPageNumber()
 	return true
 }
 
@@ -319,6 +325,17 @@ func (c *Cursor) GetValue() []byte {
 func (c *Cursor) GotoNext() bool {
 	if c.currentTupleIndex+1 <= len(c.currentPageEntries)-1 {
 		c.currentTupleIndex += 1
+		return true
+	}
+	if c.currentRightPage != 0 {
+		candidatePage := c.pager.GetPage(c.currentRightPage)
+		if len(candidatePage.GetEntries()) == 0 {
+			return false
+		}
+		c.currentPageEntries = candidatePage.GetEntries()
+		c.currentTupleIndex = 0
+		_, c.currentLeftPage = candidatePage.GetLeftPageNumber()
+		_, c.currentRightPage = candidatePage.GetRightPageNumber()
 		return true
 	}
 	return false

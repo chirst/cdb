@@ -244,6 +244,34 @@ func (p *Page) SetParentPageNumber(pageNumber uint16) {
 	copy(p.content[PARENT_POINTER_OFFSET:PARENT_POINTER_OFFSET+PAGE_POINTER_SIZE], bpn)
 }
 
+func (p *Page) GetLeftPageNumber() (hasLeft bool, pageNumber uint16) {
+	pn := binary.LittleEndian.Uint16(p.content[LEFT_POINTER_OFFSET : LEFT_POINTER_OFFSET+PAGE_POINTER_SIZE])
+	if pn == EMPTY_PARENT_PAGE_NUMBER {
+		return false, EMPTY_PARENT_PAGE_NUMBER
+	}
+	return true, pn
+}
+
+func (p *Page) SetLeftPageNumber(pageNumber uint16) {
+	bpn := make([]byte, PAGE_POINTER_SIZE)
+	binary.LittleEndian.PutUint16(bpn, pageNumber)
+	copy(p.content[LEFT_POINTER_OFFSET:LEFT_POINTER_OFFSET+PAGE_POINTER_SIZE], bpn)
+}
+
+func (p *Page) GetRightPageNumber() (hasRight bool, pageNumber uint16) {
+	pn := binary.LittleEndian.Uint16(p.content[RIGHT_POINTER_OFFSET : RIGHT_POINTER_OFFSET+PAGE_POINTER_SIZE])
+	if pn == EMPTY_PARENT_PAGE_NUMBER {
+		return false, EMPTY_PARENT_PAGE_NUMBER
+	}
+	return true, pn
+}
+
+func (p *Page) SetRightPageNumber(pageNumber uint16) {
+	bpn := make([]byte, PAGE_POINTER_SIZE)
+	binary.LittleEndian.PutUint16(bpn, pageNumber)
+	copy(p.content[RIGHT_POINTER_OFFSET:RIGHT_POINTER_OFFSET+PAGE_POINTER_SIZE], bpn)
+}
+
 func (p *Page) GetNumber() uint16 {
 	return p.number
 }
