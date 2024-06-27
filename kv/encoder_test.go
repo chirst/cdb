@@ -1,6 +1,8 @@
 package kv
 
 import (
+	"bytes"
+	"math"
 	"reflect"
 	"testing"
 )
@@ -18,6 +20,38 @@ func TestEncoding(t *testing.T) {
 		}
 		if !reflect.DeepEqual(v, dv) {
 			t.Fatalf("expected %v to be %v", v, dv)
+		}
+	})
+
+	t.Run("encode/decode key", func(t *testing.T) {
+		v := 1
+		vb, err := EncodeKey(v)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+		dv, err := DecodeKey(vb)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+		if dv != v {
+			t.Fatalf("expected %d got %d", v, dv)
+		}
+	})
+
+	t.Run("compare encoded key", func(t *testing.T) {
+		for i := 0; i < math.MaxInt16; i += 1 {
+			k1, err := EncodeKey(i)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+			k2, err := EncodeKey(i + 1)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+			c := bytes.Compare(k1, k2)
+			if c != -1 {
+				t.Fatal("expected k1 to be less than k2")
+			}
 		}
 	})
 }

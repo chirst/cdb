@@ -250,7 +250,12 @@ type RowIdCmd cmd
 
 func (c *RowIdCmd) execute(vm *vm, routine *routine) cmdRes {
 	ek := routine.cursors[c.P1].GetKey()
-	dk := kv.DecodeKey(ek)
+	dk, err := kv.DecodeKey(ek)
+	if err != nil {
+		return cmdRes{
+			err: err,
+		}
+	}
 	routine.registers[c.P2] = dk
 	return cmdRes{}
 }
@@ -400,7 +405,12 @@ func (c *InsertCmd) execute(vm *vm, routine *routine) cmdRes {
 			err: fmt.Errorf("failed to convert %v to int", bp3i),
 		}
 	}
-	bp3 := kv.EncodeKey(uint16(bp3i))
+	bp3, err := kv.EncodeKey(bp3i)
+	if err != nil {
+		return cmdRes{
+			err: err,
+		}
+	}
 	bp2, ok := routine.registers[c.P2].([]byte)
 	if !ok {
 		return cmdRes{

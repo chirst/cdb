@@ -248,8 +248,15 @@ func (kv *KV) NewRowID(rootPageNumber int) (int, error) {
 		candidate = kv.pager.GetPage(binary.LittleEndian.Uint16(descendingPageNum))
 	}
 	k := candidate.GetEntries()[len(candidate.GetEntries())-1].Key
-	dk := DecodeKey(k)
-	return dk + 1, nil
+	dk, err := DecodeKey(k)
+	if err != nil {
+		return 0, err
+	}
+	dki, ok := dk.(int)
+	if !ok {
+		return 0, errors.New("non integer key increment not supported")
+	}
+	return dki + 1, nil
 }
 
 func (kv *KV) ParseSchema() error {
