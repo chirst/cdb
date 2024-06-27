@@ -417,7 +417,7 @@ func (c *InsertCmd) execute(vm *vm, routine *routine) cmdRes {
 			err: fmt.Errorf("failed to convert %v to byte slice", bp2),
 		}
 	}
-	vm.kv.Set(uint16(c.P1), bp3, bp2)
+	vm.kv.Set(c.P1, bp3, bp2)
 	return cmdRes{}
 }
 

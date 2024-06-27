@@ -28,7 +28,7 @@ func TestPageHelpers(t *testing.T) {
 	})
 
 	t.Run("get set record count", func(t *testing.T) {
-		want := uint16(2)
+		want := 2
 		p.setRecordCount(want)
 		if res := p.getRecordCount(); res != want {
 			t.Errorf("want %d got %d", want, res)
@@ -36,7 +36,7 @@ func TestPageHelpers(t *testing.T) {
 	})
 
 	t.Run("get page number", func(t *testing.T) {
-		var want uint16 = 1
+		want := 1
 		res := p.GetNumber()
 		if res != want {
 			t.Errorf("want %d got %d", want, res)
@@ -50,7 +50,7 @@ func TestPageHelpers(t *testing.T) {
 	})
 
 	t.Run("get set parent page number", func(t *testing.T) {
-		var wantPn uint16 = 12
+		wantPn := 12
 		p.SetParentPageNumber(wantPn)
 		gotHas, gotPn := p.GetParentPageNumber()
 		if gotHas != true {
@@ -62,7 +62,7 @@ func TestPageHelpers(t *testing.T) {
 	})
 
 	t.Run("get set left page number", func(t *testing.T) {
-		var wantPn uint16 = 21
+		wantPn := 21
 		p.SetLeftPageNumber(wantPn)
 		gotHas, gotPn := p.GetLeftPageNumber()
 		if gotHas != true {
@@ -74,7 +74,7 @@ func TestPageHelpers(t *testing.T) {
 	})
 
 	t.Run("get set right page number", func(t *testing.T) {
-		var wantPn uint16 = 33
+		wantPn := 33
 		p.SetRightPageNumber(wantPn)
 		gotHas, gotPn := p.GetRightPageNumber()
 		if gotHas != true {

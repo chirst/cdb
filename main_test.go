@@ -12,7 +12,7 @@ func TestBulk(t *testing.T) {
 	if r.Err != nil {
 		t.Fatal(r.Err.Error())
 	}
-	for i := 0; i < 700; i += 1 {
+	for i := 0; i < 1000; i += 1 {
 		r = d.Execute("INSERT INTO test (junk) VALUES ('asdf')")
 		if r.Err != nil {
 			t.Fatal(r.Err.Error())

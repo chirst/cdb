@@ -41,7 +41,7 @@ func (kv *KV) GetCatalog() *catalog {
 // Get returns a byte array corresponding to the key and a bool indicating if
 // the key was found. The pageNumber has to do with the root page of the
 // corresponding table. The system catalog uses the page number 1.
-func (kv *KV) Get(pageNumber uint16, key []byte) ([]byte, bool, error) {
+func (kv *KV) Get(pageNumber int, key []byte) ([]byte, bool, error) {
 	if pageNumber == pager.EMPTY_PARENT_PAGE_NUMBER {
 		return nil, false, errorReservedPage
 	}
@@ -63,19 +63,15 @@ func (kv *KV) Get(pageNumber uint16, key []byte) ([]byte, bool, error) {
 		}
 		// Step 3. If the page is internal jump to the next page and go back to
 		// 2. This process guarantees that we are on a leaf page for step 4.
-		pageNumber = binary.LittleEndian.Uint16(v)
+		pageNumber = int(binary.LittleEndian.Uint16(v))
 	}
 }
 
 // Set inserts or updates the value for the given key. The pageNumber has to do
 // with the root page of the corresponding table. The system catalog uses the
 // page number 1.
-func (kv *KV) Set(pageNumber uint16, key, value []byte) error {
-	// TODO set has some issues. One being set doesn't differentiate between
-	// insert and update which isn't very intentional. Two being set cannot
-	// perform multiple insertions in the span of one transaction. This is
-	// because page splits pull out stale pages on subsequent inserts which
-	// causes difficult to diagnose bugs.
+func (kv *KV) Set(pageNumber int, key, value []byte) error {
+	// TODO set doesn't differentiate between insert and update
 	if pageNumber == pager.EMPTY_PARENT_PAGE_NUMBER {
 		return errorReservedPage
 	}
@@ -125,15 +121,15 @@ func insertIntoOne(key, value []byte, lp, rp *pager.Page) {
 	rp.SetEntries(append(rp.GetEntries(), pager.PageTuple{Key: key, Value: value}))
 }
 
-func (kv *KV) getLeafPage(nextPageNumber uint16, key []byte) *pager.Page {
+func (kv *KV) getLeafPage(nextPageNumber int, key []byte) *pager.Page {
 	p := kv.pager.GetPage(nextPageNumber)
 	for p.GetType() != pager.PAGE_TYPE_LEAF {
 		nextPage, found := p.GetValue(key)
 		if !found {
 			return nil
 		}
-		nextPageNumber = binary.LittleEndian.Uint16(nextPage)
-		p = kv.pager.GetPage(nextPageNumber)
+		nextPageNumber16 := binary.LittleEndian.Uint16(nextPage)
+		p = kv.pager.GetPage(int(nextPageNumber16))
 	}
 	return p
 }
@@ -215,7 +211,7 @@ func (kv *KV) parentInsert(p, l, r *pager.Page) {
 // NewBTree creates an empty BTree and returns the new tree's root page number.
 func (kv *KV) NewBTree() int {
 	np := kv.pager.NewPage()
-	return int(np.GetNumber())
+	return np.GetNumber()
 }
 
 func (kv *KV) BeginReadTransaction() {
@@ -238,14 +234,15 @@ func (kv *KV) EndWriteTransaction() error {
 // For a integer key it is the largest integer key plus one.
 func (kv *KV) NewRowID(rootPageNumber int) (int, error) {
 	// TODO could possibly cache this in the catalog or something
-	candidate := kv.pager.GetPage(uint16(rootPageNumber))
+	candidate := kv.pager.GetPage(rootPageNumber)
 	if len(candidate.GetEntries()) == 0 {
 		return 1, nil
 	}
 	for candidate.GetType() != pager.PAGE_TYPE_LEAF {
 		pagePointers := candidate.GetEntries()
 		descendingPageNum := pagePointers[len(pagePointers)-1].Value
-		candidate = kv.pager.GetPage(binary.LittleEndian.Uint16(descendingPageNum))
+		descendingPageNum16 := binary.LittleEndian.Uint16(descendingPageNum)
+		candidate = kv.pager.GetPage(int(descendingPageNum16))
 	}
 	k := candidate.GetEntries()[len(candidate.GetEntries())-1].Key
 	dk, err := DecodeKey(k)
@@ -292,8 +289,8 @@ type Cursor struct {
 	rootPageNumber     int
 	currentPageEntries []pager.PageTuple
 	currentTupleIndex  int
-	currentLeftPage    uint16
-	currentRightPage   uint16
+	currentLeftPage    int
+	currentRightPage   int
 	pager              *pager.Pager
 }
 
@@ -307,14 +304,15 @@ func (kv *KV) NewCursor(rootPageNumber int) *Cursor {
 // GotoFirstRecord moves the cursor to the first tuple in ascending order. It
 // returns true if the table has values. It returns false if the table is empty.
 func (c *Cursor) GotoFirstRecord() bool {
-	candidatePage := c.pager.GetPage(uint16(c.rootPageNumber))
+	candidatePage := c.pager.GetPage(c.rootPageNumber)
 	if len(candidatePage.GetEntries()) == 0 {
 		return false
 	}
 	for candidatePage.GetType() != pager.PAGE_TYPE_LEAF {
 		pagePointers := candidatePage.GetEntries()
 		ascendingPageNum := pagePointers[0].Value
-		candidatePage = c.pager.GetPage(binary.LittleEndian.Uint16(ascendingPageNum))
+		ascendingPageNum16 := binary.LittleEndian.Uint16(ascendingPageNum)
+		candidatePage = c.pager.GetPage(int(ascendingPageNum16))
 	}
 	c.currentPageEntries = candidatePage.GetEntries()
 	c.currentTupleIndex = 0
@@ -324,14 +322,15 @@ func (c *Cursor) GotoFirstRecord() bool {
 }
 
 func (c *Cursor) GotoLastRecord() bool {
-	candidatePage := c.pager.GetPage(uint16(c.rootPageNumber))
+	candidatePage := c.pager.GetPage(c.rootPageNumber)
 	if len(candidatePage.GetEntries()) == 0 {
 		return false
 	}
 	for candidatePage.GetType() != pager.PAGE_TYPE_LEAF {
 		pagePointers := candidatePage.GetEntries()
 		descendingPageNum := pagePointers[len(pagePointers)-1].Value
-		candidatePage = c.pager.GetPage(binary.LittleEndian.Uint16(descendingPageNum))
+		descendingPageNum16 := binary.LittleEndian.Uint16(descendingPageNum)
+		candidatePage = c.pager.GetPage(int(descendingPageNum16))
 	}
 	c.currentPageEntries = candidatePage.GetEntries()
 	c.currentTupleIndex = len(c.currentPageEntries) - 1

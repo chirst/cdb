@@ -51,7 +51,7 @@ type Pager struct {
 	// store implements storage and is typically a file
 	store storage
 	// currentMaxPage is a counter that holds a free page number
-	currentMaxPage uint16
+	currentMaxPage int
 	// fileLock enables read and writes to be in isolation. The RWMutex allows
 	// either many readers or only one writer. RWMutex also prevents writer
 	// starvation by only allowing readers to acquire a lock if there is no
@@ -91,7 +91,7 @@ func New(useMemory bool) (*Pager, error) {
 	}
 	p := &Pager{
 		store:          s,
-		currentMaxPage: cmpi,
+		currentMaxPage: int(cmpi),
 		fileLock:       sync.RWMutex{},
 		dirtyPages:     []*Page{},
 		pageCache:      cache.NewLRU(PAGE_CACHE_SIZE),
@@ -126,7 +126,7 @@ func (p *Pager) EndWrite() error {
 	}
 	for _, fp := range p.dirtyPages {
 		p.WritePage(fp)
-		p.pageCache.Remove(int(fp.GetNumber()))
+		p.pageCache.Remove(fp.GetNumber())
 	}
 	p.dirtyPages = []*Page{}
 	p.writeMaxPageNumber()
@@ -138,7 +138,7 @@ func (p *Pager) EndWrite() error {
 	return nil
 }
 
-func (p *Pager) GetPage(pageNumber uint16) *Page {
+func (p *Pager) GetPage(pageNumber int) *Page {
 	// During a write pages are collected in the dirtyPages buffer. These pages
 	// must be retrieved from the buffer as they are modified because the file
 	// is becoming outdated.
@@ -150,7 +150,7 @@ func (p *Pager) GetPage(pageNumber uint16) *Page {
 			return p.dirtyPages[dpn]
 		}
 	} else {
-		if v, hit := p.pageCache.Get(int(pageNumber)); hit {
+		if v, hit := p.pageCache.Get(pageNumber); hit {
 			return p.allocatePage(pageNumber, v)
 		}
 	}
@@ -161,19 +161,22 @@ func (p *Pager) GetPage(pageNumber uint16) *Page {
 	if p.isWriting {
 		p.dirtyPages = append(p.dirtyPages, ap)
 	}
-	p.pageCache.Add(int(pageNumber), page)
+	p.pageCache.Add(pageNumber, page)
 	return ap
 }
 
 func (p *Pager) WritePage(page *Page) error {
 	// Page number subtracted by one since 0 is reserved as a pointer to nothing
-	_, err := p.store.WriteAt(page.content, int64(ROOT_PAGE_START+(page.GetNumber()-1)*PAGE_SIZE))
+	pn := page.GetNumber() - 1
+	pns := pn * PAGE_SIZE
+	off := ROOT_PAGE_START + pns
+	_, err := p.store.WriteAt(page.content, int64(off))
 	return err
 }
 
 func (p *Pager) writeMaxPageNumber() {
 	cmpb := make([]byte, FREE_PAGE_COUNTER_SIZE)
-	binary.LittleEndian.PutUint16(cmpb, p.currentMaxPage)
+	binary.LittleEndian.PutUint16(cmpb, uint16(p.currentMaxPage))
 	p.store.WriteAt(cmpb, FREE_PAGE_COUNTER_OFFSET)
 }
 
@@ -186,7 +189,7 @@ func (p *Pager) NewPage() *Page {
 	return np
 }
 
-func (p *Pager) allocatePage(pageNumber uint16, content []byte) *Page {
+func (p *Pager) allocatePage(pageNumber int, content []byte) *Page {
 	np := &Page{
 		content: content,
 		number:  pageNumber,
@@ -220,7 +223,7 @@ func (p *Pager) allocatePage(pageNumber uint16, content []byte) *Page {
 // tuple the size of the Page.
 type Page struct {
 	content []byte
-	number  uint16
+	number  int
 }
 
 // PageTuple is a variable length key value pair.
@@ -229,80 +232,78 @@ type PageTuple struct {
 	Value []byte
 }
 
-func (p *Page) GetParentPageNumber() (hasParent bool, pageNumber uint16) {
+func (p *Page) GetParentPageNumber() (hasParent bool, pageNumber int) {
 	pn := binary.LittleEndian.Uint16(p.content[PARENT_POINTER_OFFSET : PARENT_POINTER_OFFSET+PAGE_POINTER_SIZE])
 	// An unsigned int page number has to be reserved to tell if the current
 	// page is a root.
 	if pn == EMPTY_PARENT_PAGE_NUMBER {
 		return false, EMPTY_PARENT_PAGE_NUMBER
 	}
-	return true, pn
+	return true, int(pn)
 }
 
-func (p *Page) SetParentPageNumber(pageNumber uint16) {
+func (p *Page) SetParentPageNumber(pageNumber int) {
 	bpn := make([]byte, PAGE_POINTER_SIZE)
-	binary.LittleEndian.PutUint16(bpn, pageNumber)
+	binary.LittleEndian.PutUint16(bpn, uint16(pageNumber))
 	copy(p.content[PARENT_POINTER_OFFSET:PARENT_POINTER_OFFSET+PAGE_POINTER_SIZE], bpn)
 }
 
-func (p *Page) GetLeftPageNumber() (hasLeft bool, pageNumber uint16) {
+func (p *Page) GetLeftPageNumber() (hasLeft bool, pageNumber int) {
 	pn := binary.LittleEndian.Uint16(p.content[LEFT_POINTER_OFFSET : LEFT_POINTER_OFFSET+PAGE_POINTER_SIZE])
 	if pn == EMPTY_PARENT_PAGE_NUMBER {
 		return false, EMPTY_PARENT_PAGE_NUMBER
 	}
-	return true, pn
+	return true, int(pn)
 }
 
-func (p *Page) SetLeftPageNumber(pageNumber uint16) {
+func (p *Page) SetLeftPageNumber(pageNumber int) {
 	bpn := make([]byte, PAGE_POINTER_SIZE)
-	binary.LittleEndian.PutUint16(bpn, pageNumber)
+	binary.LittleEndian.PutUint16(bpn, uint16(pageNumber))
 	copy(p.content[LEFT_POINTER_OFFSET:LEFT_POINTER_OFFSET+PAGE_POINTER_SIZE], bpn)
 }
 
-func (p *Page) GetRightPageNumber() (hasRight bool, pageNumber uint16) {
+func (p *Page) GetRightPageNumber() (hasRight bool, pageNumber int) {
 	pn := binary.LittleEndian.Uint16(p.content[RIGHT_POINTER_OFFSET : RIGHT_POINTER_OFFSET+PAGE_POINTER_SIZE])
 	if pn == EMPTY_PARENT_PAGE_NUMBER {
 		return false, EMPTY_PARENT_PAGE_NUMBER
 	}
-	return true, pn
+	return true, int(pn)
 }
 
-func (p *Page) SetRightPageNumber(pageNumber uint16) {
+func (p *Page) SetRightPageNumber(pageNumber int) {
 	bpn := make([]byte, PAGE_POINTER_SIZE)
-	binary.LittleEndian.PutUint16(bpn, pageNumber)
+	binary.LittleEndian.PutUint16(bpn, uint16(pageNumber))
 	copy(p.content[RIGHT_POINTER_OFFSET:RIGHT_POINTER_OFFSET+PAGE_POINTER_SIZE], bpn)
 }
 
-func (p *Page) GetNumber() uint16 {
+func (p *Page) GetNumber() int {
 	return p.number
 }
 
 func (p *Page) GetNumberAsBytes() []byte {
 	n := p.GetNumber()
 	bn := make([]byte, FREE_PAGE_COUNTER_SIZE)
-	binary.LittleEndian.PutUint16(bn, n)
+	binary.LittleEndian.PutUint16(bn, uint16(n))
 	return bn
 }
 
-func (p *Page) GetType() uint16 {
-	return binary.LittleEndian.Uint16(p.content[PAGE_TYPE_OFFSET:PAGE_TYPE_SIZE])
+func (p *Page) GetType() int {
+	return int(binary.LittleEndian.Uint16(p.content[PAGE_TYPE_OFFSET:PAGE_TYPE_SIZE]))
 }
 
-func (p *Page) SetType(t uint16) {
+func (p *Page) SetType(t int) {
 	bytePageType := make([]byte, PAGE_TYPE_SIZE)
-	binary.LittleEndian.PutUint16(bytePageType, t)
+	binary.LittleEndian.PutUint16(bytePageType, uint16(t))
 	copy(p.content[PAGE_TYPE_OFFSET:PAGE_TYPE_OFFSET+PAGE_TYPE_SIZE], bytePageType)
 }
 
-func (p *Page) getRecordCount() uint16 {
-	return binary.LittleEndian.Uint16(
-		p.content[PAGE_RECORD_COUNT_OFFSET : PAGE_RECORD_COUNT_OFFSET+PAGE_RECORD_COUNT_SIZE],
-	)
+func (p *Page) getRecordCount() int {
+	return int(binary.LittleEndian.Uint16(p.content[PAGE_RECORD_COUNT_OFFSET : PAGE_RECORD_COUNT_OFFSET+PAGE_RECORD_COUNT_SIZE]))
 }
 
-func (p *Page) setRecordCount(newCount uint16) {
+func (p *Page) setRecordCount(newCount int) {
 	byteRecordCount := make([]byte, PAGE_RECORD_COUNT_SIZE)
-	binary.LittleEndian.PutUint16(byteRecordCount, newCount)
+	binary.LittleEndian.PutUint16(byteRecordCount, uint16(newCount))
 	copy(
 		p.content[PAGE_RECORD_COUNT_OFFSET:PAGE_RECORD_COUNT_OFFSET+PAGE_RECORD_COUNT_SIZE],
 		byteRecordCount,
@@ -345,53 +346,53 @@ func (p *Page) SetEntries(entries []PageTuple) {
 		endValueOffset := shift + PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE
 
 		// set key offset
-		keyOffset := uint16(entryEnd - len(entry.Key) - len(entry.Value))
+		keyOffset := entryEnd - len(entry.Key) - len(entry.Value)
 		byteKeyOffset := make([]byte, PAGE_ROW_OFFSET_SIZE)
-		binary.LittleEndian.PutUint16(byteKeyOffset, keyOffset)
+		binary.LittleEndian.PutUint16(byteKeyOffset, uint16(keyOffset))
 		copy(p.content[startKeyOffset:endKeyOffset], byteKeyOffset)
 
 		// set value offset
-		valueOffset := uint16(entryEnd - len(entry.Value))
+		valueOffset := entryEnd - len(entry.Value)
 		byteValueOffset := make([]byte, PAGE_ROW_OFFSET_SIZE)
-		binary.LittleEndian.PutUint16(byteValueOffset, valueOffset)
+		binary.LittleEndian.PutUint16(byteValueOffset, uint16(valueOffset))
 		copy(p.content[endKeyOffset:endValueOffset], byteValueOffset)
 
 		// set key
 		copy(p.content[keyOffset:valueOffset], entry.Key)
 
 		// set value
-		copy(p.content[valueOffset:valueOffset+uint16(len(entry.Value))], entry.Value)
+		copy(p.content[valueOffset:valueOffset+len(entry.Value)], entry.Value)
 
 		// update for next iteration
 		shift = endValueOffset
-		entryEnd = int(keyOffset)
+		entryEnd = keyOffset
 	}
-	p.setRecordCount(uint16(len(entries)))
+	p.setRecordCount(len(entries))
 }
 
 func (p *Page) GetEntries() []PageTuple {
 	entries := []PageTuple{}
 	recordCount := p.getRecordCount()
 	entryEnd := PAGE_SIZE
-	for i := uint16(0); i < recordCount; i += 1 {
+	for i := 0; i < recordCount; i += 1 {
 		startKeyOffset := PAGE_ROW_OFFSETS_OFFSET + (i * (PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE))
 		endKeyOffset := PAGE_ROW_OFFSETS_OFFSET + (i * (PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE)) + PAGE_ROW_OFFSET_SIZE
 		endValueOffset := PAGE_ROW_OFFSETS_OFFSET + (i * (PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE)) + PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE
 
-		keyOffset := binary.LittleEndian.Uint16(p.content[startKeyOffset:endKeyOffset])
-		valueOffset := binary.LittleEndian.Uint16(p.content[endKeyOffset:endValueOffset])
+		keyOffset := int(binary.LittleEndian.Uint16(p.content[startKeyOffset:endKeyOffset]))
+		valueOffset := int(binary.LittleEndian.Uint16(p.content[endKeyOffset:endValueOffset]))
 
 		// These must be copied otherwise the underlying byte array is returned.
 		// This causes what seems a unique value to be treated as a reference.
 		byteKey := make([]byte, valueOffset-keyOffset)
 		copy(byteKey, p.content[keyOffset:valueOffset])
-		byteValue := make([]byte, entryEnd-int(valueOffset))
+		byteValue := make([]byte, entryEnd-valueOffset)
 		copy(byteValue, p.content[valueOffset:entryEnd])
 		entries = append(entries, PageTuple{
 			Key:   byteKey,
 			Value: byteValue,
 		})
-		entryEnd = int(keyOffset)
+		entryEnd = keyOffset
 	}
 	return entries
 }
