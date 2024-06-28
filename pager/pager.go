@@ -34,6 +34,22 @@ const (
 	dbFileName = "db.db" // TODO make dynamic
 	// pageCacheSize is maximum amount of pages that can be cached in memory.
 	pageCacheSize = 1000
+)
+
+// File header constants
+const (
+	// freePageCounterOffset is in the first position of the file header. It
+	// stores the last allocated page.
+	freePageCounterOffset = 0
+	// freePageCounterSize is a uint32 and must match the size of the page
+	// pointer size.
+	freePageCounterSize = 4
+	// rootPageStart marks the end of the file header.
+	rootPageStart = 4
+)
+
+// Page constants
+const (
 	// pageSize is the byte size of a single page. This size is used to
 	// calculate the offset for each block.
 	//
@@ -51,7 +67,7 @@ const (
 	pageTypeLeaf   = 2
 	pageTypeOffset = 0
 	// pageTypeSize is a uint16
-	pageTypeSize = 2 // TODO could be 8
+	pageTypeSize = 2 // TODO could be uint8
 	// pagePointerSize is a uint32 and must be consistent with the free page
 	// counter.
 	pagePointerSize       = 4
@@ -67,16 +83,8 @@ const (
 	pageRowOffsetsOffset = pageRecordCountOffset + pageRecordCountSize
 	// pageRowOffsetSize is a uint16 that is the size of each offset.
 	pageRowOffsetSize = 2
-	// freePageCounterOffset is in the first position of the file header. It
-	// stores the last allocated page.
-	freePageCounterOffset = 0
 	// emptyParentPageNumber is a reserved number to indicate no parent.
 	emptyParentPageNumber = 0
-	// rootPageStart marks the end of the file header.
-	rootPageStart = 3 // TODO could be 4?
-	// freePageCounterSize is a uint32 and must match the size of the page
-	// pointer size.
-	freePageCounterSize = 2 // TODO needs to be 4
 )
 
 // pageCache defines the page caching interface.
@@ -141,7 +149,7 @@ func New(useMemory bool) (*Pager, error) {
 func allocateFreePageCounter(s storage) int {
 	fb := make([]byte, freePageCounterSize)
 	s.ReadAt(fb, freePageCounterOffset)
-	fpc := int(binary.LittleEndian.Uint16(fb))
+	fpc := int(binary.LittleEndian.Uint32(fb))
 	// If the max page is the reserved page number the free page counter has not
 	// yet been set. Meaning the max page should probably be 1.
 	if fpc == emptyParentPageNumber {
@@ -153,7 +161,7 @@ func allocateFreePageCounter(s storage) int {
 // Write the free page counter to the file header.
 func (p *Pager) writeFreePageCounter() {
 	fb := make([]byte, freePageCounterSize)
-	binary.LittleEndian.PutUint16(fb, uint16(p.currentMaxPage))
+	binary.LittleEndian.PutUint32(fb, uint32(p.currentMaxPage))
 	p.store.WriteAt(fb, freePageCounterOffset)
 }
 
@@ -310,7 +318,7 @@ type PageTuple struct {
 }
 
 func (p *Page) GetParentPageNumber() (hasParent bool, pageNumber int) {
-	pn := binary.LittleEndian.Uint16(p.content[parentPointerOffset : parentPointerOffset+pagePointerSize])
+	pn := binary.LittleEndian.Uint32(p.content[parentPointerOffset : parentPointerOffset+pagePointerSize])
 	if pn == emptyParentPageNumber {
 		return false, emptyParentPageNumber
 	}
@@ -319,12 +327,12 @@ func (p *Page) GetParentPageNumber() (hasParent bool, pageNumber int) {
 
 func (p *Page) SetParentPageNumber(pageNumber int) {
 	bpn := make([]byte, pagePointerSize)
-	binary.LittleEndian.PutUint16(bpn, uint16(pageNumber))
+	binary.LittleEndian.PutUint32(bpn, uint32(pageNumber))
 	copy(p.content[parentPointerOffset:parentPointerOffset+pagePointerSize], bpn)
 }
 
 func (p *Page) GetLeftPageNumber() (hasLeft bool, pageNumber int) {
-	pn := binary.LittleEndian.Uint16(p.content[leftPointerOffset : leftPointerOffset+pagePointerSize])
+	pn := binary.LittleEndian.Uint32(p.content[leftPointerOffset : leftPointerOffset+pagePointerSize])
 	if pn == emptyParentPageNumber {
 		return false, emptyParentPageNumber
 	}
@@ -333,12 +341,12 @@ func (p *Page) GetLeftPageNumber() (hasLeft bool, pageNumber int) {
 
 func (p *Page) SetLeftPageNumber(pageNumber int) {
 	bpn := make([]byte, pagePointerSize)
-	binary.LittleEndian.PutUint16(bpn, uint16(pageNumber))
+	binary.LittleEndian.PutUint32(bpn, uint32(pageNumber))
 	copy(p.content[leftPointerOffset:leftPointerOffset+pagePointerSize], bpn)
 }
 
 func (p *Page) GetRightPageNumber() (hasRight bool, pageNumber int) {
-	pn := binary.LittleEndian.Uint16(p.content[rightPointerOffset : rightPointerOffset+pagePointerSize])
+	pn := binary.LittleEndian.Uint32(p.content[rightPointerOffset : rightPointerOffset+pagePointerSize])
 	if pn == emptyParentPageNumber {
 		return false, emptyParentPageNumber
 	}
@@ -347,7 +355,7 @@ func (p *Page) GetRightPageNumber() (hasRight bool, pageNumber int) {
 
 func (p *Page) SetRightPageNumber(pageNumber int) {
 	bpn := make([]byte, pagePointerSize)
-	binary.LittleEndian.PutUint16(bpn, uint16(pageNumber))
+	binary.LittleEndian.PutUint32(bpn, uint32(pageNumber))
 	copy(p.content[rightPointerOffset:rightPointerOffset+pagePointerSize], bpn)
 }
 
@@ -358,7 +366,7 @@ func (p *Page) GetNumber() int {
 func (p *Page) GetNumberAsBytes() []byte {
 	n := p.GetNumber()
 	bn := make([]byte, freePageCounterSize)
-	binary.LittleEndian.PutUint16(bn, uint16(n))
+	binary.LittleEndian.PutUint32(bn, uint32(n))
 	return bn
 }
 
