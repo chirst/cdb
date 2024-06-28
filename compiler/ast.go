@@ -1,7 +1,8 @@
+package compiler
+
 // ast (Abstract Syntax Tree) defines a data structure representing a SQL
 // program. This data structure is generated from the parser. This data
 // structure is intended to be compiled into a execution plan.
-package compiler
 
 type Stmt interface{}
 

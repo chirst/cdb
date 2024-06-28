@@ -1,6 +1,6 @@
-// vm (Virtual Machine) is capable of running routines made up of commands that
-// access the kv layer. The commands are formed from the ast (Abstract Syntax
-// Tree).
+// vm (virtual machine) is capable of running routines made up of commands that
+// access the kv layer. The commands are formed by the planner from the ast
+// (abstract syntax tree).
 package vm
 
 import (

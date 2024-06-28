@@ -1,7 +1,6 @@
 // db serves as an interface for the database where raw SQL goes in and
 // convenient data structures come out. db is intended to be consumed by things
-// like a repl (read eval print loop), a program, or a transport protocol such
-// as http.
+// like a repl (read eval print loop), a program, or a transport protocol
 package db
 
 import (

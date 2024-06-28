@@ -1,7 +1,8 @@
+package compiler
+
 // parser takes tokens from the lexer and produces an AST (Abstract Syntax
 // Tree). The AST is consumed to make a query plan ran by the vm (Virtual
 // Machine).
-package compiler
 
 import (
 	"fmt"

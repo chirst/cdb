@@ -1,5 +1,6 @@
-// lexer creates tokens from a sql string. The tokens are fed into the parser.
 package compiler
+
+// lexer creates tokens from a sql string. The tokens are fed into the parser.
 
 import (
 	"slices"

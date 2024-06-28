@@ -1,5 +1,7 @@
 // KV provides a set of key value operations that implement data structures such
-// as a b-tree to efficiently access the page cache.
+// as a b-tree to efficiently access the page cache. KV implements an
+// abstraction called a cursor to efficiently seek and scan the btree. Each B
+// tree is referenced with a page number assigned by the catalog.
 package kv
 
 import (

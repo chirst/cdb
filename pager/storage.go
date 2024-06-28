@@ -1,6 +1,7 @@
+package pager
+
 // Storage provides an interface for accessing the filesystem. This allows the
 // database to run on an in memory buffer if desired.
-package pager
 
 import (
 	"fmt"
