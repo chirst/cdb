@@ -3,8 +3,6 @@
 // memory. It also handles locking.
 package pager
 
-// TODO try and remove specific integer types in favor of just int.
-
 import (
 	"bytes"
 	"encoding/binary"
@@ -15,26 +13,70 @@ import (
 	"github.com/chirst/cdb/pager/cache"
 )
 
+// The pager is an abstraction over the database file. The file is formatted
+// with a header and pages as follows:
+// +---------+
+// | HEADER  |
+// +---------+
+// | Page 1  |
+// +---------+
+// | Page 2  |
+// +---------+
+// | Page n  |
+// +---------+
+// | Page... |
+// +---------+
+
 const (
-	PAGE_CACHE_SIZE          = 1000
-	PAGE_SIZE                = 4096
-	PAGE_TYPE_UNKNOWN        = 0
-	PAGE_TYPE_INTERNAL       = 1
-	PAGE_TYPE_LEAF           = 2
-	PAGE_TYPE_OFFSET         = 0
-	PAGE_TYPE_SIZE           = 2
-	PAGE_POINTER_SIZE        = 4
-	PARENT_POINTER_OFFSET    = PAGE_TYPE_OFFSET + PAGE_TYPE_SIZE
-	LEFT_POINTER_OFFSET      = PARENT_POINTER_OFFSET + PAGE_POINTER_SIZE
-	RIGHT_POINTER_OFFSET     = LEFT_POINTER_OFFSET + PAGE_POINTER_SIZE
-	PAGE_RECORD_COUNT_OFFSET = RIGHT_POINTER_OFFSET + PAGE_POINTER_SIZE
-	PAGE_RECORD_COUNT_SIZE   = 2
-	PAGE_ROW_OFFSETS_OFFSET  = PAGE_RECORD_COUNT_OFFSET + PAGE_RECORD_COUNT_SIZE
-	PAGE_ROW_OFFSET_SIZE     = 2
-	ROOT_PAGE_START          = 3
-	FREE_PAGE_COUNTER_SIZE   = 2
-	FREE_PAGE_COUNTER_OFFSET = 0
-	EMPTY_PARENT_PAGE_NUMBER = 0
+	// journalFileName is the name of the file the rollback journal uses.
+	journalFileName = "journal.db"
+	// dbFileName is the name of the file the database uses.
+	dbFileName = "db.db" // TODO make dynamic
+	// pageCacheSize is maximum amount of pages that can be cached in memory.
+	pageCacheSize = 1000
+	// pageSize is the byte size of a single page. This size is used to
+	// calculate the offset for each block.
+	//
+	// The capacity of the database can be calculated with the pageSize and the
+	// PAGE_POINTER_SIZE. For example 4096 * 4,294,967,295 = 1.7592186e+13 bytes
+	// which is 17.5 Terabytes. This number could be much larger given the page
+	// size was increased. It is eventually limited to the size of a file
+	// allowed by the operating system.
+	pageSize = 4096
+	// pageTypeUnknown is an invalid type.
+	pageTypeUnknown = 0
+	// pageTypeInternal is a page representing a B tree internal node.
+	pageTypeInternal = 1
+	// pageTypeLeaf is a page representing a B tree leaf.
+	pageTypeLeaf   = 2
+	pageTypeOffset = 0
+	// pageTypeSize is a uint16
+	pageTypeSize = 2 // TODO could be 8
+	// pagePointerSize is a uint32 and must be consistent with the free page
+	// counter.
+	pagePointerSize       = 4
+	parentPointerOffset   = pageTypeOffset + pageTypeSize
+	leftPointerOffset     = parentPointerOffset + pagePointerSize
+	rightPointerOffset    = leftPointerOffset + pagePointerSize
+	pageRecordCountOffset = rightPointerOffset + pagePointerSize
+	// pageRecordCountSize is a uint16 and stores the number of records in a
+	// page.
+	pageRecordCountSize = 2
+	// pageRowOffsetsOffset marks the start of offsets that map to the tuple
+	// positions on a page.
+	pageRowOffsetsOffset = pageRecordCountOffset + pageRecordCountSize
+	// pageRowOffsetSize is a uint16 that is the size of each offset.
+	pageRowOffsetSize = 2
+	// freePageCounterOffset is in the first position of the file header. It
+	// stores the last allocated page.
+	freePageCounterOffset = 0
+	// emptyParentPageNumber is a reserved number to indicate no parent.
+	emptyParentPageNumber = 0
+	// rootPageStart marks the end of the file header.
+	rootPageStart = 3 // TODO could be 4?
+	// freePageCounterSize is a uint32 and must match the size of the page
+	// pointer size.
+	freePageCounterSize = 2 // TODO needs to be 4
 )
 
 // pageCache defines the page caching interface.
@@ -48,9 +90,10 @@ type pageCache interface {
 // accessing the file in a thread safe manner and atomically writing to the
 // file.
 type Pager struct {
-	// store implements storage and is typically a file
+	// store implements storage and is typically a file, but also can be an in
+	// memory representation for testing purposes.
 	store storage
-	// currentMaxPage is a counter that holds a free page number
+	// currentMaxPage is a counter that holds the last allocated page number.
 	currentMaxPage int
 	// fileLock enables read and writes to be in isolation. The RWMutex allows
 	// either many readers or only one writer. RWMutex also prevents writer
@@ -70,6 +113,9 @@ type Pager struct {
 	pageCache pageCache
 }
 
+// New creates a new pager. The useMemory flag means the database will not
+// create a file or persist changes to disk. This is useful for testing
+// purposes.
 func New(useMemory bool) (*Pager, error) {
 	var s storage
 	var err error
@@ -81,33 +127,51 @@ func New(useMemory bool) (*Pager, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmpb := make([]byte, FREE_PAGE_COUNTER_SIZE)
-	s.ReadAt(cmpb, FREE_PAGE_COUNTER_OFFSET)
-	cmpi := binary.LittleEndian.Uint16(cmpb)
-	// If the max page is the reserved page number the free page counter has not
-	// yet been set. Meaning the max page should probably be 1.
-	if cmpi == EMPTY_PARENT_PAGE_NUMBER {
-		cmpi = 1
-	}
 	p := &Pager{
 		store:          s,
-		currentMaxPage: int(cmpi),
+		currentMaxPage: allocateFreePageCounter(s),
 		fileLock:       sync.RWMutex{},
 		dirtyPages:     []*Page{},
-		pageCache:      cache.NewLRU(PAGE_CACHE_SIZE),
+		pageCache:      cache.NewLRU(pageCacheSize),
 	}
-	p.GetPage(1)
 	return p, nil
 }
 
+// Read the free page counter from the file header.
+func allocateFreePageCounter(s storage) int {
+	fb := make([]byte, freePageCounterSize)
+	s.ReadAt(fb, freePageCounterOffset)
+	fpc := int(binary.LittleEndian.Uint16(fb))
+	// If the max page is the reserved page number the free page counter has not
+	// yet been set. Meaning the max page should probably be 1.
+	if fpc == emptyParentPageNumber {
+		fpc = 1
+	}
+	return fpc
+}
+
+// Write the free page counter to the file header.
+func (p *Pager) writeFreePageCounter() {
+	fb := make([]byte, freePageCounterSize)
+	binary.LittleEndian.PutUint16(fb, uint16(p.currentMaxPage))
+	p.store.WriteAt(fb, freePageCounterOffset)
+}
+
+// BeginRead starts a read transaction. Other readers will be able to access the
+// database file.
 func (p *Pager) BeginRead() {
 	p.fileLock.RLock()
 }
 
+// BeginRead ends a read transaction.
 func (p *Pager) EndRead() {
 	p.fileLock.RUnlock()
 }
 
+// BeginWrite starts a write transaction. If there are active readers this will
+// go into a pending state. When there is a pending writer no new readers will
+// be able to acquire a lock. Once all of the readers have finished this will
+// acquire exclusive access to the database file.
 func (p *Pager) BeginWrite() {
 	p.fileLock.Lock()
 	p.isWriting = true
@@ -117,6 +181,7 @@ func (p *Pager) BeginWrite() {
 // to write pages to disk and removes the journal after all pages have been
 // written. If there is a crash while the pages are being written the journal
 // will be promoted to the main database file the next time the db is started.
+// This enables the database to write atomically.
 func (p *Pager) EndWrite() error {
 	if !p.isWriting {
 		return nil
@@ -129,7 +194,7 @@ func (p *Pager) EndWrite() error {
 		p.pageCache.Remove(fp.GetNumber())
 	}
 	p.dirtyPages = []*Page{}
-	p.writeMaxPageNumber()
+	p.writeFreePageCounter()
 	if err := p.store.DeleteJournal(); err != nil {
 		return err
 	}
@@ -138,6 +203,8 @@ func (p *Pager) EndWrite() error {
 	return nil
 }
 
+// GetPage returns an allocated page. GetPage will return cached pages. GetPage
+// will return dirtyPages during a write transaction.
 func (p *Pager) GetPage(pageNumber int) *Page {
 	// During a write pages are collected in the dirtyPages buffer. These pages
 	// must be retrieved from the buffer as they are modified because the file
@@ -154,9 +221,9 @@ func (p *Pager) GetPage(pageNumber int) *Page {
 			return p.allocatePage(pageNumber, v)
 		}
 	}
-	page := make([]byte, PAGE_SIZE)
+	page := make([]byte, pageSize)
 	// Page number subtracted by 1 since 0 is reserved as a pointer to nothing.
-	p.store.ReadAt(page, int64(ROOT_PAGE_START+(pageNumber-1)*PAGE_SIZE))
+	p.store.ReadAt(page, int64(rootPageStart+(pageNumber-1)*pageSize))
 	ap := p.allocatePage(pageNumber, page)
 	if p.isWriting {
 		p.dirtyPages = append(p.dirtyPages, ap)
@@ -165,37 +232,39 @@ func (p *Pager) GetPage(pageNumber int) *Page {
 	return ap
 }
 
+// Write page writes the page to storage.
 func (p *Pager) WritePage(page *Page) error {
 	// Page number subtracted by one since 0 is reserved as a pointer to nothing
 	pn := page.GetNumber() - 1
-	pns := pn * PAGE_SIZE
-	off := ROOT_PAGE_START + pns
+	pns := pn * pageSize
+	off := rootPageStart + pns
 	_, err := p.store.WriteAt(page.content, int64(off))
 	return err
 }
 
-func (p *Pager) writeMaxPageNumber() {
-	cmpb := make([]byte, FREE_PAGE_COUNTER_SIZE)
-	binary.LittleEndian.PutUint16(cmpb, uint16(p.currentMaxPage))
-	p.store.WriteAt(cmpb, FREE_PAGE_COUNTER_OFFSET)
-}
-
+// NewPage increases the free page counter, allocates a new page, and adds it to
+// the dirtyPages list. NewPage must be called during a write transaction.
 func (p *Pager) NewPage() *Page {
+	if !p.isWriting {
+		panic("must be a write transaction to allocate a new page")
+	}
 	p.currentMaxPage += 1
-	np := p.allocatePage(p.currentMaxPage, make([]byte, PAGE_SIZE))
+	np := p.allocatePage(p.currentMaxPage, make([]byte, pageSize))
 	if p.isWriting {
 		p.dirtyPages = append(p.dirtyPages, np)
 	}
 	return np
 }
 
+// allocatePage is a helper function that is capable of converting the
+// underlying byte slice into a page structure.
 func (p *Pager) allocatePage(pageNumber int, content []byte) *Page {
 	np := &Page{
 		content: content,
 		number:  pageNumber,
 	}
-	if np.GetType() == PAGE_TYPE_UNKNOWN {
-		np.SetType(PAGE_TYPE_LEAF)
+	if np.GetType() == pageTypeUnknown {
+		np.SetType(pageTypeLeaf)
 	}
 	return np
 }
@@ -212,15 +281,23 @@ func (p *Pager) allocatePage(pageNumber int, content []byte) *Page {
 //   - Variable length key and value tuples filling the remaining space. Which
 //     accumulates from the end of the Page to the start.
 //
-// TODO could implement overflow pages in case a tuple is larger than some
-// threshold (say half the Page). There would be another block that would
-// contain pointers to overflow pages or be empty. The overflow pages would
-// contain a pointer to the next overflow Page and content of the overflow.
-//
 // Tuple offsets are sorted and listed in order. Tuples are stored in reverse
 // order starting at the end of the Page. This is so the end of each tuple can
 // be calculated by the start of the previous tuple and in the case of the first
 // tuple the size of the Page.
+//
+// Example page:
+// +---------------------------------------------------------------------------+
+// | Page type - Parent pointer - Left pointer - Right pointer - Tuple Count - |
+// | Tuple offsets - Tuple offset 1 - Tuple offset 2 - Tuple offset 3 ---------|
+// |--> grows forwards                                                         |
+// |                  grows backwards <----------- Tuple 3 - Tuple 2 - Tuple 1 |
+// +---------------------------------------------------------------------------+
+//
+// TODO could implement overflow pages in case a tuple is larger than some
+// threshold (say half the Page). There would be another block that would
+// contain pointers to overflow pages or be empty. The overflow pages would
+// contain a pointer to the next overflow Page and content of the overflow.
 type Page struct {
 	content []byte
 	number  int
@@ -233,47 +310,45 @@ type PageTuple struct {
 }
 
 func (p *Page) GetParentPageNumber() (hasParent bool, pageNumber int) {
-	pn := binary.LittleEndian.Uint16(p.content[PARENT_POINTER_OFFSET : PARENT_POINTER_OFFSET+PAGE_POINTER_SIZE])
-	// An unsigned int page number has to be reserved to tell if the current
-	// page is a root.
-	if pn == EMPTY_PARENT_PAGE_NUMBER {
-		return false, EMPTY_PARENT_PAGE_NUMBER
+	pn := binary.LittleEndian.Uint16(p.content[parentPointerOffset : parentPointerOffset+pagePointerSize])
+	if pn == emptyParentPageNumber {
+		return false, emptyParentPageNumber
 	}
 	return true, int(pn)
 }
 
 func (p *Page) SetParentPageNumber(pageNumber int) {
-	bpn := make([]byte, PAGE_POINTER_SIZE)
+	bpn := make([]byte, pagePointerSize)
 	binary.LittleEndian.PutUint16(bpn, uint16(pageNumber))
-	copy(p.content[PARENT_POINTER_OFFSET:PARENT_POINTER_OFFSET+PAGE_POINTER_SIZE], bpn)
+	copy(p.content[parentPointerOffset:parentPointerOffset+pagePointerSize], bpn)
 }
 
 func (p *Page) GetLeftPageNumber() (hasLeft bool, pageNumber int) {
-	pn := binary.LittleEndian.Uint16(p.content[LEFT_POINTER_OFFSET : LEFT_POINTER_OFFSET+PAGE_POINTER_SIZE])
-	if pn == EMPTY_PARENT_PAGE_NUMBER {
-		return false, EMPTY_PARENT_PAGE_NUMBER
+	pn := binary.LittleEndian.Uint16(p.content[leftPointerOffset : leftPointerOffset+pagePointerSize])
+	if pn == emptyParentPageNumber {
+		return false, emptyParentPageNumber
 	}
 	return true, int(pn)
 }
 
 func (p *Page) SetLeftPageNumber(pageNumber int) {
-	bpn := make([]byte, PAGE_POINTER_SIZE)
+	bpn := make([]byte, pagePointerSize)
 	binary.LittleEndian.PutUint16(bpn, uint16(pageNumber))
-	copy(p.content[LEFT_POINTER_OFFSET:LEFT_POINTER_OFFSET+PAGE_POINTER_SIZE], bpn)
+	copy(p.content[leftPointerOffset:leftPointerOffset+pagePointerSize], bpn)
 }
 
 func (p *Page) GetRightPageNumber() (hasRight bool, pageNumber int) {
-	pn := binary.LittleEndian.Uint16(p.content[RIGHT_POINTER_OFFSET : RIGHT_POINTER_OFFSET+PAGE_POINTER_SIZE])
-	if pn == EMPTY_PARENT_PAGE_NUMBER {
-		return false, EMPTY_PARENT_PAGE_NUMBER
+	pn := binary.LittleEndian.Uint16(p.content[rightPointerOffset : rightPointerOffset+pagePointerSize])
+	if pn == emptyParentPageNumber {
+		return false, emptyParentPageNumber
 	}
 	return true, int(pn)
 }
 
 func (p *Page) SetRightPageNumber(pageNumber int) {
-	bpn := make([]byte, PAGE_POINTER_SIZE)
+	bpn := make([]byte, pagePointerSize)
 	binary.LittleEndian.PutUint16(bpn, uint16(pageNumber))
-	copy(p.content[RIGHT_POINTER_OFFSET:RIGHT_POINTER_OFFSET+PAGE_POINTER_SIZE], bpn)
+	copy(p.content[rightPointerOffset:rightPointerOffset+pagePointerSize], bpn)
 }
 
 func (p *Page) GetNumber() int {
@@ -282,34 +357,44 @@ func (p *Page) GetNumber() int {
 
 func (p *Page) GetNumberAsBytes() []byte {
 	n := p.GetNumber()
-	bn := make([]byte, FREE_PAGE_COUNTER_SIZE)
+	bn := make([]byte, freePageCounterSize)
 	binary.LittleEndian.PutUint16(bn, uint16(n))
 	return bn
 }
 
 func (p *Page) GetType() int {
-	return int(binary.LittleEndian.Uint16(p.content[PAGE_TYPE_OFFSET:PAGE_TYPE_SIZE]))
+	return int(binary.LittleEndian.Uint16(p.content[pageTypeOffset:pageTypeSize]))
+}
+
+func (p *Page) IsLeaf() bool {
+	return p.GetType() == pageTypeLeaf
 }
 
 func (p *Page) SetType(t int) {
-	bytePageType := make([]byte, PAGE_TYPE_SIZE)
+	bytePageType := make([]byte, pageTypeSize)
 	binary.LittleEndian.PutUint16(bytePageType, uint16(t))
-	copy(p.content[PAGE_TYPE_OFFSET:PAGE_TYPE_OFFSET+PAGE_TYPE_SIZE], bytePageType)
+	copy(p.content[pageTypeOffset:pageTypeOffset+pageTypeSize], bytePageType)
+}
+
+func (p *Page) SetTypeInternal() {
+	p.SetType(pageTypeInternal)
 }
 
 func (p *Page) getRecordCount() int {
-	return int(binary.LittleEndian.Uint16(p.content[PAGE_RECORD_COUNT_OFFSET : PAGE_RECORD_COUNT_OFFSET+PAGE_RECORD_COUNT_SIZE]))
+	return int(binary.LittleEndian.Uint16(p.content[pageRecordCountOffset : pageRecordCountOffset+pageRecordCountSize]))
 }
 
 func (p *Page) setRecordCount(newCount int) {
-	byteRecordCount := make([]byte, PAGE_RECORD_COUNT_SIZE)
+	byteRecordCount := make([]byte, pageRecordCountSize)
 	binary.LittleEndian.PutUint16(byteRecordCount, uint16(newCount))
 	copy(
-		p.content[PAGE_RECORD_COUNT_OFFSET:PAGE_RECORD_COUNT_OFFSET+PAGE_RECORD_COUNT_SIZE],
+		p.content[pageRecordCountOffset:pageRecordCountOffset+pageRecordCountSize],
 		byteRecordCount,
 	)
 }
 
+// CanInsertTuples returns true if the page can fit the new tuple otherwise it
+// returns false.
 func (p *Page) CanInsertTuple(key, value []byte) bool {
 	return p.CanInsertTuples([]PageTuple{
 		{
@@ -319,41 +404,44 @@ func (p *Page) CanInsertTuple(key, value []byte) bool {
 	})
 }
 
+// CanInsertTuples returns true if the page can fit the new tuples otherwise it
+// returns false.
 func (p *Page) CanInsertTuples(pageTuples []PageTuple) bool {
 	s := 0
-	s += PAGE_TYPE_SIZE
-	s += PAGE_RECORD_COUNT_SIZE
-	s += PAGE_POINTER_SIZE // parent
-	s += PAGE_POINTER_SIZE // left
-	s += PAGE_POINTER_SIZE // right
+	s += pageTypeSize
+	s += pageRecordCountSize
+	s += pagePointerSize // parent
+	s += pagePointerSize // left
+	s += pagePointerSize // right
 	entries := append(pageTuples, p.GetEntries()...)
-	s += len(entries) * (PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE)
+	s += len(entries) * (pageRowOffsetSize + pageRowOffsetSize)
 	for _, e := range entries {
 		s += len(e.Key)
 		s += len(e.Value)
 	}
-	return PAGE_SIZE >= s
+	return pageSize >= s
 }
 
+// SetEntries sets the page tuples in sorted order.
 func (p *Page) SetEntries(entries []PageTuple) {
-	copy(p.content[PAGE_ROW_OFFSETS_OFFSET:PAGE_SIZE], make([]byte, PAGE_SIZE-PAGE_ROW_OFFSETS_OFFSET))
+	copy(p.content[pageRowOffsetsOffset:pageSize], make([]byte, pageSize-pageRowOffsetsOffset))
 	sort.Slice(entries, func(a, b int) bool { return bytes.Compare(entries[a].Key, entries[b].Key) == -1 })
-	shift := PAGE_ROW_OFFSETS_OFFSET
-	entryEnd := PAGE_SIZE
+	shift := pageRowOffsetsOffset
+	entryEnd := pageSize
 	for _, entry := range entries {
 		startKeyOffset := shift
-		endKeyOffset := shift + PAGE_ROW_OFFSET_SIZE
-		endValueOffset := shift + PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE
+		endKeyOffset := shift + pageRowOffsetSize
+		endValueOffset := shift + pageRowOffsetSize + pageRowOffsetSize
 
 		// set key offset
 		keyOffset := entryEnd - len(entry.Key) - len(entry.Value)
-		byteKeyOffset := make([]byte, PAGE_ROW_OFFSET_SIZE)
+		byteKeyOffset := make([]byte, pageRowOffsetSize)
 		binary.LittleEndian.PutUint16(byteKeyOffset, uint16(keyOffset))
 		copy(p.content[startKeyOffset:endKeyOffset], byteKeyOffset)
 
 		// set value offset
 		valueOffset := entryEnd - len(entry.Value)
-		byteValueOffset := make([]byte, PAGE_ROW_OFFSET_SIZE)
+		byteValueOffset := make([]byte, pageRowOffsetSize)
 		binary.LittleEndian.PutUint16(byteValueOffset, uint16(valueOffset))
 		copy(p.content[endKeyOffset:endValueOffset], byteValueOffset)
 
@@ -370,14 +458,15 @@ func (p *Page) SetEntries(entries []PageTuple) {
 	p.setRecordCount(len(entries))
 }
 
+// GetEntries returns the page tuples in sorted order.
 func (p *Page) GetEntries() []PageTuple {
 	entries := []PageTuple{}
 	recordCount := p.getRecordCount()
-	entryEnd := PAGE_SIZE
+	entryEnd := pageSize
 	for i := 0; i < recordCount; i += 1 {
-		startKeyOffset := PAGE_ROW_OFFSETS_OFFSET + (i * (PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE))
-		endKeyOffset := PAGE_ROW_OFFSETS_OFFSET + (i * (PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE)) + PAGE_ROW_OFFSET_SIZE
-		endValueOffset := PAGE_ROW_OFFSETS_OFFSET + (i * (PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE)) + PAGE_ROW_OFFSET_SIZE + PAGE_ROW_OFFSET_SIZE
+		startKeyOffset := pageRowOffsetsOffset + (i * (pageRowOffsetSize + pageRowOffsetSize))
+		endKeyOffset := pageRowOffsetsOffset + (i * (pageRowOffsetSize + pageRowOffsetSize)) + pageRowOffsetSize
+		endValueOffset := pageRowOffsetsOffset + (i * (pageRowOffsetSize + pageRowOffsetSize)) + pageRowOffsetSize + pageRowOffsetSize
 
 		keyOffset := int(binary.LittleEndian.Uint16(p.content[startKeyOffset:endKeyOffset]))
 		valueOffset := int(binary.LittleEndian.Uint16(p.content[endKeyOffset:endValueOffset]))
@@ -397,6 +486,8 @@ func (p *Page) GetEntries() []PageTuple {
 	return entries
 }
 
+// SetValue searches with GetValue and adds the value or overwrites the existing
+// value.
 func (p *Page) SetValue(key, value []byte) {
 	_, found := p.GetValue(key)
 	if found {
@@ -413,9 +504,13 @@ func (p *Page) SetValue(key, value []byte) {
 	}
 }
 
-func (p *Page) GetValue(key []byte) ([]byte, bool) {
+// GetValue searches the page and returns the value and a flag indicated if the
+// value was found. If the page is leaf an exact match must be made. If the page
+// is internal GetValue will search for the range the key falls in and return
+// the ranges value.
+func (p *Page) GetValue(key []byte) (value []byte, exists bool) {
 	e := p.GetEntries()
-	if p.GetType() == PAGE_TYPE_LEAF {
+	if p.GetType() == pageTypeLeaf {
 		for _, entry := range e {
 			c := bytes.Compare(entry.Key, key)
 			if c == 0 { // entryKey == searchKey

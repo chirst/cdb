@@ -10,8 +10,6 @@ import (
 	"github.com/chirst/cdb/pager"
 )
 
-var errorReservedPage = errors.New("specified a reserved page number")
-
 type KV struct {
 	pager   *pager.Pager
 	catalog *catalog
@@ -42,8 +40,8 @@ func (kv *KV) GetCatalog() *catalog {
 // the key was found. The pageNumber has to do with the root page of the
 // corresponding table. The system catalog uses the page number 1.
 func (kv *KV) Get(pageNumber int, key []byte) ([]byte, bool, error) {
-	if pageNumber == pager.EMPTY_PARENT_PAGE_NUMBER {
-		return nil, false, errorReservedPage
+	if pageNumber == 0 {
+		panic("pageNumber cannot be 0")
 	}
 	// Step 1. Need a source page to start from. Will start from 1 if there is
 	// no source page specified. This source page has to do with a table. 1 has
@@ -52,7 +50,7 @@ func (kv *KV) Get(pageNumber int, key []byte) ([]byte, bool, error) {
 		page := kv.pager.GetPage(pageNumber)
 		// Step 2. Decide whether the page is an internal node or a leaf node.
 		//This can be determined by asking what the page type is.
-		if page.GetType() == pager.PAGE_TYPE_LEAF {
+		if page.IsLeaf() {
 			// 4. Find the value for the key and return.
 			b1, b2 := page.GetValue(key)
 			return b1, b2, nil
@@ -72,8 +70,8 @@ func (kv *KV) Get(pageNumber int, key []byte) ([]byte, bool, error) {
 // page number 1.
 func (kv *KV) Set(pageNumber int, key, value []byte) error {
 	// TODO set doesn't differentiate between insert and update
-	if pageNumber == pager.EMPTY_PARENT_PAGE_NUMBER {
-		return errorReservedPage
+	if pageNumber == 0 {
+		panic("pageNumber cannot be 0")
 	}
 	leafPage := kv.getLeafPage(pageNumber, key)
 	if leafPage.CanInsertTuple(key, value) {
@@ -88,7 +86,7 @@ func (kv *KV) Set(pageNumber int, key, value []byte) error {
 		kv.parentInsert(parentPage, leftPage, rightPage)
 		return nil
 	}
-	leafPage.SetType(pager.PAGE_TYPE_INTERNAL)
+	leafPage.SetTypeInternal()
 	leafPage.SetEntries([]pager.PageTuple{
 		{
 			Key:   leftPage.GetEntries()[0].Key,
@@ -123,7 +121,7 @@ func insertIntoOne(key, value []byte, lp, rp *pager.Page) {
 
 func (kv *KV) getLeafPage(nextPageNumber int, key []byte) *pager.Page {
 	p := kv.pager.GetPage(nextPageNumber)
-	for p.GetType() != pager.PAGE_TYPE_LEAF {
+	for !p.IsLeaf() {
 		nextPage, found := p.GetValue(key)
 		if !found {
 			return nil
@@ -196,7 +194,7 @@ func (kv *KV) parentInsert(p, l, r *pager.Page) {
 	// The root node needs to be split. It is wise to keep the root node the
 	// same page number so the table catalog doesn't need to be updated every
 	// time a root node splits.
-	p.SetType(pager.PAGE_TYPE_INTERNAL)
+	p.SetTypeInternal()
 	p.SetEntries([]pager.PageTuple{
 		{
 			Key:   leftPage.GetEntries()[0].Key,
@@ -241,7 +239,7 @@ func (kv *KV) NewRowID(rootPageNumber int) (int, error) {
 	if len(candidate.GetEntries()) == 0 {
 		return 1, nil
 	}
-	for candidate.GetType() != pager.PAGE_TYPE_LEAF {
+	for !candidate.IsLeaf() {
 		pagePointers := candidate.GetEntries()
 		descendingPageNum := pagePointers[len(pagePointers)-1].Value
 		descendingPageNum16 := binary.LittleEndian.Uint16(descendingPageNum)
@@ -311,7 +309,7 @@ func (c *Cursor) GotoFirstRecord() bool {
 	if len(candidatePage.GetEntries()) == 0 {
 		return false
 	}
-	for candidatePage.GetType() != pager.PAGE_TYPE_LEAF {
+	for !candidatePage.IsLeaf() {
 		pagePointers := candidatePage.GetEntries()
 		ascendingPageNum := pagePointers[0].Value
 		ascendingPageNum16 := binary.LittleEndian.Uint16(ascendingPageNum)
@@ -329,7 +327,7 @@ func (c *Cursor) GotoLastRecord() bool {
 	if len(candidatePage.GetEntries()) == 0 {
 		return false
 	}
-	for candidatePage.GetType() != pager.PAGE_TYPE_LEAF {
+	for !candidatePage.IsLeaf() {
 		pagePointers := candidatePage.GetEntries()
 		descendingPageNum := pagePointers[len(pagePointers)-1].Value
 		descendingPageNum16 := binary.LittleEndian.Uint16(descendingPageNum)

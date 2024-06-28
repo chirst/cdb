@@ -14,16 +14,16 @@ func TestPageHelpers(t *testing.T) {
 	p := pager.GetPage(1)
 
 	t.Run("get set internal", func(t *testing.T) {
-		p.SetType(PAGE_TYPE_INTERNAL)
-		if res := p.GetType(); res != PAGE_TYPE_INTERNAL {
-			t.Errorf("want %d got %d", PAGE_TYPE_INTERNAL, res)
+		p.SetType(pageTypeInternal)
+		if res := p.GetType(); res != pageTypeInternal {
+			t.Errorf("want %d got %d", pageTypeInternal, res)
 		}
 	})
 
 	t.Run("get set leaf", func(t *testing.T) {
-		p.SetType(PAGE_TYPE_LEAF)
-		if res := p.GetType(); res != PAGE_TYPE_LEAF {
-			t.Errorf("want %d got %d", PAGE_TYPE_LEAF, res)
+		p.SetType(pageTypeLeaf)
+		if res := p.GetType(); res != pageTypeLeaf {
+			t.Errorf("want %d got %d", pageTypeLeaf, res)
 		}
 	})
 

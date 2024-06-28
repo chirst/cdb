@@ -21,13 +21,13 @@ type memoryStorage struct {
 
 func newMemoryStorage() storage {
 	return &memoryStorage{
-		buf: make([]byte, PAGE_SIZE),
+		buf: make([]byte, pageSize),
 	}
 }
 
 func (mf *memoryStorage) WriteAt(p []byte, off int64) (n int, err error) {
 	for len(mf.buf) < int(off)+len(p) {
-		mf.buf = append(mf.buf, make([]byte, PAGE_SIZE)...)
+		mf.buf = append(mf.buf, make([]byte, pageSize)...)
 	}
 	copy(mf.buf[off:len(p)+int(off)], p)
 	return 0, nil
@@ -35,7 +35,7 @@ func (mf *memoryStorage) WriteAt(p []byte, off int64) (n int, err error) {
 
 func (mf *memoryStorage) ReadAt(p []byte, off int64) (n int, err error) {
 	for len(mf.buf) < int(off)+len(p) {
-		mf.buf = append(mf.buf, make([]byte, PAGE_SIZE)...)
+		mf.buf = append(mf.buf, make([]byte, pageSize)...)
 	}
 	copy(p, mf.buf[off:len(p)+int(off)])
 	return 0, nil
@@ -51,18 +51,15 @@ func (mf *memoryStorage) DeleteJournal() error {
 	return nil
 }
 
-const JOURNAL_FILE_NAME = "journal.db"
-const DB_FILE_NAME = "db.db"
-
 type fileStorage struct {
 	file *os.File
 }
 
 func newFileStorage() (storage, error) {
-	jfl, err := os.OpenFile(JOURNAL_FILE_NAME, os.O_RDWR, 0644)
+	jfl, err := os.OpenFile(journalFileName, os.O_RDWR, 0644)
 	// if journal file doesn't exist open normal db file
 	if err != nil && os.IsNotExist(err) {
-		fl, err := os.OpenFile(DB_FILE_NAME, os.O_RDWR|os.O_CREATE, 0644)
+		fl, err := os.OpenFile(dbFileName, os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
 			return nil, fmt.Errorf("error opening db file: %w", err)
 		}
@@ -75,7 +72,7 @@ func newFileStorage() (storage, error) {
 		return nil, fmt.Errorf("error opening journal: %w", err)
 	}
 	// if no error opening journal use journal as main file
-	fl, err := os.OpenFile(DB_FILE_NAME, os.O_RDWR|os.O_CREATE, 0644)
+	fl, err := os.OpenFile(dbFileName, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("error opening db file to restore journal: %w", err)
 	}
@@ -83,7 +80,7 @@ func newFileStorage() (storage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error copying journal to db file: %w", err)
 	}
-	os.Remove(JOURNAL_FILE_NAME)
+	os.Remove(journalFileName)
 	return &fileStorage{
 		file: fl,
 	}, nil
@@ -98,7 +95,7 @@ func (s *fileStorage) ReadAt(p []byte, off int64) (n int, err error) {
 }
 
 func (s *fileStorage) CreateJournal() error {
-	f, err := os.OpenFile(JOURNAL_FILE_NAME, os.O_RDWR|os.O_CREATE, 0644)
+	f, err := os.OpenFile(journalFileName, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return err
 	}
@@ -109,7 +106,7 @@ func (s *fileStorage) CreateJournal() error {
 }
 
 func (s *fileStorage) DeleteJournal() error {
-	err := os.Remove(JOURNAL_FILE_NAME)
+	err := os.Remove(journalFileName)
 	if err != nil {
 		return err
 	}

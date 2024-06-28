@@ -3,8 +3,6 @@ package kv
 import (
 	"bytes"
 	"testing"
-
-	"github.com/chirst/cdb/pager"
 )
 
 func TestKv(t *testing.T) {
@@ -32,7 +30,7 @@ func TestKv(t *testing.T) {
 		ri := 178
 		// For a page 4096 a split is more than guaranteed here because
 		// 512*8=4096 not including the header of each page.
-		iters := pager.PAGE_SIZE / 8
+		iters := 4096 / 8
 		for i := 1; i <= iters; i += 1 {
 			kv.BeginWriteTransaction()
 			k, err := EncodeKey(i)
