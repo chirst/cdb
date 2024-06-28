@@ -53,11 +53,25 @@ func (p *parser) parseSelect(sb *StmtBase) (*SelectStmt, error) {
 		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
 	r := p.nextNonSpace()
-	if r.tokenType != tkPunctuator && r.tokenType != tkLiteral {
+	if r.value == "*" {
+		stmt.ResultColumn = ResultColumn{
+			All: true,
+		}
+	} else if r.value == kwCount {
+		if v := p.nextNonSpace().value; v != "(" {
+			return nil, fmt.Errorf(tokenErr, v)
+		}
+		if v := p.nextNonSpace().value; v != "*" {
+			return nil, fmt.Errorf(tokenErr, v)
+		}
+		if v := p.nextNonSpace().value; v != ")" {
+			return nil, fmt.Errorf(tokenErr, v)
+		}
+		stmt.ResultColumn = ResultColumn{
+			Count: true,
+		}
+	} else {
 		return nil, fmt.Errorf(tokenErr, r.value)
-	}
-	stmt.ResultColumn = ResultColumn{
-		All: r.value == "*",
 	}
 
 	f := p.nextNonSpace()

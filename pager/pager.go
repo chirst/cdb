@@ -388,7 +388,9 @@ func (p *Page) SetTypeInternal() {
 	p.SetType(pageTypeInternal)
 }
 
-func (p *Page) getRecordCount() int {
+// GetRecordCount returns the value of the counter that tells how many tuples
+// are currently stored on the page.
+func (p *Page) GetRecordCount() int {
 	return int(binary.LittleEndian.Uint16(p.content[pageRecordCountOffset : pageRecordCountOffset+pageRecordCountSize]))
 }
 
@@ -469,7 +471,7 @@ func (p *Page) SetEntries(entries []PageTuple) {
 // GetEntries returns the page tuples in sorted order.
 func (p *Page) GetEntries() []PageTuple {
 	entries := []PageTuple{}
-	recordCount := p.getRecordCount()
+	recordCount := p.GetRecordCount()
 	entryEnd := pageSize
 	for i := 0; i < recordCount; i += 1 {
 		startKeyOffset := pageRowOffsetsOffset + (i * (pageRowOffsetSize + pageRowOffsetSize))

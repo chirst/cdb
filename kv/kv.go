@@ -289,12 +289,13 @@ func (kv *KV) ParseSchema() error {
 // Cursor is an abstraction that can seek and scan ranges of a btree.
 type Cursor struct {
 	// rootPageNumber is the table this cursor operates on
-	rootPageNumber     int
-	currentPageEntries []pager.PageTuple
-	currentTupleIndex  int
-	currentLeftPage    int
-	currentRightPage   int
-	pager              *pager.Pager
+	rootPageNumber          int
+	currentPageEntries      []pager.PageTuple
+	currentTupleIndex       int
+	currentLeftPage         int
+	currentRightPage        int
+	currentPageEntriesCount int
+	pager                   *pager.Pager
 }
 
 func (kv *KV) NewCursor(rootPageNumber int) *Cursor {
@@ -321,6 +322,7 @@ func (c *Cursor) GotoFirstRecord() bool {
 	c.currentTupleIndex = 0
 	_, c.currentLeftPage = candidatePage.GetLeftPageNumber()
 	_, c.currentRightPage = candidatePage.GetRightPageNumber()
+	c.currentPageEntriesCount = candidatePage.GetRecordCount()
 	return true
 }
 
@@ -366,7 +368,40 @@ func (c *Cursor) GotoNext() bool {
 		c.currentTupleIndex = 0
 		_, c.currentLeftPage = candidatePage.GetLeftPageNumber()
 		_, c.currentRightPage = candidatePage.GetRightPageNumber()
+		c.currentPageEntriesCount = candidatePage.GetRecordCount()
 		return true
 	}
 	return false
+}
+
+// GotoNextPage advances the cursor to the next page and returns true. If there
+// is no next page it will not advance and will return false
+func (c *Cursor) GotoNextPage() bool {
+	if c.currentRightPage == 0 {
+		return false
+	}
+	np := c.pager.GetPage(c.currentRightPage)
+	c.currentPageEntries = np.GetEntries()
+	c.currentTupleIndex = 0
+	_, c.currentLeftPage = np.GetLeftPageNumber()
+	_, c.currentRightPage = np.GetRightPageNumber()
+	c.currentPageEntriesCount = np.GetRecordCount()
+	return true
+}
+
+// Count returns the count of the current b trees leaf node entries.
+//
+// Count does this not by scanning each individual tuple, but scanning each page
+// and summing the computed counter on the page.
+func (c *Cursor) Count() int {
+	hasValues := c.GotoFirstRecord()
+	sum := 0
+	if !hasValues {
+		return sum
+	}
+	sum += c.currentPageEntriesCount
+	for c.GotoNextPage() {
+		sum += c.currentPageEntriesCount
+	}
+	return sum
 }

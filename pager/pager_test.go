@@ -30,7 +30,7 @@ func TestPageHelpers(t *testing.T) {
 	t.Run("get set record count", func(t *testing.T) {
 		want := 2
 		p.setRecordCount(want)
-		if res := p.getRecordCount(); res != want {
+		if res := p.GetRecordCount(); res != want {
 			t.Errorf("want %d got %d", want, res)
 		}
 	})

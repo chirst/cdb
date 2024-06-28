@@ -25,6 +25,21 @@ func TestLexSelect(t *testing.T) {
 			},
 		},
 		{
+			sql: "SELECT COUNT(*) FROM foo",
+			expected: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkKeyword, "COUNT"},
+				{tkSeparator, "("},
+				{tkPunctuator, "*"},
+				{tkSeparator, ")"},
+				{tkWhitespace, " "},
+				{tkKeyword, "FROM"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+			},
+		},
+		{
 			sql: "select * from foo",
 			expected: []token{
 				{tkKeyword, "SELECT"},

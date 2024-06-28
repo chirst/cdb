@@ -29,7 +29,7 @@ func TestExecute(t *testing.T) {
 			"{\"columns\":[{\"name\":\"id\",\"type\":\"INTEGER\"},{\"name\":\"first_name\",\"type\":\"TEXT\"},{\"name\":\"last_name\",\"type\":\"TEXT\"},{\"name\":\"age\",\"type\":\"INTEGER\"}]}",
 		}
 		for i, s := range schemaSelectExpectations {
-			if c := *schemaRes.ResultRows[1][i]; c != s {
+			if c := *schemaRes.ResultRows[0][i]; c != s {
 				t.Fatalf("expected %s got %s", s, c)
 			}
 		}
@@ -50,7 +50,7 @@ func TestExecute(t *testing.T) {
 			"50",
 		}
 		for i, s := range selectPersonExpectations {
-			if c := *selectPersonRes.ResultRows[1][i]; c != s {
+			if c := *selectPersonRes.ResultRows[0][i]; c != s {
 				t.Fatalf("expected %s got %s", s, c)
 			}
 		}
@@ -79,9 +79,7 @@ func TestExecute(t *testing.T) {
 		if selectRes.Err != nil {
 			t.Fatal(selectRes.Err.Error())
 		}
-		// minus 1 due to the result header being part. TODO the result header
-		// should be on its own.
-		if gotT := len(selectRes.ResultRows) - 1; expectedTotal != gotT {
+		if gotT := len(selectRes.ResultRows); expectedTotal != gotT {
 			t.Fatalf("expected %d got %d", expectedTotal, gotT)
 		}
 	})

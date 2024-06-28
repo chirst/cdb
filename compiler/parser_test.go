@@ -36,6 +36,32 @@ func TestParseSelect(t *testing.T) {
 				},
 			},
 		},
+		{
+			tokens: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkKeyword, "COUNT"},
+				{tkSeparator, "("},
+				{tkPunctuator, "*"},
+				{tkSeparator, ")"},
+				{tkWhitespace, " "},
+				{tkKeyword, "FROM"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+			},
+			expect: &SelectStmt{
+				StmtBase: &StmtBase{
+					Explain: false,
+				},
+				From: &From{
+					TableName: "foo",
+				},
+				ResultColumn: ResultColumn{
+					Count: true,
+					All:   false,
+				},
+			},
+		},
 	}
 	for _, c := range cases {
 		ret, err := NewParser(c.tokens).Parse()

@@ -7,7 +7,7 @@ a subset of SQL described below.
 
 ## Language reference
 
-### Special tables
+### System tables
 `cdb_schema` which holds the database schema.
 
 ### SELECT
@@ -146,9 +146,9 @@ mechanism makes queries predictable and consistent.
 ### KV (Key Value)
 The KV layer implements a data structure known as a
 [B+ tree](https://en.wikipedia.org/wiki/B%2B_tree) this tree enables the
-database to perform fast lookups. At this layer data is encoded into byte slices
-enabled by the `Encoder` in this layer. The layer implements a cursor
-abstraction which enables queries to scan and seek the B trees associated with a
+database to perform fast lookups. At this layer, data is encoded into byte
+slices by the `Encoder`. The KV layer implements a cursor abstraction, which
+enables queries to scan and seek the B trees associated with a
 table or index. Additionally this layer maintains the `Catalog`, an in memory
 representation of the database schema.
 
@@ -159,4 +159,4 @@ persist data, but it can be an in memory representation. The pager abstracts
 this block into pages which represent nodes in the KV layer's B tree. The pager
 is capable of caching the pages. The pager implements a read write mutex for
 concurrency control. The pager implements atomic writes to its storage through
-an algorithm known as the journal.
+what is known as the journal file.

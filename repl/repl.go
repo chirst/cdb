@@ -40,7 +40,7 @@ func (r *repl) Run() {
 			fmt.Println(result.Text)
 		}
 		if len(result.ResultRows) != 0 {
-			fmt.Println(r.printRows(result.ResultRows))
+			fmt.Println(r.printRows(result.ResultHeader, result.ResultRows))
 		}
 	}
 }
@@ -50,29 +50,27 @@ func (*repl) getInput(reader *bufio.Scanner) bool {
 	return reader.Scan()
 }
 
-func (r *repl) printRows(resultRows [][]*string) string {
+func (r *repl) printRows(resultHeader []*string, resultRows [][]*string) string {
 	ret := ""
-	widths := r.getWidths(resultRows)
-	for i, row := range resultRows {
-		if i == 0 {
-			ret += r.printHeader(row, widths)
-		} else {
-			ret += r.printRow(row, widths)
-		}
+	widths := r.getWidths(append(resultRows, resultHeader))
+	ret += r.printHeader(resultHeader, widths)
+	ret = ret + "\n"
+	for _, row := range resultRows {
+		ret += r.printRow(row, widths)
 		ret = ret + "\n"
 	}
-	if len(resultRows) == 1 {
+	if len(resultRows) == 0 {
 		ret = ret + "(0 rows)\n"
 	}
 	return ret
 }
 
-func (*repl) getWidths(resultRows [][]*string) []int {
-	widths := make([]int, len(resultRows[0]))
+func (*repl) getWidths(rows [][]*string) []int {
+	widths := make([]int, len(rows[0]))
 	for i := range widths {
 		widths[i] = 0
 	}
-	for _, row := range resultRows {
+	for _, row := range rows {
 		for i, column := range row {
 			size := len("NULL")
 			if column != nil {

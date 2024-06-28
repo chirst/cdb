@@ -17,7 +17,8 @@ type SelectStmt struct {
 }
 
 type ResultColumn struct {
-	All bool
+	All   bool
+	Count bool
 }
 
 type From struct {

@@ -49,9 +49,10 @@ type cmd struct {
 }
 
 type ExecuteResult struct {
-	Err        error
-	Text       string
-	ResultRows [][]*string
+	Err          error
+	Text         string
+	ResultHeader []*string
+	ResultRows   [][]*string
 }
 
 type ExecutionPlan struct {
@@ -62,9 +63,7 @@ type ExecutionPlan struct {
 
 func (v *vm) Execute(plan *ExecutionPlan) *ExecuteResult {
 	if plan.Explain {
-		return &ExecuteResult{
-			ResultRows: v.explain(plan),
-		}
+		return v.explain(plan)
 	}
 	routine := &routine{
 		registers:        map[int]any{},
@@ -72,9 +71,6 @@ func (v *vm) Execute(plan *ExecutionPlan) *ExecuteResult {
 		cursors:          map[int]*kv.Cursor{},
 		readTransaction:  false,
 		writeTransaction: false,
-	}
-	if plan.ResultHeader != nil {
-		*routine.resultRows = append(*routine.resultRows, plan.ResultHeader)
 	}
 	i := 0
 	var currentCommand Command
@@ -94,7 +90,8 @@ func (v *vm) Execute(plan *ExecutionPlan) *ExecuteResult {
 		}
 	}
 	return &ExecuteResult{
-		ResultRows: *routine.resultRows,
+		ResultRows:   *routine.resultRows,
+		ResultHeader: plan.ResultHeader,
 	}
 }
 
@@ -120,9 +117,18 @@ func (*vm) makeStr(s string) *string {
 	return &s
 }
 
-func (v *vm) explain(plan *ExecutionPlan) [][]*string {
-	resultRows := [][]*string{
-		{
+func (v *vm) explain(plan *ExecutionPlan) *ExecuteResult {
+	resultRows := [][]*string{}
+	i := 0
+	var currentCommand Command
+	for i < len(plan.Commands) {
+		currentCommand = plan.Commands[i]
+		resultRows = append(resultRows, currentCommand.explain(i))
+		i = i + 1
+	}
+	return &ExecuteResult{
+		ResultRows: resultRows,
+		ResultHeader: []*string{
 			v.makeStr("addr"),
 			v.makeStr("opcode"),
 			v.makeStr("P1"),
@@ -133,14 +139,6 @@ func (v *vm) explain(plan *ExecutionPlan) [][]*string {
 			v.makeStr("comment"),
 		},
 	}
-	i := 0
-	var currentCommand Command
-	for i < len(plan.Commands) {
-		currentCommand = plan.Commands[i]
-		resultRows = append(resultRows, currentCommand.explain(i))
-		i = i + 1
-	}
-	return resultRows
 }
 
 // InitCmd jumps to the instruction at address P2.
@@ -465,4 +463,19 @@ func (c *CopyCmd) execute(vm *vm, routine *routine) cmdRes {
 func (c *CopyCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Copy register[%d] into register[%d]", c.P1, c.P2)
 	return formatExplain(addr, "Copy", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
+// CountCmd Stores the number of entries for cursor P1 in register P2.
+type CountCmd cmd
+
+func (c *CountCmd) execute(vm *vm, routine *routine) cmdRes {
+	cr := routine.cursors[c.P1]
+	co := cr.Count()
+	routine.registers[c.P2] = co
+	return cmdRes{}
+}
+
+func (c *CountCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Count entries for cursor %d and store in register[%d]", c.P1, c.P2)
+	return formatExplain(addr, "Count", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }

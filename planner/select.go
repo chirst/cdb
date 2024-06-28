@@ -39,10 +39,12 @@ func (p *selectPlanner) GetPlan(s *compiler.SelectStmt) (*vm.ExecutionPlan, erro
 	if err != nil {
 		return nil, err
 	}
-	for _, c := range cols {
-		if s.ResultColumn.All {
+	if s.ResultColumn.All {
+		for _, c := range cols {
 			resultHeader = append(resultHeader, &c)
 		}
+	} else if s.ResultColumn.Count {
+		resultHeader = append(resultHeader, nil)
 	}
 	rootPage, err := p.catalog.GetRootPageNumber(s.From.TableName)
 	if err != nil {
@@ -53,25 +55,31 @@ func (p *selectPlanner) GetPlan(s *compiler.SelectStmt) (*vm.ExecutionPlan, erro
 	commands = append(commands, &vm.InitCmd{P2: 1})
 	commands = append(commands, &vm.TransactionCmd{P2: 0})
 	commands = append(commands, &vm.OpenReadCmd{P1: cursorId, P2: rootPage})
-	rwc := &vm.RewindCmd{P1: cursorId}
-	commands = append(commands, rwc)
-	commands = append(commands, &vm.RowIdCmd{P1: cursorId, P2: 1})
-	colIdx := 0
-	registerIdx := 2
-	gap := 1
-	for _, c := range cols {
-		if c == "id" {
-			continue
+	if s.ResultColumn.All {
+		rwc := &vm.RewindCmd{P1: cursorId}
+		commands = append(commands, rwc)
+		commands = append(commands, &vm.RowIdCmd{P1: cursorId, P2: 1})
+		colIdx := 0
+		registerIdx := 2
+		gap := 1
+		for _, c := range cols {
+			if c == "id" {
+				continue
+			}
+			commands = append(commands, &vm.ColumnCmd{P1: cursorId, P2: colIdx, P3: registerIdx})
+			colIdx += 1
+			registerIdx += 1
+			gap += 1
 		}
-		commands = append(commands, &vm.ColumnCmd{P1: cursorId, P2: colIdx, P3: registerIdx})
-		colIdx += 1
-		registerIdx += 1
-		gap += 1
+		commands = append(commands, &vm.ResultRowCmd{P1: 1, P2: gap})
+		commands = append(commands, &vm.NextCmd{P1: cursorId, P2: 4})
+		commands = append(commands, &vm.HaltCmd{})
+		rwc.P2 = len(commands) - 1
+	} else {
+		commands = append(commands, &vm.CountCmd{P1: cursorId, P2: 1})
+		commands = append(commands, &vm.ResultRowCmd{P1: 1, P2: 1})
+		commands = append(commands, &vm.HaltCmd{})
 	}
-	commands = append(commands, &vm.ResultRowCmd{P1: 1, P2: gap})
-	commands = append(commands, &vm.NextCmd{P1: cursorId, P2: 4})
-	commands = append(commands, &vm.HaltCmd{})
-	rwc.P2 = len(commands) - 1
 	return &vm.ExecutionPlan{
 		Explain:      s.Explain,
 		Commands:     commands,
