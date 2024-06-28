@@ -58,4 +58,79 @@ func TestKv(t *testing.T) {
 			t.Errorf("expected value %v got %v", rv, res)
 		}
 	})
+
+	t.Run("test bulk insert and get", func(t *testing.T) {
+		kv, _ := New(true)
+		amount := 500_000
+		kv.BeginWriteTransaction()
+		for i := 1; i <= amount; i += 1 {
+			k, err := EncodeKey(i)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+			v, err := Encode([]any{i})
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+			err = kv.Set(1, k, v)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+		}
+		kv.EndWriteTransaction()
+
+		midProbe := amount / 2
+		mpk, err := EncodeKey(midProbe)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+		mr, _, err := kv.Get(1, mpk)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+		mrv, err := Decode(mr)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+		mrvi := mrv[0].(int)
+		if mrvi != midProbe {
+			t.Fatalf("want mid to be %d got %d", midProbe, mrv)
+		}
+
+		leftProbe := 1
+		lpk, err := EncodeKey(leftProbe)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+		lr, _, err := kv.Get(1, lpk)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+		lrv, err := Decode(lr)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+		lrvi := lrv[0].(int)
+		if lrvi != leftProbe {
+			t.Fatalf("want left to be %d got %d", leftProbe, lrv)
+		}
+
+		rightProbe := amount
+		rpk, err := EncodeKey(rightProbe)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+		rr, _, err := kv.Get(1, rpk)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+		rrv, err := Decode(rr)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+		rrvi := rrv[0].(int)
+		if rrvi != rightProbe {
+			t.Fatalf("want right to be %d got %d", rightProbe, rrv)
+		}
+	})
 }

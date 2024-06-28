@@ -66,7 +66,7 @@ func TestExecute(t *testing.T) {
 		if createRes.Err != nil {
 			t.Fatal(createRes.Err.Error())
 		}
-		expectedTotal := 5000
+		expectedTotal := 100_000
 		for i := 0; i < expectedTotal; i += 1 {
 			insertSql := "INSERT INTO test (junk) VALUES ('asdf')"
 			insertRes := db.Execute(insertSql)
@@ -84,6 +84,5 @@ func TestExecute(t *testing.T) {
 		if gotT := len(selectRes.ResultRows) - 1; expectedTotal != gotT {
 			t.Fatalf("expected %d got %d", expectedTotal, gotT)
 		}
-
 	})
 }

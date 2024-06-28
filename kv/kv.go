@@ -138,6 +138,7 @@ func (kv *KV) splitPage(page *pager.Page) (left, right *pager.Page) {
 	hasParent, _ := page.GetParentPageNumber()
 	_, parentLeftPageNumber := page.GetLeftPageNumber()
 	_, parentRightPageNumber := page.GetRightPageNumber()
+	parentType := page.GetType()
 	entries := page.GetEntries()
 	// If it is splitting the root page should make two new nodes so the
 	// root can keep the same page number. Otherwise will only need to split
@@ -148,9 +149,11 @@ func (kv *KV) splitPage(page *pager.Page) (left, right *pager.Page) {
 	}
 	leftEntries := entries[:len(entries)/2]
 	leftPage.SetEntries(leftEntries)
+	leftPage.SetType(parentType)
 	rightPage := kv.pager.NewPage()
 	rightEntries := entries[len(entries)/2:]
 	rightPage.SetEntries(rightEntries)
+	rightPage.SetType(parentType)
 	// Set relative left page's right page
 	if parentLeftPageNumber != 0 {
 		kv.pager.GetPage(parentLeftPageNumber).SetRightPageNumber(leftPage.GetNumber())
