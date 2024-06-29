@@ -53,9 +53,9 @@ func TestPrintCount(t *testing.T) {
 	}
 	result := repl.printRows(resultHeader, resultRows)
 	e := "" +
-		" NULL \n" +
-		"------\n" +
-		" 1    \n"
+		" <anonymous> \n" +
+		"-------------\n" +
+		" 1           \n"
 	if result != e {
 		t.Errorf("\nwant\n%s\ngot\n%s\n", e, result)
 	}

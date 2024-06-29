@@ -10,6 +10,13 @@ import (
 	"github.com/chirst/cdb/db"
 )
 
+const (
+	// emptyRowValue is printed when the cell in a row is nil.
+	emptyRowValue = "NULL"
+	// emptyHeaderValue is printed when the cell in a header is nil
+	emptyHeaderValue = "<anonymous>"
+)
+
 type repl struct {
 	db *db.DB
 }
@@ -52,7 +59,7 @@ func (*repl) getInput(reader *bufio.Scanner) bool {
 
 func (r *repl) printRows(resultHeader []*string, resultRows [][]*string) string {
 	ret := ""
-	widths := r.getWidths(append(resultRows, resultHeader))
+	widths := r.getWidths(resultHeader, resultRows)
 	ret += r.printHeader(resultHeader, widths)
 	ret = ret + "\n"
 	for _, row := range resultRows {
@@ -65,14 +72,23 @@ func (r *repl) printRows(resultHeader []*string, resultRows [][]*string) string 
 	return ret
 }
 
-func (*repl) getWidths(rows [][]*string) []int {
+func (*repl) getWidths(header []*string, rows [][]*string) []int {
 	widths := make([]int, len(rows[0]))
 	for i := range widths {
 		widths[i] = 0
 	}
+	for i, hCol := range header {
+		size := len(emptyHeaderValue)
+		if hCol != nil {
+			size = len(*hCol)
+		}
+		if widths[i] < size {
+			widths[i] = size
+		}
+	}
 	for _, row := range rows {
 		for i, column := range row {
-			size := len("NULL")
+			size := len(emptyRowValue)
 			if column != nil {
 				size = len(*column)
 			}
@@ -87,7 +103,7 @@ func (*repl) getWidths(rows [][]*string) []int {
 func (*repl) printHeader(row []*string, widths []int) string {
 	ret := ""
 	for i, column := range row {
-		v := "NULL"
+		v := emptyHeaderValue
 		if column != nil {
 			v = *column
 		}
@@ -109,7 +125,7 @@ func (*repl) printHeader(row []*string, widths []int) string {
 func (*repl) printRow(row []*string, widths []int) string {
 	ret := ""
 	for i, column := range row {
-		v := "NULL"
+		v := emptyRowValue
 		if column != nil {
 			v = *column
 		}
