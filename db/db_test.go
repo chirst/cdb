@@ -1,6 +1,7 @@
 package db
 
 import (
+	"strconv"
 	"testing"
 )
 
@@ -81,6 +82,19 @@ func TestExecute(t *testing.T) {
 		}
 		if gotT := len(selectRes.ResultRows); expectedTotal != gotT {
 			t.Fatalf("expected %d got %d", expectedTotal, gotT)
+		}
+		selectCountSql := "SELECT COUNT(*) FROM test"
+		selectCountRes := db.Execute(selectCountSql)
+		if selectCountRes.Err != nil {
+			t.Fatal(selectCountRes.Err.Error())
+		}
+		gotCS := selectCountRes.ResultRows[0][0]
+		gotC, err := strconv.Atoi(*gotCS)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+		if expectedTotal != gotC {
+			t.Fatalf("got count %d want %d", gotC, expectedTotal)
 		}
 	})
 }

@@ -305,6 +305,14 @@ func (kv *KV) NewCursor(rootPageNumber int) *Cursor {
 	}
 }
 
+func (c *Cursor) moveToPage(p *pager.Page) {
+	c.currentPageEntries = p.GetEntries()
+	c.currentTupleIndex = 0
+	_, c.currentLeftPage = p.GetLeftPageNumber()
+	_, c.currentRightPage = p.GetRightPageNumber()
+	c.currentPageEntriesCount = p.GetRecordCount()
+}
+
 // GotoFirstRecord moves the cursor to the first tuple in ascending order. It
 // returns true if the table has values. It returns false if the table is empty.
 func (c *Cursor) GotoFirstRecord() bool {
@@ -318,14 +326,13 @@ func (c *Cursor) GotoFirstRecord() bool {
 		ascendingPageNum16 := binary.LittleEndian.Uint16(ascendingPageNum)
 		candidatePage = c.pager.GetPage(int(ascendingPageNum16))
 	}
-	c.currentPageEntries = candidatePage.GetEntries()
-	c.currentTupleIndex = 0
-	_, c.currentLeftPage = candidatePage.GetLeftPageNumber()
-	_, c.currentRightPage = candidatePage.GetRightPageNumber()
-	c.currentPageEntriesCount = candidatePage.GetRecordCount()
+	c.moveToPage(candidatePage)
 	return true
 }
 
+// GotoLastRecord moves the cursor to the last tuple in the last page
+// (descending ordering). It returns true if the table has values otherwise
+// false.
 func (c *Cursor) GotoLastRecord() bool {
 	candidatePage := c.pager.GetPage(c.rootPageNumber)
 	if len(candidatePage.GetEntries()) == 0 {
@@ -337,7 +344,7 @@ func (c *Cursor) GotoLastRecord() bool {
 		descendingPageNum16 := binary.LittleEndian.Uint16(descendingPageNum)
 		candidatePage = c.pager.GetPage(int(descendingPageNum16))
 	}
-	c.currentPageEntries = candidatePage.GetEntries()
+	c.moveToPage(candidatePage)
 	c.currentTupleIndex = len(c.currentPageEntries) - 1
 	return true
 }
@@ -364,11 +371,7 @@ func (c *Cursor) GotoNext() bool {
 		if len(candidatePage.GetEntries()) == 0 {
 			return false
 		}
-		c.currentPageEntries = candidatePage.GetEntries()
-		c.currentTupleIndex = 0
-		_, c.currentLeftPage = candidatePage.GetLeftPageNumber()
-		_, c.currentRightPage = candidatePage.GetRightPageNumber()
-		c.currentPageEntriesCount = candidatePage.GetRecordCount()
+		c.moveToPage(candidatePage)
 		return true
 	}
 	return false
@@ -381,11 +384,7 @@ func (c *Cursor) GotoNextPage() bool {
 		return false
 	}
 	np := c.pager.GetPage(c.currentRightPage)
-	c.currentPageEntries = np.GetEntries()
-	c.currentTupleIndex = 0
-	_, c.currentLeftPage = np.GetLeftPageNumber()
-	_, c.currentRightPage = np.GetRightPageNumber()
-	c.currentPageEntriesCount = np.GetRecordCount()
+	c.moveToPage(np)
 	return true
 }
 
