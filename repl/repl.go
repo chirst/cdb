@@ -17,6 +17,12 @@ const (
 	emptyHeaderValue = "<anonymous>"
 )
 
+// ansi are codes that will color terminal output
+const (
+	ansiWarn  = "\033[33m"
+	ansiReset = "\033[0m"
+)
+
 type repl struct {
 	db *db.DB
 }
@@ -27,6 +33,9 @@ func New(db *db.DB) *repl {
 
 func (r *repl) Run() {
 	fmt.Println("Welcome to cdb. Type .exit to exit")
+	if r.db.UseMemory {
+		fmt.Println(ansiWarn + "WARN database is running in memory and will not persist changes" + ansiReset)
+	}
 	reader := bufio.NewScanner(os.Stdin)
 	for r.getInput(reader) {
 		input := reader.Text()

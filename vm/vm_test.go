@@ -8,7 +8,7 @@ import (
 )
 
 func TestExec(t *testing.T) {
-	kv, err := kv.New(true)
+	kv, err := kv.New(true, "")
 	if err != nil {
 		log.Fatal(err.Error())
 	}

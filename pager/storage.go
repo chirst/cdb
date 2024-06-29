@@ -53,19 +53,25 @@ func (mf *memoryStorage) DeleteJournal() error {
 }
 
 type fileStorage struct {
-	file *os.File
+	file        *os.File
+	journalName string
+	dbFileName  string
 }
 
-func newFileStorage() (storage, error) {
-	jfl, err := os.OpenFile(journalFileName, os.O_RDWR, 0644)
+func newFileStorage(filename string) (storage, error) {
+	dName := getFileName(filename)
+	jName := getJournalName(filename)
+	jfl, err := os.OpenFile(jName, os.O_RDWR, 0644)
 	// if journal file doesn't exist open normal db file
 	if err != nil && os.IsNotExist(err) {
-		fl, err := os.OpenFile(dbFileName, os.O_RDWR|os.O_CREATE, 0644)
+		fl, err := os.OpenFile(dName, os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
 			return nil, fmt.Errorf("error opening db file: %w", err)
 		}
 		return &fileStorage{
-			file: fl,
+			file:        fl,
+			dbFileName:  dName,
+			journalName: jName,
 		}, nil
 	}
 	// if journal file has an error
@@ -73,7 +79,7 @@ func newFileStorage() (storage, error) {
 		return nil, fmt.Errorf("error opening journal: %w", err)
 	}
 	// if no error opening journal use journal as main file
-	fl, err := os.OpenFile(dbFileName, os.O_RDWR|os.O_CREATE, 0644)
+	fl, err := os.OpenFile(dName, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("error opening db file to restore journal: %w", err)
 	}
@@ -81,10 +87,26 @@ func newFileStorage() (storage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error copying journal to db file: %w", err)
 	}
-	os.Remove(journalFileName)
+	os.Remove(jName)
 	return &fileStorage{
-		file: fl,
+		file:        fl,
+		dbFileName:  dName,
+		journalName: jName,
 	}, nil
+}
+
+func getFileName(filename string) string {
+	if filename == "" {
+		return fmt.Sprintf("%s.db", DefaultDBFileName)
+	}
+	return fmt.Sprintf("%s.db", filename)
+}
+
+func getJournalName(filename string) string {
+	if filename == "" {
+		return fmt.Sprintf("%s%s.db", DefaultDBFileName, journalSuffix)
+	}
+	return fmt.Sprintf("%s%s.db", filename, journalSuffix)
 }
 
 func (s *fileStorage) WriteAt(p []byte, off int64) (n int, err error) {
@@ -96,20 +118,20 @@ func (s *fileStorage) ReadAt(p []byte, off int64) (n int, err error) {
 }
 
 func (s *fileStorage) CreateJournal() error {
-	f, err := os.OpenFile(journalFileName, os.O_RDWR|os.O_CREATE, 0644)
+	f, err := os.OpenFile(s.journalName, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		return err
+		return fmt.Errorf("error creating journal %w", err)
 	}
 	if f.Close() != nil {
-		return err
+		return fmt.Errorf("error closing journal %w", err)
 	}
 	return nil
 }
 
 func (s *fileStorage) DeleteJournal() error {
-	err := os.Remove(journalFileName)
+	err := os.Remove(s.journalName)
 	if err != nil {
-		return err
+		return fmt.Errorf("error deleting journal %w", err)
 	}
 	return nil
 }

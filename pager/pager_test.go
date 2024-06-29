@@ -7,7 +7,7 @@ import (
 )
 
 func TestPageHelpers(t *testing.T) {
-	pager, err := New(true)
+	pager, err := New(true, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestPageHelpers(t *testing.T) {
 
 func TestPageSet(t *testing.T) {
 	t.Run("set", func(t *testing.T) {
-		pager, err := New(true)
+		pager, err := New(true, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -115,7 +115,7 @@ func TestPageSet(t *testing.T) {
 	})
 
 	t.Run("set update", func(t *testing.T) {
-		pager, err := New(true)
+		pager, err := New(true, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -136,7 +136,7 @@ func TestPageSet(t *testing.T) {
 func TestGet(t *testing.T) {
 
 	t.Run("get", func(t *testing.T) {
-		pager, err := New(true)
+		pager, err := New(true, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -157,7 +157,7 @@ func TestGet(t *testing.T) {
 	})
 
 	t.Run("get not found", func(t *testing.T) {
-		pager, err := New(true)
+		pager, err := New(true, "")
 		if err != nil {
 			t.Fatal(err)
 		}

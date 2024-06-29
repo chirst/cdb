@@ -91,6 +91,9 @@ literal --> rparen2
 colSep2 --> rparen2
 ```
 
+## Flags
+Run `cdb -h` for command line flags.
+
 ## Architecture
 ```mermaid
 ---

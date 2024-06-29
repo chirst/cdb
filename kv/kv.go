@@ -17,8 +17,8 @@ type KV struct {
 	catalog *catalog
 }
 
-func New(useMemory bool) (*KV, error) {
-	pager, err := pager.New(useMemory)
+func New(useMemory bool, filename string) (*KV, error) {
+	pager, err := pager.New(useMemory, filename)
 	if err != nil {
 		return nil, err
 	}

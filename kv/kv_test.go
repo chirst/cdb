@@ -7,7 +7,7 @@ import (
 
 func TestKv(t *testing.T) {
 	t.Run("get", func(t *testing.T) {
-		kv, _ := New(true)
+		kv, _ := New(true, "")
 		k := []byte{1}
 		v := []byte{'n', 'e', 'd'}
 		kv.Set(1, k, v)
@@ -24,7 +24,7 @@ func TestKv(t *testing.T) {
 	})
 
 	t.Run("set page split", func(t *testing.T) {
-		kv, _ := New(true)
+		kv, _ := New(true, "")
 		var rk []byte
 		var rv []byte
 		ri := 178
@@ -58,7 +58,7 @@ func TestKv(t *testing.T) {
 	})
 
 	t.Run("test bulk insert and get", func(t *testing.T) {
-		kv, _ := New(true)
+		kv, _ := New(true, "")
 		amount := 500_000
 		kv.BeginWriteTransaction()
 		for i := 1; i <= amount; i += 1 {

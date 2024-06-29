@@ -28,10 +28,13 @@ import (
 // +---------+
 
 const (
-	// journalFileName is the name of the file the rollback journal uses.
-	journalFileName = "journal.db"
-	// dbFileName is the name of the file the database uses.
-	dbFileName = "db.db" // TODO make dynamic
+	// journalSuffix is the suffix of the filename the rollback journal uses.
+	// If the database file is called cdb.db a journal will be called
+	// cdb-journal.db
+	journalSuffix = "-journal"
+	// DefaultDBFileName is the default name of the file the database uses. The
+	// file extension is .db.
+	DefaultDBFileName = "cdb"
 	// pageCacheSize is maximum amount of pages that can be cached in memory.
 	pageCacheSize = 1000
 )
@@ -124,13 +127,13 @@ type Pager struct {
 // New creates a new pager. The useMemory flag means the database will not
 // create a file or persist changes to disk. This is useful for testing
 // purposes.
-func New(useMemory bool) (*Pager, error) {
+func New(useMemory bool, filename string) (*Pager, error) {
 	var s storage
 	var err error
 	if useMemory {
 		s = newMemoryStorage()
 	} else {
-		s, err = newFileStorage()
+		s, err = newFileStorage(filename)
 	}
 	if err != nil {
 		return nil, err

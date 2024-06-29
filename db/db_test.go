@@ -7,7 +7,7 @@ import (
 
 func TestExecute(t *testing.T) {
 	t.Run("create, select schema, insert, select", func(t *testing.T) {
-		db, err := New(true)
+		db, err := New(true, "")
 		if err != nil {
 			t.Fatal(err.Error())
 		}
@@ -58,7 +58,7 @@ func TestExecute(t *testing.T) {
 	})
 
 	t.Run("bulk insert", func(t *testing.T) {
-		db, err := New(true)
+		db, err := New(true, "")
 		if err != nil {
 			t.Fatal(err.Error())
 		}

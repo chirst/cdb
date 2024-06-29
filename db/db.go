@@ -22,18 +22,20 @@ type dbCatalog interface {
 }
 
 type DB struct {
-	vm      executor
-	catalog dbCatalog
+	vm        executor
+	catalog   dbCatalog
+	UseMemory bool
 }
 
-func New(useMemory bool) (*DB, error) {
-	kv, err := kv.New(useMemory)
+func New(useMemory bool, filename string) (*DB, error) {
+	kv, err := kv.New(useMemory, filename)
 	if err != nil {
 		return nil, err
 	}
 	return &DB{
-		vm:      vm.New(kv),
-		catalog: kv.GetCatalog(),
+		vm:        vm.New(kv),
+		catalog:   kv.GetCatalog(),
+		UseMemory: useMemory,
 	}, nil
 }
 
