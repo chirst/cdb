@@ -142,7 +142,7 @@ func TestLexCreate(t *testing.T) {
 func TestLexInsert(t *testing.T) {
 	cases := []tc{
 		{
-			sql: "INSERT INTO foo (id, first_name, last_name) VALUES (1, 'gud', 'dude')",
+			sql: "INSERT INTO foo (id, first_name, last_name) VALUES (1, 'gud', 'dude'), (2, 'joe', 'doe')",
 			expected: []token{
 				{tkKeyword, "INSERT"},
 				{tkWhitespace, " "},
@@ -170,6 +170,17 @@ func TestLexInsert(t *testing.T) {
 				{tkSeparator, ","},
 				{tkWhitespace, " "},
 				{tkLiteral, "'dude'"},
+				{tkSeparator, ")"},
+				{tkSeparator, ","},
+				{tkWhitespace, " "},
+				{tkSeparator, "("},
+				{tkNumeric, "2"},
+				{tkSeparator, ","},
+				{tkWhitespace, " "},
+				{tkLiteral, "'joe'"},
+				{tkSeparator, ","},
+				{tkWhitespace, " "},
+				{tkLiteral, "'doe'"},
 				{tkSeparator, ")"},
 			},
 		},

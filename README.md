@@ -68,9 +68,10 @@ rparen[")"]
 colSep[","]
 values([VALUES])
 lparen2["("]
-rparen2["("]
+rparen2[")"]
 colSep2[","]
 literal["literal"]
+valSep[","]
 
 begin --> explain
 begin --> insert
@@ -89,6 +90,8 @@ literal --> colSep2
 colSep2 --> literal
 literal --> rparen2
 colSep2 --> rparen2
+rparen2 --> valSep
+valSep --> lparen2
 ```
 
 ## Flags

@@ -168,6 +168,10 @@ func (p *parser) parseInsert(sb *StmtBase) (*InsertStmt, error) {
 	if p.nextNonSpace().value != kwValues {
 		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
+	return p.parseValue(stmt)
+}
+
+func (p *parser) parseValue(stmt *InsertStmt) (*InsertStmt, error) {
 	if p.nextNonSpace().value != "(" {
 		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
@@ -184,6 +188,10 @@ func (p *parser) parseInsert(sb *StmtBase) (*InsertStmt, error) {
 		sep := p.nextNonSpace()
 		if sep.value != "," {
 			if sep.value == ")" {
+				sep2 := p.nextNonSpace()
+				if sep2.value == "," {
+					p.parseValue(stmt)
+				}
 				break
 			}
 			return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)

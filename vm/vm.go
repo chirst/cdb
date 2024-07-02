@@ -394,6 +394,7 @@ func (c *NewRowIdCmd) explain(addr int) []*string {
 }
 
 // InsertCmd write to cursor P1 with data in P2 and key in P3
+// TODO p1 is not really a cursor, but is a b tree
 type InsertCmd cmd
 
 func (c *InsertCmd) execute(vm *vm, routine *routine) cmdRes {
