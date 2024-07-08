@@ -13,7 +13,7 @@ import (
 const (
 	// emptyRowValue is printed when the cell in a row is nil.
 	emptyRowValue = "NULL"
-	// emptyHeaderValue is printed when the cell in a header is nil
+	// emptyHeaderValue is printed when the cell in a header is the empty string
 	emptyHeaderValue = "<anonymous>"
 )
 
@@ -66,7 +66,7 @@ func (*repl) getInput(reader *bufio.Scanner) bool {
 	return reader.Scan()
 }
 
-func (r *repl) printRows(resultHeader []*string, resultRows [][]*string) string {
+func (r *repl) printRows(resultHeader []string, resultRows [][]*string) string {
 	ret := ""
 	widths := r.getWidths(resultHeader, resultRows)
 	ret += r.printHeader(resultHeader, widths)
@@ -81,15 +81,15 @@ func (r *repl) printRows(resultHeader []*string, resultRows [][]*string) string 
 	return ret
 }
 
-func (*repl) getWidths(header []*string, rows [][]*string) []int {
+func (*repl) getWidths(header []string, rows [][]*string) []int {
 	widths := make([]int, len(rows[0]))
 	for i := range widths {
 		widths[i] = 0
 	}
 	for i, hCol := range header {
 		size := len(emptyHeaderValue)
-		if hCol != nil {
-			size = len(*hCol)
+		if hCol != "" {
+			size = len(hCol)
 		}
 		if widths[i] < size {
 			widths[i] = size
@@ -109,12 +109,12 @@ func (*repl) getWidths(header []*string, rows [][]*string) []int {
 	return widths
 }
 
-func (*repl) printHeader(row []*string, widths []int) string {
+func (*repl) printHeader(row []string, widths []int) string {
 	ret := ""
 	for i, column := range row {
 		v := emptyHeaderValue
-		if column != nil {
-			v = *column
+		if column != "" {
+			v = column
 		}
 		ret = ret + fmt.Sprintf(" %-*s ", widths[i], v)
 		if i != len(row)-1 {

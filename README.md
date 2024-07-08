@@ -103,6 +103,11 @@ Run `cdb -h` for command line flags.
 title: Packages
 ---
 graph LR
+    subgraph Adapters
+    Driver
+    REPL
+    end
+    Driver --> DB
     REPL --> DB
     DB --> Compiler
     subgraph Compiler
@@ -127,6 +132,11 @@ The REPL works with the DB (Database) layer and is responsible for two things.
 Passing down the SQL strings that are read by the REPL to the DB. Printing out
 execution results that are returned from the DB layer. The REPL can be thought
 of as an adapter layer.
+
+### Driver
+The Driver plays the same role as the REPL in that it adapts the DB to be used
+in a Go program. This is done by implementing the Go standard library 
+`database/sql/driver.Driver` interface.
 
 ### DB (Database)
 The DB (Database) layer is an interface that is called by adapters like the

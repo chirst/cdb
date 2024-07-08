@@ -34,17 +34,15 @@ func NewSelect(catalog selectCatalog) *selectPlanner {
 }
 
 func (p *selectPlanner) GetPlan(s *compiler.SelectStmt) (*vm.ExecutionPlan, error) {
-	resultHeader := []*string{}
+	resultHeader := []string{}
 	cols, err := p.catalog.GetColumns(s.From.TableName)
 	if err != nil {
 		return nil, err
 	}
 	if s.ResultColumn.All {
-		for _, c := range cols {
-			resultHeader = append(resultHeader, &c)
-		}
+		resultHeader = append(resultHeader, cols...)
 	} else if s.ResultColumn.Count {
-		resultHeader = append(resultHeader, nil)
+		resultHeader = append(resultHeader, "")
 	}
 	rootPage, err := p.catalog.GetRootPageNumber(s.From.TableName)
 	if err != nil {

@@ -8,9 +8,9 @@ func makeStr(s string) *string {
 
 func TestPrint(t *testing.T) {
 	repl := New(nil)
-	resultHeader := []*string{
-		makeStr("id"),
-		makeStr("name"),
+	resultHeader := []string{
+		"id",
+		"name",
 	}
 	resultRows := [][]*string{
 		{
@@ -45,7 +45,7 @@ func TestPrint(t *testing.T) {
 
 func TestPrintCount(t *testing.T) {
 	repl := New(nil)
-	resultHeader := []*string{nil}
+	resultHeader := []string{""}
 	resultRows := [][]*string{
 		{
 			makeStr("1"),

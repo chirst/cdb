@@ -49,16 +49,20 @@ type cmd struct {
 }
 
 type ExecuteResult struct {
-	Err          error
-	Text         string
-	ResultHeader []*string
-	ResultRows   [][]*string
+	Err  error
+	Text string
+	// ResultHeader is the names of columns in the result.
+	ResultHeader []string
+	// ResultRows are the columns and rows in a result. These are pointers to a
+	// string since columns can be a null result. TODO this may be wise to make
+	// an any type.
+	ResultRows [][]*string
 }
 
 type ExecutionPlan struct {
 	Explain      bool
 	Commands     []Command
-	ResultHeader []*string
+	ResultHeader []string
 }
 
 func (v *vm) Execute(plan *ExecutionPlan) *ExecuteResult {
@@ -113,10 +117,6 @@ func formatExplain(addr int, c string, P1, P2, P3 int, P4 string, P5 int, commen
 	}
 }
 
-func (*vm) makeStr(s string) *string {
-	return &s
-}
-
 func (v *vm) explain(plan *ExecutionPlan) *ExecuteResult {
 	resultRows := [][]*string{}
 	i := 0
@@ -128,15 +128,15 @@ func (v *vm) explain(plan *ExecutionPlan) *ExecuteResult {
 	}
 	return &ExecuteResult{
 		ResultRows: resultRows,
-		ResultHeader: []*string{
-			v.makeStr("addr"),
-			v.makeStr("opcode"),
-			v.makeStr("P1"),
-			v.makeStr("P2"),
-			v.makeStr("P3"),
-			v.makeStr("P4"),
-			v.makeStr("P5"),
-			v.makeStr("comment"),
+		ResultHeader: []string{
+			"addr",
+			"opcode",
+			"P1",
+			"P2",
+			"P3",
+			"P4",
+			"P5",
+			"comment",
 		},
 	}
 }
