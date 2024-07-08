@@ -110,6 +110,11 @@ type Pager struct {
 	// either many readers or only one writer. RWMutex also prevents writer
 	// starvation by only allowing readers to acquire a lock if there is no
 	// pending writer.
+	//
+	// TODO the fileLock lives in the database process, so it is only resilient
+	// to writers in the same process. If two instances of the database are
+	// sharing a file there are no guarantees. This could probably be solved
+	// with some sort of lock that is put on the file itself.
 	fileLock sync.RWMutex
 	// isWriting is a helper flag that is true when a writer has acquired a
 	// lock. This enables functions distributing pages to the kv layer to mark
