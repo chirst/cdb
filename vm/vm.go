@@ -453,6 +453,19 @@ func (c *StringCmd) explain(addr int) []*string {
 	return formatExplain(addr, "String", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
 
+// IntegerCmd stores integer P1 into register P2
+type IntegerCmd cmd
+
+func (c *IntegerCmd) execute(vm *vm, routine *routine) cmdRes {
+	routine.registers[c.P2] = c.P1
+	return cmdRes{}
+}
+
+func (c *IntegerCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Store integer %d in register[%d]", c.P1, c.P2)
+	return formatExplain(addr, "Integer", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
 // CopyCmd copies P1 into P2
 type CopyCmd cmd
 

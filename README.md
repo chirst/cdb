@@ -28,6 +28,10 @@ from --> table
 ```
 
 ### CREATE
+Create has non standard behavior for primary keys. A `id` column of type 
+`INTEGER` is automatically added for all tables. If a `id` column is specified
+in the `CREATE` statement the specification will only allow the column position
+and column casing to be changed.
 ```mermaid
 graph LR
 begin(( ))

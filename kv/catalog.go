@@ -3,6 +3,7 @@ package kv
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 )
 
 // catalog holds information about the database schema
@@ -43,6 +44,12 @@ func (c *catalog) GetColumns(tableName string) ([]string, error) {
 		}
 	}
 	return nil, fmt.Errorf("cannot get columns for table %s", tableName)
+}
+
+func (c *catalog) TableExists(tableName string) bool {
+	return slices.ContainsFunc(c.schema.objects, func(o object) bool {
+		return o.objectType == "table" && o.tableName == tableName
+	})
 }
 
 // schema is a cached representation of the database schema

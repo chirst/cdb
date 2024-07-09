@@ -19,6 +19,7 @@ type executor interface {
 type dbCatalog interface {
 	GetColumns(tableOrIndexName string) ([]string, error)
 	GetRootPageNumber(tableOrIndexName string) (int, error)
+	TableExists(tableName string) bool
 }
 
 type DB struct {
@@ -27,6 +28,9 @@ type DB struct {
 	UseMemory bool
 }
 
+// TODO filename could likely handle memory and filename like what is attempted
+// in the driver. This could prevent constants from needing to be bubbled up
+// from interior layers (such as the one in repl).
 func New(useMemory bool, filename string) (*DB, error) {
 	kv, err := kv.New(useMemory, filename)
 	if err != nil {
