@@ -87,6 +87,8 @@ func TestInsertWithPrimaryKey(t *testing.T) {
 		&vm.InitCmd{P2: 1},
 		&vm.TransactionCmd{P2: 1},
 		&vm.OpenWriteCmd{P1: 1, P2: 2},
+		&vm.NotExistsCmd{P1: 2, P2: 5, P3: 22},
+		&vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"},
 		&vm.IntegerCmd{P1: 22, P2: 1},
 		&vm.StringCmd{P1: 2, P4: "gud"},
 		&vm.MakeRecordCmd{P1: 2, P2: 1, P3: 3},
