@@ -4,11 +4,16 @@
 package vm
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 
 	"github.com/chirst/cdb/kv"
 )
+
+// ErrVersionChanged signals the execution plan must be recompiled since the
+// catalog has gone out of date since the statement was compiled.
+var ErrVersionChanged = errors.New("statement was compiled with an out of date catalog")
 
 type vm struct {
 	kv *kv.KV
@@ -27,6 +32,7 @@ type routine struct {
 	cursors          map[int]*kv.Cursor
 	readTransaction  bool
 	writeTransaction bool
+	schemaVersion    string
 }
 
 type Command interface {
@@ -63,8 +69,21 @@ type ExecutionPlan struct {
 	Explain      bool
 	Commands     []Command
 	ResultHeader []string
+	// Version is the catalog version used to compile this plan. If the version
+	// is not the same during execution the execution plan will be recompiled.
+	Version string
 }
 
+func NewExecutionPlan(version string) *ExecutionPlan {
+	return &ExecutionPlan{
+		Version: version,
+	}
+}
+
+// Execute performs the execution plan provided. If the execution plan is an
+// explain Execute does not execute the plan. If the plan is out of date with
+// the system catalog Execute will return ErrVersionChanged in the ExecuteResult
+// err field so the plan can be recompiled.
 func (v *vm) Execute(plan *ExecutionPlan) *ExecuteResult {
 	if plan.Explain {
 		return v.explain(plan)
@@ -75,6 +94,7 @@ func (v *vm) Execute(plan *ExecutionPlan) *ExecuteResult {
 		cursors:          map[int]*kv.Cursor{},
 		readTransaction:  false,
 		writeTransaction: false,
+		schemaVersion:    plan.Version,
 	}
 	i := 0
 	var currentCommand Command
@@ -82,6 +102,7 @@ func (v *vm) Execute(plan *ExecutionPlan) *ExecuteResult {
 		currentCommand = plan.Commands[i]
 		res := currentCommand.execute(v, routine)
 		if res.err != nil {
+			v.rollback(routine)
 			return &ExecuteResult{Err: res.err}
 		}
 		if res.doHalt {
@@ -96,6 +117,17 @@ func (v *vm) Execute(plan *ExecutionPlan) *ExecuteResult {
 	return &ExecuteResult{
 		ResultRows:   *routine.resultRows,
 		ResultHeader: plan.ResultHeader,
+	}
+}
+
+func (v *vm) rollback(r *routine) {
+	if r.writeTransaction {
+		v.kv.RollbackWrite()
+		return
+	}
+	if r.readTransaction {
+		v.kv.EndReadTransaction()
+		return
 	}
 }
 
@@ -190,11 +222,17 @@ func (c *TransactionCmd) execute(vm *vm, routine *routine) cmdRes {
 	if c.P2 == 0 {
 		routine.readTransaction = true
 		vm.kv.BeginReadTransaction()
+		if routine.schemaVersion != vm.kv.GetCatalog().GetVersion() {
+			return cmdRes{err: ErrVersionChanged}
+		}
 		return cmdRes{}
 	}
 	if c.P2 == 1 {
 		routine.writeTransaction = true
 		vm.kv.BeginWriteTransaction()
+		if routine.schemaVersion != vm.kv.GetCatalog().GetVersion() {
+			return cmdRes{err: ErrVersionChanged}
+		}
 		return cmdRes{}
 	}
 	return cmdRes{

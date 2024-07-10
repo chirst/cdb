@@ -229,6 +229,10 @@ func (kv *KV) BeginWriteTransaction() {
 	kv.pager.BeginWrite()
 }
 
+func (kv *KV) RollbackWrite() {
+	kv.pager.RollbackWrite()
+}
+
 func (kv *KV) EndWriteTransaction() error {
 	return kv.pager.EndWrite()
 }
@@ -282,7 +286,7 @@ func (kv *KV) ParseSchema() error {
 		objs = append(objs, *o)
 		exists = c.GotoNext()
 	}
-	kv.catalog.schema.objects = objs
+	kv.catalog.setSchema(objs)
 	return nil
 }
 

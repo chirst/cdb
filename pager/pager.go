@@ -219,6 +219,18 @@ func (p *Pager) EndWrite() error {
 	return nil
 }
 
+// RollbackWrite ends a write transaction without committing the changes to
+// storage.
+func (p *Pager) RollbackWrite() {
+	if !p.isWriting {
+		return
+	}
+	p.dirtyPages = []*Page{}
+	allocateFreePageCounter(p.store)
+	p.isWriting = false
+	p.fileLock.Unlock()
+}
+
 // GetPage returns an allocated page. GetPage will return cached pages. GetPage
 // will return dirtyPages during a write transaction.
 func (p *Pager) GetPage(pageNumber int) *Page {

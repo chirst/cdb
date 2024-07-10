@@ -4,6 +4,7 @@
 package db
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/chirst/cdb/compiler"
@@ -20,6 +21,7 @@ type dbCatalog interface {
 	GetColumns(tableOrIndexName string) ([]string, error)
 	GetRootPageNumber(tableOrIndexName string) (int, error)
 	TableExists(tableName string) bool
+	GetVersion() string
 }
 
 type DB struct {
@@ -28,9 +30,6 @@ type DB struct {
 	UseMemory bool
 }
 
-// TODO filename could likely handle memory and filename like what is attempted
-// in the driver. This could prevent constants from needing to be bubbled up
-// from interior layers (such as the one in repl).
 func New(useMemory bool, filename string) (*DB, error) {
 	kv, err := kv.New(useMemory, filename)
 	if err != nil {
@@ -49,11 +48,18 @@ func (db *DB) Execute(sql string) vm.ExecuteResult {
 	if err != nil {
 		return vm.ExecuteResult{Err: err}
 	}
-	executionPlan, err := db.getExecutionPlanFor(statement)
-	if err != nil {
-		return vm.ExecuteResult{Err: err}
+	var executeResult vm.ExecuteResult
+	for {
+		executionPlan, err := db.getExecutionPlanFor(statement)
+		if err != nil {
+			return vm.ExecuteResult{Err: err}
+		}
+		executeResult = *db.vm.Execute(executionPlan)
+		if !errors.Is(executeResult.Err, vm.ErrVersionChanged) {
+			break
+		}
 	}
-	return *db.vm.Execute(executionPlan)
+	return executeResult
 }
 
 func (db *DB) getExecutionPlanFor(statement compiler.Stmt) (*vm.ExecutionPlan, error) {

@@ -18,6 +18,10 @@ func (*mockSelectCatalog) GetRootPageNumber(s string) (int, error) {
 	return 2, nil
 }
 
+func (*mockSelectCatalog) GetVersion() string {
+	return "v"
+}
+
 func TestGetPlan(t *testing.T) {
 	expectedCommands := []vm.Command{
 		&vm.InitCmd{P2: 1},

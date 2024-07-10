@@ -29,6 +29,7 @@ var errMissingColumnName = errors.New("missing column")
 type insertCatalog interface {
 	GetColumns(tableOrIndexName string) ([]string, error)
 	GetRootPageNumber(tableOrIndexName string) (int, error)
+	GetVersion() string
 }
 
 type insertPlanner struct {
@@ -42,6 +43,8 @@ func NewInsert(catalog insertCatalog) *insertPlanner {
 }
 
 func (p *insertPlanner) GetPlan(s *compiler.InsertStmt) (*vm.ExecutionPlan, error) {
+	executionPlan := vm.NewExecutionPlan(p.catalog.GetVersion())
+	executionPlan.Explain = s.Explain
 	rootPageNumber, err := p.catalog.GetRootPageNumber(s.TableName)
 	if err != nil {
 		return nil, errTableNotExist
@@ -96,8 +99,6 @@ func (p *insertPlanner) GetPlan(s *compiler.InsertStmt) (*vm.ExecutionPlan, erro
 	}
 
 	commands = append(commands, &vm.HaltCmd{})
-	return &vm.ExecutionPlan{
-		Explain:  s.Explain,
-		Commands: commands,
-	}, nil
+	executionPlan.Commands = commands
+	return executionPlan, nil
 }
