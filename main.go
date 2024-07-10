@@ -5,7 +5,6 @@ import (
 	"log"
 
 	"github.com/chirst/cdb/db"
-	"github.com/chirst/cdb/pager"
 	"github.com/chirst/cdb/repl"
 )
 
@@ -13,7 +12,7 @@ const fFlagHelp = "Specify the database file name"
 const mFlagHelp = "Run the database in memory with no persistence"
 
 func main() {
-	dbfName := flag.String("f", pager.DefaultDBFileName, fFlagHelp)
+	dbfName := flag.String("f", "cdb", fFlagHelp)
 	isMemory := flag.Bool("m", false, mFlagHelp)
 	flag.Parse()
 	db, err := db.New(*isMemory, *dbfName)
