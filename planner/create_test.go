@@ -26,6 +26,10 @@ func (m *mockCreateCatalog) TableExists(tableName string) bool {
 	return m.tableExistsRes
 }
 
+func (*mockCreateCatalog) GetVersion() string {
+	return "v"
+}
+
 func TestCreateWithNoIDColumn(t *testing.T) {
 	stmt := &compiler.CreateStmt{
 		StmtBase:  &compiler.StmtBase{},

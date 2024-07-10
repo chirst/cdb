@@ -3,18 +3,27 @@ package kv
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"slices"
 )
 
 // catalog holds information about the database schema
 type catalog struct {
 	schema *schema
+	// version handles concurrency control when the planner prepares statements.
+	// Statements being run by the virtual machine will have their version
+	// checked with current catalog when the executing statement acquires it's
+	// file lock. If the version is out of date the statement will roll back,
+	// be recompiled, and be re-executed.
+	version string
 }
 
 func newCatalog() *catalog {
-	return &catalog{
+	c := &catalog{
 		schema: &schema{},
 	}
+	c.setNewVersion()
+	return c
 }
 
 func (c *catalog) GetRootPageNumber(tableOrIndexName string) (int, error) {
@@ -50,6 +59,26 @@ func (c *catalog) TableExists(tableName string) bool {
 	return slices.ContainsFunc(c.schema.objects, func(o object) bool {
 		return o.objectType == "table" && o.tableName == tableName
 	})
+}
+
+// GetVersion returns a unique version identifier that is updated when the
+// catalog is updated.
+func (c *catalog) GetVersion() string {
+	return c.version
+}
+
+func (c *catalog) setSchema(o []object) {
+	c.schema.objects = o
+	c.setNewVersion()
+}
+
+func (c *catalog) setNewVersion() {
+	chars := "abcdefghijklmnopqrstuvwxyz"
+	v := make([]byte, 16)
+	for i := range v {
+		v[i] = chars[rand.Intn(len(chars))]
+	}
+	c.version = string(v)
 }
 
 // schema is a cached representation of the database schema

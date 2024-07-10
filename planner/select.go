@@ -21,6 +21,7 @@ import (
 type selectCatalog interface {
 	GetColumns(tableOrIndexName string) ([]string, error)
 	GetRootPageNumber(tableOrIndexName string) (int, error)
+	GetVersion() string
 }
 
 type selectPlanner struct {
@@ -34,6 +35,8 @@ func NewSelect(catalog selectCatalog) *selectPlanner {
 }
 
 func (p *selectPlanner) GetPlan(s *compiler.SelectStmt) (*vm.ExecutionPlan, error) {
+	executionPlan := vm.NewExecutionPlan(p.catalog.GetVersion())
+	executionPlan.Explain = s.Explain
 	resultHeader := []string{}
 	cols, err := p.catalog.GetColumns(s.From.TableName)
 	if err != nil {
@@ -78,9 +81,7 @@ func (p *selectPlanner) GetPlan(s *compiler.SelectStmt) (*vm.ExecutionPlan, erro
 		commands = append(commands, &vm.ResultRowCmd{P1: 1, P2: 1})
 		commands = append(commands, &vm.HaltCmd{})
 	}
-	return &vm.ExecutionPlan{
-		Explain:      s.Explain,
-		Commands:     commands,
-		ResultHeader: resultHeader,
-	}, nil
+	executionPlan.Commands = commands
+	executionPlan.ResultHeader = resultHeader
+	return executionPlan, nil
 }

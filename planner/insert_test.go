@@ -27,6 +27,10 @@ func (*mockInsertCatalog) GetRootPageNumber(s string) (int, error) {
 	return 0, errors.New("mock error")
 }
 
+func (*mockInsertCatalog) GetVersion() string {
+	return "v"
+}
+
 func TestInsertWithoutPrimaryKey(t *testing.T) {
 	expectedCommands := []vm.Command{
 		&vm.InitCmd{P2: 1},

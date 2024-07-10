@@ -1,13 +1,5 @@
 package planner
 
-// TODO Catalog access at this level could cause a race since a mutex isn't
-// acquired until the commands start execution. This is likely an issue for all
-// planners, but is caused by CREATE since it is a writer to the catalog. This
-// could potentially be solved by extending the reach of the kv mutex into the
-// planner.
-//
-// TODO planner has odd dependencies on kv and vm.
-
 import (
 	"errors"
 	"slices"
@@ -26,6 +18,7 @@ type createCatalog interface {
 	GetColumns(tableOrIndexName string) ([]string, error)
 	GetRootPageNumber(tableOrIndexName string) (int, error)
 	TableExists(tableName string) bool
+	GetVersion() string
 }
 
 type createPlanner struct {
@@ -39,6 +32,8 @@ func NewCreate(catalog createCatalog) *createPlanner {
 }
 
 func (c *createPlanner) GetPlan(s *compiler.CreateStmt) (*vm.ExecutionPlan, error) {
+	executionPlan := vm.NewExecutionPlan(c.catalog.GetVersion())
+	executionPlan.Explain = s.Explain
 	err := c.ensureTableDoesNotExist(s)
 	if err != nil {
 		return nil, err
@@ -68,10 +63,8 @@ func (c *createPlanner) GetPlan(s *compiler.CreateStmt) (*vm.ExecutionPlan, erro
 	commands = append(commands, &vm.InsertCmd{P1: 1, P2: 8, P3: 2})
 	commands = append(commands, &vm.ParseSchemaCmd{})
 	commands = append(commands, &vm.HaltCmd{})
-	return &vm.ExecutionPlan{
-		Explain:  s.Explain,
-		Commands: commands,
-	}, nil
+	executionPlan.Commands = commands
+	return executionPlan, nil
 }
 
 func (c *createPlanner) ensureTableDoesNotExist(s *compiler.CreateStmt) error {
