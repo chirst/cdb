@@ -1,15 +1,5 @@
 package planner
 
-// TODO insert should have a unique constraints on a specified primary key
-//
-// With a primary key specified and specifying value for primary key. Will check
-// that key is unique and throw a unique constraint error if it is not.
-// INSERT INTO foo (id, bar) VALUES (1, 'asdf')
-//
-// Will use the NotExists instruction with a halt immediately after. The
-// NotExists will seek that the table doesn't have a row with the given pk
-// Halt will roll the transaction back if it is called in error.
-
 import (
 	"errors"
 	"fmt"
@@ -75,6 +65,9 @@ func (p *insertPlanner) GetPlan(s *compiler.InsertStmt) (*vm.ExecutionPlan, erro
 			if err != nil {
 				return nil, err
 			}
+			integerCmdIdx := len(commands) + 2
+			commands = append(commands, &vm.NotExistsCmd{P1: rootPageNumber, P2: integerCmdIdx, P3: rowId})
+			commands = append(commands, &vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"})
 			commands = append(commands, &vm.IntegerCmd{P1: rowId, P2: keyRegister})
 		}
 		registerIdx := keyRegister

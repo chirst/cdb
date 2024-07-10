@@ -188,9 +188,21 @@ func (c *InitCmd) explain(addr int) []*string {
 }
 
 // HaltCmd ends the routine which closes all cursors and commits transactions.
+// If P1 is non zero Halt will raise an exception and rollback the transaction
+// P4 will hold the error message.
 type HaltCmd cmd
 
 func (c *HaltCmd) execute(vm *vm, routine *routine) cmdRes {
+	if c.P1 != 0 {
+		em := c.P4
+		if em == "" {
+			em = "halt exited with a non zero error code and no error message"
+		}
+		// Raising an exception will rollback the transaction in the executor.
+		return cmdRes{
+			err: errors.New(em),
+		}
+	}
 	if routine.readTransaction {
 		vm.kv.EndReadTransaction()
 	}
@@ -207,9 +219,9 @@ func (c *HaltCmd) execute(vm *vm, routine *routine) cmdRes {
 }
 
 func (c *HaltCmd) explain(addr int) []*string {
-	comment := "End read transaction and exit"
-	if c.P2 == 1 {
-		comment = "End write transaction and exit"
+	comment := "End transaction and exit"
+	if c.P1 != 0 {
+		comment = "Exit with err"
 	}
 	return formatExplain(addr, "Halt", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
@@ -530,4 +542,29 @@ func (c *CountCmd) execute(vm *vm, routine *routine) cmdRes {
 func (c *CountCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Count entries for cursor %d and store in register[%d]", c.P1, c.P2)
 	return formatExplain(addr, "Count", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
+// TODO P1 should be a cursor
+// NotExistsCmd P1 is a root page number P3 is an integer if P1 does not contain
+// key P3 jump to P2 otherwise fall through.
+type NotExistsCmd cmd
+
+func (c *NotExistsCmd) execute(vm *vm, routine *routine) cmdRes {
+	bp3, err := kv.EncodeKey(c.P3)
+	if err != nil {
+		return cmdRes{err: err}
+	}
+	_, exists, err := vm.kv.Get(c.P1, bp3)
+	if err != nil {
+		return cmdRes{err: err}
+	}
+	if !exists {
+		return cmdRes{nextAddress: c.P2}
+	}
+	return cmdRes{}
+}
+
+func (c *NotExistsCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Jump to register[%d] if object %d does not contain key %d", c.P2, c.P1, c.P3)
+	return formatExplain(addr, "NotExists", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
