@@ -120,11 +120,21 @@ func (p *parser) parseCreate(sb *StmtBase) (*CreateStmt, error) {
 		if colType.value != kwInteger && colType.value != kwText {
 			return nil, fmt.Errorf(columnErr, colType.value)
 		}
-		stmt.ColDefs = append(stmt.ColDefs, ColDef{
-			ColName: colName.value,
-			ColType: colType.value,
-		})
 		sep := p.nextNonSpace()
+		isPrimaryKey := false
+		if sep.value == kwPrimary {
+			keyKw := p.nextNonSpace()
+			if keyKw.value != kwKey {
+				return nil, fmt.Errorf(tokenErr, tn.value)
+			}
+			isPrimaryKey = true
+			sep = p.nextNonSpace()
+		}
+		stmt.ColDefs = append(stmt.ColDefs, ColDef{
+			ColName:    colName.value,
+			ColType:    colType.value,
+			PrimaryKey: isPrimaryKey,
+		})
 		if sep.value != "," {
 			if sep.value == ")" {
 				break

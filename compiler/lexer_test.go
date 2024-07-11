@@ -105,7 +105,7 @@ func TestLexSelect(t *testing.T) {
 func TestLexCreate(t *testing.T) {
 	cases := []tc{
 		{
-			sql: "CREATE TABLE foo (id INTEGER, first_name TEXT, last_name TEXT)",
+			sql: "CREATE TABLE foo (id INTEGER PRIMARY KEY, first_name TEXT, last_name TEXT, age INTEGER)",
 			expected: []token{
 				{tkKeyword, "CREATE"},
 				{tkWhitespace, " "},
@@ -117,6 +117,10 @@ func TestLexCreate(t *testing.T) {
 				{tkIdentifier, "id"},
 				{tkWhitespace, " "},
 				{tkKeyword, "INTEGER"},
+				{tkWhitespace, " "},
+				{tkKeyword, "PRIMARY"},
+				{tkWhitespace, " "},
+				{tkKeyword, "KEY"},
 				{tkSeparator, ","},
 				{tkWhitespace, " "},
 				{tkIdentifier, "first_name"},
@@ -127,6 +131,11 @@ func TestLexCreate(t *testing.T) {
 				{tkIdentifier, "last_name"},
 				{tkWhitespace, " "},
 				{tkKeyword, "TEXT"},
+				{tkSeparator, ","},
+				{tkWhitespace, " "},
+				{tkIdentifier, "age"},
+				{tkWhitespace, " "},
+				{tkKeyword, "INTEGER"},
 				{tkSeparator, ")"},
 			},
 		},

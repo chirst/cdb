@@ -10,7 +10,7 @@ func TestDriver(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open err %s", err.Error())
 	}
-	_, err = db.Exec("CREATE TABLE foo (id INTEGER, name TEXT)")
+	_, err = db.Exec("CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)")
 	if err != nil {
 		t.Fatalf("exec err %s", err.Error())
 	}

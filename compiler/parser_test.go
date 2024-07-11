@@ -93,6 +93,10 @@ func TestParseCreate(t *testing.T) {
 				{tkIdentifier, "id"},
 				{tkWhitespace, " "},
 				{tkKeyword, "INTEGER"},
+				{tkWhitespace, " "},
+				{tkKeyword, "PRIMARY"},
+				{tkWhitespace, " "},
+				{tkKeyword, "KEY"},
 				{tkSeparator, ","},
 				{tkWhitespace, " "},
 				{tkIdentifier, "first_name"},
@@ -112,8 +116,9 @@ func TestParseCreate(t *testing.T) {
 				TableName: "foo",
 				ColDefs: []ColDef{
 					{
-						ColName: "id",
-						ColType: "INTEGER",
+						ColName:    "id",
+						ColType:    "INTEGER",
+						PrimaryKey: true,
 					},
 					{
 						ColName: "first_name",

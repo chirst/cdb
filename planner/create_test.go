@@ -45,10 +45,6 @@ func TestCreateWithNoIDColumn(t *testing.T) {
 	expectedSchema := &kv.TableSchema{
 		Columns: []kv.TableColumn{
 			{
-				Name:    "id",
-				ColType: "INTEGER",
-			},
-			{
 				Name:    "first",
 				ColType: "TEXT",
 			},
@@ -144,21 +140,22 @@ func TestCreateWithAlternateNamedIDColumn(t *testing.T) {
 	}
 }
 
-func TestCreateWithIDColumnAndTextType(t *testing.T) {
+func TestCreatePrimaryKeyWithTextType(t *testing.T) {
 	stmt := &compiler.CreateStmt{
 		StmtBase:  &compiler.StmtBase{},
 		TableName: "foo",
 		ColDefs: []compiler.ColDef{
 			{
-				ColName: "ID",
-				ColType: "TEXT",
+				ColName:    "ID",
+				ColType:    "TEXT",
+				PrimaryKey: true,
 			},
 		},
 	}
 	mc := &mockCreateCatalog{}
 	_, err := NewCreate(mc).GetPlan(stmt)
-	if !errors.Is(err, errInvalidIDColumnType) {
-		t.Fatalf("got error %s expected error %s", err, errInvalidIDColumnType)
+	if !errors.Is(err, errInvalidPKColumnType) {
+		t.Fatalf("got error %s expected error %s", err, errInvalidPKColumnType)
 	}
 }
 
@@ -176,6 +173,30 @@ func TestCreateWithExistingTable(t *testing.T) {
 	mc := &mockCreateCatalog{tableExistsRes: true}
 	_, err := NewCreate(mc).GetPlan(stmt)
 	if !errors.Is(err, errTableExists) {
-		t.Fatalf("got error %s expected error %s", err.Error(), errTableExists.Error())
+		t.Fatalf("got error %s expected error %s", err, errTableExists)
+	}
+}
+
+func TestCreateWithMoreThanOnePrimaryKey(t *testing.T) {
+	stmt := &compiler.CreateStmt{
+		StmtBase:  &compiler.StmtBase{},
+		TableName: "foo",
+		ColDefs: []compiler.ColDef{
+			{
+				ColName:    "bar",
+				ColType:    "INTEGER",
+				PrimaryKey: true,
+			},
+			{
+				ColName:    "baz",
+				ColType:    "INTEGER",
+				PrimaryKey: true,
+			},
+		},
+	}
+	mc := &mockCreateCatalog{}
+	_, err := NewCreate(mc).GetPlan(stmt)
+	if !errors.Is(err, errMoreThanOnePK) {
+		t.Fatalf("got error %s expected error %s", err, errMoreThanOnePK)
 	}
 }
