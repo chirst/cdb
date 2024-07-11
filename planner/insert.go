@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
@@ -20,6 +19,7 @@ type insertCatalog interface {
 	GetColumns(tableOrIndexName string) ([]string, error)
 	GetRootPageNumber(tableOrIndexName string) (int, error)
 	GetVersion() string
+	GetPrimaryKeyColumn(tableName string) (string, error)
 }
 
 type insertPlanner struct {
@@ -49,19 +49,26 @@ func (p *insertPlanner) GetPlan(s *compiler.InsertStmt) (*vm.ExecutionPlan, erro
 	commands = append(commands, &vm.TransactionCmd{P2: 1})
 	commands = append(commands, &vm.OpenWriteCmd{P1: cursorId, P2: rootPageNumber})
 
-	if len(s.ColValues)%len(s.ColNames) != 0 {
-		return nil, errValuesNotMatch
+	if err := checkValuesMatchColumns(s); err != nil {
+		return nil, err
 	}
 
+	pkColumn, err := p.catalog.GetPrimaryKeyColumn(s.TableName)
+	if err != nil {
+		return nil, err
+	}
 	for valueIdx := range len(s.ColValues) / len(s.ColNames) {
 		keyRegister := 1
-		statementIDIdx := slices.IndexFunc(s.ColNames, func(s string) bool {
-			return strings.ToLower(s) == "id"
-		})
+		statementIDIdx := -1
+		if pkColumn != "" {
+			statementIDIdx = slices.IndexFunc(s.ColNames, func(s string) bool {
+				return s == pkColumn
+			})
+		}
 		if statementIDIdx == -1 {
 			commands = append(commands, &vm.NewRowIdCmd{P1: rootPageNumber, P2: keyRegister})
 		} else {
-			rowId, err := strconv.Atoi(s.ColValues[statementIDIdx*len(s.ColNames)])
+			rowId, err := strconv.Atoi(s.ColValues[statementIDIdx+valueIdx*len(s.ColNames)])
 			if err != nil {
 				return nil, err
 			}
@@ -72,7 +79,7 @@ func (p *insertPlanner) GetPlan(s *compiler.InsertStmt) (*vm.ExecutionPlan, erro
 		}
 		registerIdx := keyRegister
 		for _, catalogColumnName := range catalogColumnNames {
-			if strings.ToLower(catalogColumnName) == "id" {
+			if catalogColumnName != "" && catalogColumnName == pkColumn {
 				continue
 			}
 			registerIdx += 1
@@ -94,4 +101,14 @@ func (p *insertPlanner) GetPlan(s *compiler.InsertStmt) (*vm.ExecutionPlan, erro
 	commands = append(commands, &vm.HaltCmd{})
 	executionPlan.Commands = commands
 	return executionPlan, nil
+}
+
+func checkValuesMatchColumns(s *compiler.InsertStmt) error {
+	// TODO need to enhance for INSERT INTO foo (name) VALUES ('n1', 'n2')
+	vl := len(s.ColValues)
+	cl := len(s.ColNames)
+	if vl%cl != 0 {
+		return errValuesNotMatch
+	}
+	return nil
 }

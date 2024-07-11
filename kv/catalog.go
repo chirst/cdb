@@ -55,6 +55,25 @@ func (c *catalog) GetColumns(tableName string) ([]string, error) {
 	return nil, fmt.Errorf("cannot get columns for table %s", tableName)
 }
 
+func (c *catalog) GetPrimaryKeyColumn(tableName string) (string, error) {
+	if tableName == "cdb_schema" {
+		return "id", nil
+	}
+	for _, o := range c.schema.objects {
+		if o.name == tableName && o.tableName == tableName {
+			ts := TableSchemaFromString(o.jsonSchema)
+			for _, col := range ts.Columns {
+				if col.PrimaryKey {
+					return col.Name, nil
+				}
+			}
+			// Table has no PK
+			return "", nil
+		}
+	}
+	return "", fmt.Errorf("cannot get pk for table %s", tableName)
+}
+
 func (c *catalog) TableExists(tableName string) bool {
 	return slices.ContainsFunc(c.schema.objects, func(o object) bool {
 		return o.objectType == "table" && o.tableName == tableName
@@ -105,8 +124,9 @@ type TableSchema struct {
 }
 
 type TableColumn struct {
-	Name    string `json:"name"`
-	ColType string `json:"type"`
+	Name       string `json:"name"`
+	ColType    string `json:"type"`
+	PrimaryKey bool   `json:"primaryKey"`
 }
 
 func (ts *TableSchema) ToJSON() ([]byte, error) {

@@ -11,6 +11,7 @@ import (
 
 type mockInsertCatalog struct {
 	columnsReturn []string
+	pkColumnName  string
 }
 
 func (c *mockInsertCatalog) GetColumns(s string) ([]string, error) {
@@ -29,6 +30,10 @@ func (*mockInsertCatalog) GetRootPageNumber(s string) (int, error) {
 
 func (*mockInsertCatalog) GetVersion() string {
 	return "v"
+}
+
+func (m *mockInsertCatalog) GetPrimaryKeyColumn(tableName string) (string, error) {
+	return m.pkColumnName, nil
 }
 
 func TestInsertWithoutPrimaryKey(t *testing.T) {
@@ -71,6 +76,7 @@ func TestInsertWithoutPrimaryKey(t *testing.T) {
 		},
 	}
 	mockCatalog := &mockInsertCatalog{}
+	mockCatalog.columnsReturn = []string{"first", "last"}
 	plan, err := NewInsert(mockCatalog).GetPlan(ast)
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
@@ -109,6 +115,47 @@ func TestInsertWithPrimaryKey(t *testing.T) {
 	}
 	mockCatalog := &mockInsertCatalog{
 		columnsReturn: []string{"id", "first"},
+		pkColumnName:  "id",
+	}
+	plan, err := NewInsert(mockCatalog).GetPlan(ast)
+	if err != nil {
+		t.Errorf("expected no err got err %s", err)
+	}
+	for i, c := range expectedCommands {
+		if !reflect.DeepEqual(c, plan.Commands[i]) {
+			t.Errorf("got %#v want %#v", plan.Commands[i], c)
+		}
+	}
+}
+
+func TestInsertWithPrimaryKeyMiddleOrder(t *testing.T) {
+	expectedCommands := []vm.Command{
+		&vm.InitCmd{P2: 1},
+		&vm.TransactionCmd{P2: 1},
+		&vm.OpenWriteCmd{P1: 1, P2: 2},
+		&vm.NotExistsCmd{P1: 2, P2: 5, P3: 12},
+		&vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"},
+		&vm.IntegerCmd{P1: 12, P2: 1},
+		&vm.StringCmd{P1: 2, P4: "feller"},
+		&vm.MakeRecordCmd{P1: 2, P2: 1, P3: 3},
+		&vm.InsertCmd{P1: 2, P2: 3, P3: 1},
+		&vm.HaltCmd{},
+	}
+	ast := &compiler.InsertStmt{
+		StmtBase:  &compiler.StmtBase{},
+		TableName: "foo",
+		ColNames: []string{
+			"first",
+			"id",
+		},
+		ColValues: []string{
+			"feller",
+			"12",
+		},
+	}
+	mockCatalog := &mockInsertCatalog{
+		columnsReturn: []string{"id", "first"},
+		pkColumnName:  "id",
 	}
 	plan, err := NewInsert(mockCatalog).GetPlan(ast)
 	if err != nil {

@@ -25,7 +25,7 @@ func mustExecute(t *testing.T, db *DB, sql string) vm.ExecuteResult {
 
 func TestExecute(t *testing.T) {
 	db := mustCreateDB(t)
-	mustExecute(t, db, "CREATE TABLE person (id INTEGER, first_name TEXT, last_name TEXT, age INTEGER)")
+	mustExecute(t, db, "CREATE TABLE person (id INTEGER PRIMARY KEY, first_name TEXT, last_name TEXT, age INTEGER)")
 	schemaRes := mustExecute(t, db, "SELECT * FROM cdb_schema")
 	schemaSelectExpectations := []string{
 		"1",
@@ -33,7 +33,7 @@ func TestExecute(t *testing.T) {
 		"person",
 		"person",
 		"2",
-		"{\"columns\":[{\"name\":\"id\",\"type\":\"INTEGER\"},{\"name\":\"first_name\",\"type\":\"TEXT\"},{\"name\":\"last_name\",\"type\":\"TEXT\"},{\"name\":\"age\",\"type\":\"INTEGER\"}]}",
+		"{\"columns\":[{\"name\":\"id\",\"type\":\"INTEGER\",\"primaryKey\":true},{\"name\":\"first_name\",\"type\":\"TEXT\",\"primaryKey\":false},{\"name\":\"last_name\",\"type\":\"TEXT\",\"primaryKey\":false},{\"name\":\"age\",\"type\":\"INTEGER\",\"primaryKey\":false}]}",
 	}
 	for i, s := range schemaSelectExpectations {
 		if c := *schemaRes.ResultRows[0][i]; c != s {
@@ -57,7 +57,7 @@ func TestExecute(t *testing.T) {
 
 func TestBulkInsert(t *testing.T) {
 	db := mustCreateDB(t)
-	mustExecute(t, db, "CREATE TABLE test (id INTEGER, junk TEXT)")
+	mustExecute(t, db, "CREATE TABLE test (id INTEGER PRIMARY KEY, junk TEXT)")
 	expectedTotal := 100_000
 	for i := 0; i < expectedTotal; i += 1 {
 		mustExecute(t, db, "INSERT INTO test (junk) VALUES ('asdf')")
@@ -79,7 +79,7 @@ func TestBulkInsert(t *testing.T) {
 
 func TestPrimaryKeyUniqueConstraintViolation(t *testing.T) {
 	db := mustCreateDB(t)
-	mustExecute(t, db, "CREATE TABLE test (id INTEGER, junk TEXT)")
+	mustExecute(t, db, "CREATE TABLE test (id INTEGER PRIMARY KEY, junk TEXT)")
 	mustExecute(t, db, "INSERT INTO test (id, junk) VALUES (1, 'asdf')")
 	dupePKResponse := db.Execute("INSERT INTO test (id, junk) VALUES (1, 'asdf')")
 	if dupePKResponse.Err.Error() != "pk unique constraint violated" {

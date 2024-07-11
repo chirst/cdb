@@ -22,6 +22,7 @@ type selectCatalog interface {
 	GetColumns(tableOrIndexName string) ([]string, error)
 	GetRootPageNumber(tableOrIndexName string) (int, error)
 	GetVersion() string
+	GetPrimaryKeyColumn(tableName string) (string, error)
 }
 
 type selectPlanner struct {
@@ -59,16 +60,20 @@ func (p *selectPlanner) GetPlan(s *compiler.SelectStmt) (*vm.ExecutionPlan, erro
 	if s.ResultColumn.All {
 		rwc := &vm.RewindCmd{P1: cursorId}
 		commands = append(commands, rwc)
-		commands = append(commands, &vm.RowIdCmd{P1: cursorId, P2: 1})
+		pkColName, err := p.catalog.GetPrimaryKeyColumn(s.From.TableName)
+		if err != nil {
+			return nil, err
+		}
+		registerIdx := 1
+		gap := 0
 		colIdx := 0
-		registerIdx := 2
-		gap := 1
 		for _, c := range cols {
-			if c == "id" {
-				continue
+			if c == pkColName {
+				commands = append(commands, &vm.RowIdCmd{P1: cursorId, P2: registerIdx})
+			} else {
+				commands = append(commands, &vm.ColumnCmd{P1: cursorId, P2: colIdx, P3: registerIdx})
+				colIdx += 1
 			}
-			commands = append(commands, &vm.ColumnCmd{P1: cursorId, P2: colIdx, P3: registerIdx})
-			colIdx += 1
 			registerIdx += 1
 			gap += 1
 		}

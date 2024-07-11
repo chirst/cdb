@@ -51,6 +51,8 @@ const (
 	kwValues  = "VALUES"
 	kwInteger = "INTEGER"
 	kwText    = "TEXT"
+	kwPrimary = "PRIMARY"
+	kwKey     = "KEY"
 )
 
 var keywords = []string{
@@ -65,6 +67,8 @@ var keywords = []string{
 	kwValues,
 	kwInteger,
 	kwText,
+	kwPrimary,
+	kwKey,
 }
 
 func (*lexer) isKeyword(w string) bool {

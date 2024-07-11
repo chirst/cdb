@@ -32,8 +32,9 @@ type CreateStmt struct {
 }
 
 type ColDef struct {
-	ColName string
-	ColType string
+	ColName    string
+	ColType    string
+	PrimaryKey bool
 }
 
 type InsertStmt struct {

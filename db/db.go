@@ -22,6 +22,7 @@ type dbCatalog interface {
 	GetRootPageNumber(tableOrIndexName string) (int, error)
 	TableExists(tableName string) bool
 	GetVersion() string
+	GetPrimaryKeyColumn(tableName string) (string, error)
 }
 
 type DB struct {

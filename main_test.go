@@ -8,7 +8,7 @@ import (
 
 func TestBulk(t *testing.T) {
 	d, _ := db.New(true, "")
-	r := d.Execute("CREATE TABLE test (id INTEGER, junk TEXT)")
+	r := d.Execute("CREATE TABLE test (id INTEGER PRIMARY KEY, junk TEXT)")
 	if r.Err != nil {
 		t.Fatal(r.Err.Error())
 	}

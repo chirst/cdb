@@ -28,22 +28,21 @@ from --> table
 ```
 
 ### CREATE
-Create has non standard behavior for primary keys. A `id` column of type 
-`INTEGER` is automatically added for all tables. If a `id` column is specified
-in the `CREATE` statement the specification will only allow the column position
-and column casing to be changed.
+Create supports the `PRIMARY KEY` column constraint for a single integer column.
 ```mermaid
 graph LR
 begin(( ))
 explain([EXPLAIN])
 create([CREATE])
 table([TABLE])
-colType([INTEGER or TEXT])
+colTypeInt([INTEGER])
+colTypeText([TEXT])
 lparen["("]
 colSep[","]
 rparen[")"]
 tableIdent["Table Identifier"]
 colIdent["Column Identifier"]
+pkConstraint["PRIMARY KEY"]
 
 begin --> explain
 begin --> create
@@ -52,9 +51,15 @@ create --> table
 table --> tableIdent
 tableIdent --> lparen
 lparen --> colIdent
-colIdent --> colType
-colType --> colSep
-colType --> rparen
+colIdent --> colTypeInt
+colIdent --> colTypeText
+colTypeInt --> pkConstraint
+colTypeInt --> colSep
+colTypeInt --> rparen
+colTypeText --> colSep
+colTypeText --> rparen
+pkConstraint --> colSep
+pkConstraint --> rparen
 colSep --> rparen
 colSep --> colIdent
 ```

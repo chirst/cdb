@@ -3,15 +3,15 @@ package planner
 import (
 	"errors"
 	"slices"
-	"strings"
 
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/kv"
 	"github.com/chirst/cdb/vm"
 )
 
-var errInvalidIDColumnType = errors.New("id column must be INTEGER type")
+var errInvalidPKColumnType = errors.New("primary key must be INTEGER type")
 var errTableExists = errors.New("table exists")
+var errMoreThanOnePK = errors.New("more than one primary key specified")
 
 // createCatalog defines the catalog methods needed by the create planner
 type createCatalog interface {
@@ -75,8 +75,10 @@ func (c *createPlanner) ensureTableDoesNotExist(s *compiler.CreateStmt) error {
 }
 
 func getSchemaString(s *compiler.CreateStmt) (string, error) {
-	ensureIDColumn(s)
-	if err := ensureIntegerID(s); err != nil {
+	if err := ensurePrimaryKeyCount(s); err != nil {
+		return "", err
+	}
+	if err := ensurePrimaryKeyInteger(s); err != nil {
 		return "", err
 	}
 	jSchema, err := schemaFrom(s).ToJSON()
@@ -86,38 +88,37 @@ func getSchemaString(s *compiler.CreateStmt) (string, error) {
 	return string(jSchema), nil
 }
 
-// Add an id column as the first argument if the statement doesn't contain some
-// upper lower case variation of id. This primary key is not optional, but is
-// allowed to be specified in any nth column position or with any casing.
-func ensureIDColumn(s *compiler.CreateStmt) {
-	hasId := slices.ContainsFunc(s.ColDefs, func(cd compiler.ColDef) bool {
-		return strings.ToLower(cd.ColName) == "id"
-	})
-	if hasId {
-		return
-	}
-	s.ColDefs = append(
-		[]compiler.ColDef{
-			{
-				ColName: "id",
-				ColType: "INTEGER",
-			},
-		},
-		s.ColDefs...,
-	)
-}
-
 // The id column must be an integer. The index key is capable of being something
 // other than an integer, but is not worth implementing at the moment. Integer
 // primary keys are superior for auto incrementing and being unique.
-func ensureIntegerID(s *compiler.CreateStmt) error {
-	hasIntegerID := slices.ContainsFunc(s.ColDefs, func(cd compiler.ColDef) bool {
-		return strings.ToLower(cd.ColName) == "id" && cd.ColType == "INTEGER"
+func ensurePrimaryKeyInteger(s *compiler.CreateStmt) error {
+	hasPK := slices.ContainsFunc(s.ColDefs, func(cd compiler.ColDef) bool {
+		return cd.PrimaryKey
 	})
-	if hasIntegerID {
+	if !hasPK {
 		return nil
 	}
-	return errInvalidIDColumnType
+	hasIntegerPK := slices.ContainsFunc(s.ColDefs, func(cd compiler.ColDef) bool {
+		return cd.PrimaryKey && cd.ColType == "INTEGER"
+	})
+	if !hasIntegerPK {
+		return errInvalidPKColumnType
+	}
+	return nil
+}
+
+// Only one primary key is supported at this time.
+func ensurePrimaryKeyCount(s *compiler.CreateStmt) error {
+	count := 0
+	for _, cd := range s.ColDefs {
+		if cd.PrimaryKey {
+			count += 1
+		}
+	}
+	if count > 1 {
+		return errMoreThanOnePK
+	}
+	return nil
 }
 
 func schemaFrom(s *compiler.CreateStmt) *kv.TableSchema {
@@ -126,8 +127,9 @@ func schemaFrom(s *compiler.CreateStmt) *kv.TableSchema {
 	}
 	for _, cd := range s.ColDefs {
 		schema.Columns = append(schema.Columns, kv.TableColumn{
-			Name:    cd.ColName,
-			ColType: cd.ColType,
+			Name:       cd.ColName,
+			ColType:    cd.ColType,
+			PrimaryKey: cd.PrimaryKey,
 		})
 	}
 	return &schema
