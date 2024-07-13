@@ -1,18 +1,10 @@
 package planner
 
-// TODO
-// This planner will eventually consist of smaller parts.
-// 1. Something like a binder may be necessary which would validate the values
-//    in the statement make sense given the current schema.
-// 2. A logical query planner which would transform the ast into a relational
-//    algebra like structure. This structure would allow for optimizations like
-//    predicate push down.
-// 3. Perhaps a physical planner which would maybe take into account statistics
-//    and indexes.
-// Somewhere in these structures would be the ability to print a query plan that
-// is higher level than the bytecode operations. A typical explain tree.
-
 import (
+	"fmt"
+	"strings"
+	"unicode/utf8"
+
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
 )
@@ -38,6 +30,14 @@ func NewSelect(catalog selectCatalog) *selectPlanner {
 func (p *selectPlanner) GetPlan(s *compiler.SelectStmt) (*vm.ExecutionPlan, error) {
 	executionPlan := vm.NewExecutionPlan(p.catalog.GetVersion())
 	executionPlan.Explain = s.Explain
+	executionPlan.ExplainQueryPlan = s.ExplainQueryPlan
+	lp := p.getLogicalPlan(s)
+	if executionPlan.ExplainQueryPlan {
+		printer := &printLogicalNodeVisitor{}
+		walkLogicalTree(lp, printer, 0)
+		executionPlan.FormattedTree = connectSiblings(printer.plan)
+		return executionPlan, nil
+	}
 	resultHeader := []string{}
 	cols, err := p.catalog.GetColumns(s.From.TableName)
 	if err != nil {
@@ -89,4 +89,180 @@ func (p *selectPlanner) GetPlan(s *compiler.SelectStmt) (*vm.ExecutionPlan, erro
 	executionPlan.Commands = commands
 	executionPlan.ResultHeader = resultHeader
 	return executionPlan, nil
+}
+
+func walkLogicalTree(root logicalNode, lnv logicalNodeVisitor, depth int) {
+	root.accept(lnv, depth+1)
+	for _, c := range root.children() {
+		walkLogicalTree(c, lnv, depth+1)
+	}
+}
+
+type logicalNodeVisitor interface {
+	visit(ln logicalNode, depth int)
+}
+
+type printLogicalNodeVisitor struct {
+	plan string
+}
+
+func (p *printLogicalNodeVisitor) visit(ln logicalNode, depth int) {
+	padding := ""
+	for i := 0; i < depth; i += 1 {
+		padding += "    "
+	}
+	if depth != 0 {
+		padding += " └─ "
+	} else {
+		padding += " ── "
+	}
+	p.plan += fmt.Sprintf("%s%s\n", padding, ln.print())
+}
+
+type logicalNode interface {
+	print() string
+	accept(v logicalNodeVisitor, depth int)
+	children() []logicalNode
+}
+
+type projectNode struct {
+	projections []projection
+	child       logicalNode
+}
+
+type projection struct {
+	isAll   bool
+	isCount bool
+}
+
+func (p *projection) print() string {
+	if p.isAll {
+		return "*"
+	}
+	return "count(*)"
+}
+
+type scanNode struct {
+	tableName string
+}
+
+type joinNode struct {
+	left      logicalNode
+	right     logicalNode
+	operation string
+}
+
+func (p *projectNode) accept(v logicalNodeVisitor, depth int) {
+	v.visit(p, depth)
+}
+
+func (s *scanNode) accept(v logicalNodeVisitor, depth int) {
+	v.visit(s, depth)
+}
+
+func (j *joinNode) accept(v logicalNodeVisitor, depth int) {
+	v.visit(j, depth)
+}
+
+func (p *projectNode) print() string {
+	list := "("
+	for i, proj := range p.projections {
+		list += proj.print()
+		if i+1 < len(p.projections) {
+			list += ", "
+		}
+	}
+	list += ")"
+	return "project" + list
+}
+
+func (s *scanNode) print() string {
+	return fmt.Sprintf("scan table %s", s.tableName)
+}
+
+func (j *joinNode) print() string {
+	return fmt.Sprint(j.operation)
+}
+
+func (p *projectNode) children() []logicalNode {
+	return []logicalNode{p.child}
+}
+
+func (s *scanNode) children() []logicalNode {
+	return []logicalNode{}
+}
+
+func (j *joinNode) children() []logicalNode {
+	return []logicalNode{j.left, j.right}
+}
+
+func (p *selectPlanner) getLogicalPlan(s *compiler.SelectStmt) logicalNode {
+	// return &projectNode{
+	// 	projections: []projection{
+	// 		{
+	// 			isAll:   s.ResultColumn.All,
+	// 			isCount: s.ResultColumn.Count,
+	// 		},
+	// 	},
+	// 	child: &scanNode{
+	// 		tableName: s.From.TableName,
+	// 	},
+	// }
+	return &projectNode{
+		projections: []projection{
+			{
+				isAll:   true,
+				isCount: false,
+			},
+		},
+		child: &joinNode{
+			operation: "join",
+			left: &joinNode{
+				operation: "join",
+				left: &scanNode{
+					tableName: "foo",
+				},
+				right: &joinNode{
+					operation: "join",
+					left: &scanNode{
+						tableName: "baz",
+					},
+					right: &scanNode{
+						tableName: "buzz",
+					},
+				},
+			},
+			right: &scanNode{
+				tableName: "bar",
+			},
+		},
+	}
+}
+
+func connectSiblings(rawPlan string) string {
+	planMatrix := strings.Split(rawPlan, "\n")
+	for rowIdx := len(planMatrix) - 1; 0 < rowIdx; rowIdx -= 1 {
+		row := planMatrix[rowIdx]
+		for charIdx, char := range row {
+			if char == '└' {
+				for backwardsRowIdx := rowIdx - 1; 0 < backwardsRowIdx; backwardsRowIdx -= 1 {
+					if len(planMatrix[backwardsRowIdx]) < charIdx {
+						continue
+					}
+					char, _ := utf8.DecodeRuneInString(planMatrix[backwardsRowIdx][charIdx:])
+					if char == ' ' {
+						out := []rune(planMatrix[backwardsRowIdx])
+						out[charIdx] = '|'
+						planMatrix[backwardsRowIdx] = string(out)
+					}
+					if char == '└' {
+						out := []rune(planMatrix[backwardsRowIdx])
+						out[charIdx] = '├'
+						planMatrix[backwardsRowIdx] = string(out)
+					}
+				}
+			}
+		}
+	}
+	return strings.Join(planMatrix, "\n")
 }

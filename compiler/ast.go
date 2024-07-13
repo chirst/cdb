@@ -7,7 +7,8 @@ package compiler
 type Stmt interface{}
 
 type StmtBase struct {
-	Explain bool
+	Explain          bool
+	ExplainQueryPlan bool
 }
 
 type SelectStmt struct {
@@ -43,3 +44,32 @@ type InsertStmt struct {
 	ColNames  []string
 	ColValues []string
 }
+
+// type Expr interface {
+// 	Type() string
+// }
+
+// type BinaryExpr struct {
+// 	Left     Expr
+// 	Operator string
+// 	Right    Expr
+// }
+
+// type UnaryExpr struct {
+// 	Operator string
+// 	Operand  Expr
+// }
+
+// type ColumnRef struct {
+// 	Table  string
+// 	Column string
+// }
+
+// type IntLit struct {
+// 	Value int
+// }
+
+// type FunctionExpr struct {
+// 	Name string
+// 	Args []Expr
+// }

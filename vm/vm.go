@@ -66,9 +66,11 @@ type ExecuteResult struct {
 }
 
 type ExecutionPlan struct {
-	Explain      bool
-	Commands     []Command
-	ResultHeader []string
+	Explain          bool
+	ExplainQueryPlan bool
+	FormattedTree    string
+	Commands         []Command
+	ResultHeader     []string
 	// Version is the catalog version used to compile this plan. If the version
 	// is not the same during execution the execution plan will be recompiled.
 	Version string
@@ -85,6 +87,11 @@ func NewExecutionPlan(version string) *ExecutionPlan {
 // the system catalog Execute will return ErrVersionChanged in the ExecuteResult
 // err field so the plan can be recompiled.
 func (v *vm) Execute(plan *ExecutionPlan) *ExecuteResult {
+	if plan.ExplainQueryPlan {
+		return &ExecuteResult{
+			Text: plan.FormattedTree,
+		}
+	}
 	if plan.Explain {
 		return v.explain(plan)
 	}

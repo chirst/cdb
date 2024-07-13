@@ -41,6 +41,8 @@ const (
 // Keywords where kw is keyword
 const (
 	kwExplain = "EXPLAIN"
+	kwQuery   = "QUERY"
+	kwPlan    = "PLAN"
 	kwSelect  = "SELECT"
 	kwCount   = "COUNT"
 	kwFrom    = "FROM"
@@ -57,6 +59,8 @@ const (
 
 var keywords = []string{
 	kwExplain,
+	kwQuery,
+	kwPlan,
 	kwSelect,
 	kwCount,
 	kwFrom,

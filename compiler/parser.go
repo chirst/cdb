@@ -33,8 +33,19 @@ func (p *parser) parseStmt() (Stmt, error) {
 	t := p.tokens[p.start]
 	sb := &StmtBase{}
 	if t.value == kwExplain {
-		sb.Explain = true
 		t = p.nextNonSpace()
+		nv := p.peekNextNonSpace().value
+		if nv == kwQuery {
+			tp := p.nextNonSpace()
+			if tp.value == kwPlan {
+				sb.ExplainQueryPlan = true
+				t = p.nextNonSpace()
+			} else {
+				return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
+			}
+		} else {
+			sb.Explain = true
+		}
 	}
 	switch t.value {
 	case kwSelect:

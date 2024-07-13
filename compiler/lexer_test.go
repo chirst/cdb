@@ -77,6 +77,20 @@ func TestLexSelect(t *testing.T) {
 			},
 		},
 		{
+			sql: "EXPLAIN QUERY PLAN SELECT 1",
+			expected: []token{
+				{tkKeyword, "EXPLAIN"},
+				{tkWhitespace, " "},
+				{tkKeyword, "QUERY"},
+				{tkWhitespace, " "},
+				{tkKeyword, "PLAN"},
+				{tkWhitespace, " "},
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkNumeric, "1"},
+			},
+		},
+		{
 			sql: "SELECT 12",
 			expected: []token{
 				{tkKeyword, "SELECT"},
@@ -95,10 +109,12 @@ func TestLexSelect(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		ret := NewLexer(c.sql).Lex()
-		if !reflect.DeepEqual(ret, c.expected) {
-			t.Errorf("expected %#v got %#v", c.expected, ret)
-		}
+		t.Run(c.sql, func(t *testing.T) {
+			ret := NewLexer(c.sql).Lex()
+			if !reflect.DeepEqual(ret, c.expected) {
+				t.Errorf("expected %#v got %#v", c.expected, ret)
+			}
+		})
 	}
 }
 
@@ -141,10 +157,12 @@ func TestLexCreate(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		ret := NewLexer(c.sql).Lex()
-		if !reflect.DeepEqual(ret, c.expected) {
-			t.Errorf("expected %#v got %#v", c.expected, ret)
-		}
+		t.Run(c.sql, func(t *testing.T) {
+			ret := NewLexer(c.sql).Lex()
+			if !reflect.DeepEqual(ret, c.expected) {
+				t.Errorf("expected %#v got %#v", c.expected, ret)
+			}
+		})
 	}
 }
 
@@ -195,9 +213,11 @@ func TestLexInsert(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		ret := NewLexer(c.sql).Lex()
-		if !reflect.DeepEqual(ret, c.expected) {
-			t.Errorf("expected %#v got %#v", c.expected, ret)
-		}
+		t.Run(c.sql, func(t *testing.T) {
+			ret := NewLexer(c.sql).Lex()
+			if !reflect.DeepEqual(ret, c.expected) {
+				t.Errorf("expected %#v got %#v", c.expected, ret)
+			}
+		})
 	}
 }
