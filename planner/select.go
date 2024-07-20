@@ -18,8 +18,8 @@ type selectPlanner struct {
 	catalog selectCatalog
 	// stmt contains the AST
 	stmt *compiler.SelectStmt
-	// queryPlan contains the logical plan
-	queryPlan logicalNode
+	// queryPlan contains the logical plan. The root node must be a projection.
+	queryPlan *projectNode
 	// executionPlan contains the execution plan for the vm
 	executionPlan *vm.ExecutionPlan
 	// catalogVersion contains the version of catalog this query plan was
@@ -37,15 +37,22 @@ func NewSelect(catalog selectCatalog, stmt *compiler.SelectStmt) *selectPlanner 
 }
 
 // getQueryPlan generates the query plan tree for the planner.
-func (p *selectPlanner) getQueryPlan() {
+func (p *selectPlanner) getQueryPlan() error {
+	tableName := p.stmt.From.TableName
+	rootPageNumber, err := p.catalog.GetRootPageNumber(tableName)
+	if err != nil {
+		return err
+	}
 	var child logicalNode
 	if p.stmt.ResultColumn.All {
 		child = &scanNode{
-			tableName: p.stmt.From.TableName,
+			tableName: tableName,
+			rootPage:  rootPageNumber,
 		}
 	} else {
 		child = &countNode{
-			tableName: p.stmt.From.TableName,
+			tableName: tableName,
+			rootPage:  rootPageNumber,
 		}
 	}
 	p.queryPlan = &projectNode{
@@ -57,24 +64,32 @@ func (p *selectPlanner) getQueryPlan() {
 		},
 		child: child,
 	}
+	return nil
 }
 
 // GetPlan returns the bytecode execution plan for the planner.
 func (p *selectPlanner) GetPlan() (*vm.ExecutionPlan, error) {
-	p.getQueryPlan()
+	if err := p.getQueryPlan(); err != nil {
+		return nil, err
+	}
 	p.newExecutionPlan()
 	if err := p.resultHeader(); err != nil {
 		return nil, err
 	}
 	p.buildInit()
-	if p.stmt.ResultColumn.All {
-		if err := p.buildScan(); err != nil {
+
+	// TODO should handle more than one projection. Possibly needs to work with
+	// result header.
+	// projection := p.queryPlan.projections[0]
+	switch c := p.queryPlan.child.(type) {
+	case *scanNode:
+		if err := p.buildScan(c); err != nil {
 			return nil, err
 		}
-	} else { // count
-		if err := p.buildOptimizedCountScan(); err != nil {
-			return nil, err
-		}
+	case *countNode:
+		p.buildOptimizedCountScan(c)
+	default:
+		panic("unhandled node")
 	}
 	p.executionPlan.Append(&vm.HaltCmd{})
 	return p.executionPlan, nil
@@ -108,14 +123,10 @@ func (p *selectPlanner) buildInit() {
 	p.executionPlan.Append(&vm.TransactionCmd{P2: 0})
 }
 
-func (p *selectPlanner) buildScan() error {
+func (p *selectPlanner) buildScan(n *scanNode) error {
 	// Open read cursor
-	rootPage, err := p.catalog.GetRootPageNumber(p.stmt.From.TableName)
-	if err != nil {
-		return err
-	}
 	const cursorId = 1
-	p.executionPlan.Append(&vm.OpenReadCmd{P1: cursorId, P2: rootPage})
+	p.executionPlan.Append(&vm.OpenReadCmd{P1: cursorId, P2: n.rootPage})
 
 	// Rewind to begin loop for scan
 	rwc := &vm.RewindCmd{P1: cursorId}
@@ -153,43 +164,9 @@ func (p *selectPlanner) buildScan() error {
 	return nil
 }
 
-func (p *selectPlanner) buildOptimizedCountScan() error {
-	rootPage, err := p.catalog.GetRootPageNumber(p.stmt.From.TableName)
-	if err != nil {
-		return err
-	}
+func (p *selectPlanner) buildOptimizedCountScan(n *countNode) {
 	const cursorId = 1
-	p.executionPlan.Append(&vm.OpenReadCmd{P1: cursorId, P2: rootPage})
+	p.executionPlan.Append(&vm.OpenReadCmd{P1: cursorId, P2: n.rootPage})
 	p.executionPlan.Append(&vm.CountCmd{P1: cursorId, P2: 1})
 	p.executionPlan.Append(&vm.ResultRowCmd{P1: 1, P2: 1})
-	return nil
-}
-
-type logicalNode interface {
-	children() []logicalNode
-	print() string
-}
-
-type projectNode struct {
-	projections []projection
-	child       logicalNode
-}
-
-type projection struct {
-	isAll   bool
-	isCount bool
-}
-
-type scanNode struct {
-	tableName string
-}
-
-type countNode struct {
-	tableName string
-}
-
-type joinNode struct {
-	left      logicalNode
-	right     logicalNode
-	operation string
 }
