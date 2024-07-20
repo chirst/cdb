@@ -57,7 +57,7 @@ func TestGetPlan(t *testing.T) {
 	mockCatalog := &mockSelectCatalog{}
 	mockCatalog.primaryKeyColumnName = "id"
 	mockCatalog.columns = []string{"name", "id", "age"}
-	plan, err := NewSelect(mockCatalog).GetPlan(ast)
+	plan, err := NewSelect(mockCatalog, ast).GetPlan()
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
@@ -91,7 +91,7 @@ func TestGetPlanPKMiddleOrdinal(t *testing.T) {
 	}
 	mockCatalog := &mockSelectCatalog{}
 	mockCatalog.primaryKeyColumnName = "id"
-	plan, err := NewSelect(mockCatalog).GetPlan(ast)
+	plan, err := NewSelect(mockCatalog, ast).GetPlan()
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
@@ -121,7 +121,7 @@ func TestGetCountAggregate(t *testing.T) {
 		},
 	}
 	mockCatalog := &mockSelectCatalog{}
-	plan, err := NewSelect(mockCatalog).GetPlan(ast)
+	plan, err := NewSelect(mockCatalog, ast).GetPlan()
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
@@ -154,7 +154,7 @@ func TestGetPlanNoPrimaryKey(t *testing.T) {
 		},
 	}
 	mockCatalog := &mockSelectCatalog{}
-	plan, err := NewSelect(mockCatalog).GetPlan(ast)
+	plan, err := NewSelect(mockCatalog, ast).GetPlan()
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
@@ -162,53 +162,5 @@ func TestGetPlanNoPrimaryKey(t *testing.T) {
 		if !reflect.DeepEqual(c, plan.Commands[i]) {
 			t.Errorf("got %#v want %#v", plan.Commands[i], c)
 		}
-	}
-}
-
-func TestExplainQueryPlan(t *testing.T) {
-	// TODO test should be on higher level public method
-	root := &projectNode{
-		projections: []projection{
-			{
-				isAll:   true,
-				isCount: false,
-			},
-		},
-		child: &joinNode{
-			operation: "join",
-			left: &joinNode{
-				operation: "join",
-				left: &scanNode{
-					tableName: "foo",
-				},
-				right: &joinNode{
-					operation: "join",
-					left: &scanNode{
-						tableName: "baz",
-					},
-					right: &scanNode{
-						tableName: "buzz",
-					},
-				},
-			},
-			right: &scanNode{
-				tableName: "bar",
-			},
-		},
-	}
-	printer := &printLogicalNodeVisitor{}
-	walkLogicalTree(root, printer, 0)
-	formattedResult := connectSiblings(printer.plan)
-	expectedResult := "" +
-		"     └─ project(*)\n" +
-		"         └─ join\n" +
-		"             ├─ join\n" +
-		"             |   ├─ scan table foo\n" +
-		"             |   └─ join\n" +
-		"             |       ├─ scan table baz\n" +
-		"             |       └─ scan table buzz\n" +
-		"             └─ scan table bar\n"
-	if formattedResult != expectedResult {
-		t.Fatalf("got\n%s\nwant\n%s", formattedResult, expectedResult)
 	}
 }

@@ -66,7 +66,7 @@ func (db *DB) Execute(sql string) vm.ExecuteResult {
 func (db *DB) getExecutionPlanFor(statement compiler.Stmt) (*vm.ExecutionPlan, error) {
 	switch s := statement.(type) {
 	case *compiler.SelectStmt:
-		return planner.NewSelect(db.catalog).GetPlan(s)
+		return planner.NewSelect(db.catalog, s).GetPlan()
 	case *compiler.CreateStmt:
 		return planner.NewCreate(db.catalog).GetPlan(s)
 	case *compiler.InsertStmt:
