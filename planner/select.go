@@ -102,6 +102,14 @@ type logicalNodeVisitor interface {
 	visit(ln logicalNode, depth int)
 }
 
+type byteCodeLogicalNodeVisitor struct {
+	plan vm.ExecutionPlan
+}
+
+func (v *byteCodeLogicalNodeVisitor) visit(ln logicalNode, depth int) {
+	v.plan = ln.executionPlan(v.plan)
+}
+
 type printLogicalNodeVisitor struct {
 	plan string
 }
@@ -123,6 +131,7 @@ type logicalNode interface {
 	print() string
 	accept(v logicalNodeVisitor, depth int)
 	children() []logicalNode
+	executionPlan(in vm.ExecutionPlan) vm.ExecutionPlan
 }
 
 type projectNode struct {
@@ -146,6 +155,10 @@ type scanNode struct {
 	tableName string
 }
 
+type countNode struct {
+	tableName string
+}
+
 type joinNode struct {
 	left      logicalNode
 	right     logicalNode
@@ -158,6 +171,10 @@ func (p *projectNode) accept(v logicalNodeVisitor, depth int) {
 
 func (s *scanNode) accept(v logicalNodeVisitor, depth int) {
 	v.visit(s, depth)
+}
+
+func (c *countNode) accept(v logicalNodeVisitor, depth int) {
+	v.visit(c, depth)
 }
 
 func (j *joinNode) accept(v logicalNodeVisitor, depth int) {
@@ -180,6 +197,10 @@ func (s *scanNode) print() string {
 	return fmt.Sprintf("scan table %s", s.tableName)
 }
 
+func (c *countNode) print() string {
+	return fmt.Sprintf("count table %s", c.tableName)
+}
+
 func (j *joinNode) print() string {
 	return fmt.Sprint(j.operation)
 }
@@ -192,50 +213,49 @@ func (s *scanNode) children() []logicalNode {
 	return []logicalNode{}
 }
 
+func (c *countNode) children() []logicalNode {
+	return []logicalNode{}
+}
+
 func (j *joinNode) children() []logicalNode {
 	return []logicalNode{j.left, j.right}
 }
 
+func (p *projectNode) executionPlan(in vm.ExecutionPlan) vm.ExecutionPlan {
+	return in
+}
+
+func (s *scanNode) executionPlan(in vm.ExecutionPlan) vm.ExecutionPlan {
+	return in
+}
+
+func (c *countNode) executionPlan(in vm.ExecutionPlan) vm.ExecutionPlan {
+	return in
+}
+
+func (j *joinNode) executionPlan(in vm.ExecutionPlan) vm.ExecutionPlan {
+	return in
+}
+
 func (p *selectPlanner) getLogicalPlan(s *compiler.SelectStmt) logicalNode {
-	// return &projectNode{
-	// 	projections: []projection{
-	// 		{
-	// 			isAll:   s.ResultColumn.All,
-	// 			isCount: s.ResultColumn.Count,
-	// 		},
-	// 	},
-	// 	child: &scanNode{
-	// 		tableName: s.From.TableName,
-	// 	},
-	// }
+	var child logicalNode
+	if s.ResultColumn.All {
+		child = &scanNode{
+			tableName: s.From.TableName,
+		}
+	} else {
+		child = &countNode{
+			tableName: s.From.TableName,
+		}
+	}
 	return &projectNode{
 		projections: []projection{
 			{
-				isAll:   true,
-				isCount: false,
+				isAll:   s.ResultColumn.All,
+				isCount: s.ResultColumn.Count,
 			},
 		},
-		child: &joinNode{
-			operation: "join",
-			left: &joinNode{
-				operation: "join",
-				left: &scanNode{
-					tableName: "foo",
-				},
-				right: &joinNode{
-					operation: "join",
-					left: &scanNode{
-						tableName: "baz",
-					},
-					right: &scanNode{
-						tableName: "buzz",
-					},
-				},
-			},
-			right: &scanNode{
-				tableName: "bar",
-			},
-		},
+		child: child,
 	}
 }
 
