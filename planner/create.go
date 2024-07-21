@@ -67,10 +67,7 @@ func (p *createPlanner) QueryPlan() (*QueryPlan, error) {
 		tableName:  tableName,
 		schema:     jSchema,
 	}
-	qp := &QueryPlan{
-		root:             createNode,
-		ExplainQueryPlan: p.qp.stmt.ExplainQueryPlan,
-	}
+	qp := newQueryPlan(createNode, p.qp.stmt.ExplainQueryPlan)
 	p.ep.queryPlan = createNode
 	return qp, nil
 }

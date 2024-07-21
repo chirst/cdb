@@ -31,7 +31,7 @@ func TestExplainQueryPlan(t *testing.T) {
 			},
 		},
 	}
-	qp := QueryPlan{root: root}
+	qp := newQueryPlan(root, true)
 	formattedResult := qp.ToString()
 	expectedResult := "" +
 		"     └─ project(id, first_name, last_name)\n" +

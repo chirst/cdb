@@ -97,10 +97,7 @@ func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
 		child:       child,
 	}
 	p.ep.queryPlan = p.qp.queryPlan
-	return &QueryPlan{
-		root:             p.qp.queryPlan,
-		ExplainQueryPlan: p.qp.stmt.ExplainQueryPlan,
-	}, nil
+	return newQueryPlan(p.qp.queryPlan, p.qp.stmt.ExplainQueryPlan), nil
 }
 
 func (p *selectQueryPlanner) getScanColumns() ([]scanColumn, error) {

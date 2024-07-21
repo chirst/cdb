@@ -14,6 +14,13 @@ type QueryPlan struct {
 	ExplainQueryPlan bool
 }
 
+func newQueryPlan(root logicalNode, explainQueryPlan bool) *QueryPlan {
+	return &QueryPlan{
+		root:             root,
+		ExplainQueryPlan: explainQueryPlan,
+	}
+}
+
 func (p *QueryPlan) ToString() string {
 	qp := &QueryPlan{}
 	qp.walk(p.root, 0)
@@ -103,6 +110,10 @@ func (c *createNode) print() string {
 	return fmt.Sprintf("create table %s", c.tableName)
 }
 
+func (i *insertNode) print() string {
+	return "insert"
+}
+
 func (p *projectNode) children() []logicalNode {
 	return []logicalNode{p.child}
 }
@@ -120,5 +131,9 @@ func (j *joinNode) children() []logicalNode {
 }
 
 func (c *createNode) children() []logicalNode {
+	return []logicalNode{}
+}
+
+func (i *insertNode) children() []logicalNode {
 	return []logicalNode{}
 }

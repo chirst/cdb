@@ -59,3 +59,11 @@ type createNode struct {
 	// schema is the json serialized schema definition for the object.
 	schema string
 }
+
+type insertNode struct {
+	rootPage           int
+	catalogColumnNames []string
+	pkColumn           string
+	colNames           []string
+	colValues          []string
+}
