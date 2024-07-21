@@ -15,11 +15,14 @@ a subset of SQL described below.
 graph LR
 begin(( ))
 explain([EXPLAIN])
+queryPlan([QUERY PLAN])
 select([SELECT])
 all[*]
 from([FROM])
 
 begin --> explain
+explain --> queryPlan
+queryPlan --> select
 begin --> select
 explain --> select
 select --> all
@@ -33,6 +36,7 @@ Create supports the `PRIMARY KEY` column constraint for a single integer column.
 graph LR
 begin(( ))
 explain([EXPLAIN])
+queryPlan([QUERY PLAN])
 create([CREATE])
 table([TABLE])
 colTypeInt([INTEGER])
@@ -45,6 +49,8 @@ colIdent["Column Identifier"]
 pkConstraint["PRIMARY KEY"]
 
 begin --> explain
+explain --> queryPlan
+queryPlan --> create
 begin --> create
 explain --> create
 create --> table
@@ -69,6 +75,7 @@ colSep --> colIdent
 graph LR
 begin(( ))
 explain([EXPLAIN])
+queryPlan([QUERY PLAN])
 insert([INSERT])
 into([INTO])
 tableIdent["Table Identifier"]
@@ -83,6 +90,8 @@ literal["literal"]
 valSep[","]
 
 begin --> explain
+explain --> queryPlan
+queryPlan --> insert
 begin --> insert
 explain --> insert
 insert --> into

@@ -16,7 +16,7 @@ type executor interface {
 	Execute(*vm.ExecutionPlan) *vm.ExecuteResult
 }
 
-type iPlanner interface {
+type statementPlanner interface {
 	ExecutionPlan() (*vm.ExecutionPlan, error)
 	QueryPlan() (*planner.QueryPlan, error)
 }
@@ -79,7 +79,7 @@ func (db *DB) Execute(sql string) vm.ExecuteResult {
 	return executeResult
 }
 
-func (db *DB) getPlannerFor(statement compiler.Stmt) iPlanner {
+func (db *DB) getPlannerFor(statement compiler.Stmt) statementPlanner {
 	switch s := statement.(type) {
 	case *compiler.SelectStmt:
 		return planner.NewSelect(db.catalog, s)
