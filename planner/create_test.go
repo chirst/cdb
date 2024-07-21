@@ -70,7 +70,7 @@ func TestCreateWithNoIDColumn(t *testing.T) {
 		&vm.ParseSchemaCmd{},
 		&vm.HaltCmd{},
 	}
-	plan, err := NewCreate(mc).GetPlan(stmt)
+	plan, err := NewCreate(mc, stmt).ExecutionPlan()
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -129,7 +129,7 @@ func TestCreateWithAlternateNamedIDColumn(t *testing.T) {
 		&vm.ParseSchemaCmd{},
 		&vm.HaltCmd{},
 	}
-	plan, err := NewCreate(mc).GetPlan(stmt)
+	plan, err := NewCreate(mc, stmt).ExecutionPlan()
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -153,7 +153,7 @@ func TestCreatePrimaryKeyWithTextType(t *testing.T) {
 		},
 	}
 	mc := &mockCreateCatalog{}
-	_, err := NewCreate(mc).GetPlan(stmt)
+	_, err := NewCreate(mc, stmt).ExecutionPlan()
 	if !errors.Is(err, errInvalidPKColumnType) {
 		t.Fatalf("got error %s expected error %s", err, errInvalidPKColumnType)
 	}
@@ -171,7 +171,7 @@ func TestCreateWithExistingTable(t *testing.T) {
 		},
 	}
 	mc := &mockCreateCatalog{tableExistsRes: true}
-	_, err := NewCreate(mc).GetPlan(stmt)
+	_, err := NewCreate(mc, stmt).ExecutionPlan()
 	if !errors.Is(err, errTableExists) {
 		t.Fatalf("got error %s expected error %s", err, errTableExists)
 	}
@@ -195,7 +195,7 @@ func TestCreateWithMoreThanOnePrimaryKey(t *testing.T) {
 		},
 	}
 	mc := &mockCreateCatalog{}
-	_, err := NewCreate(mc).GetPlan(stmt)
+	_, err := NewCreate(mc, stmt).ExecutionPlan()
 	if !errors.Is(err, errMoreThanOnePK) {
 		t.Fatalf("got error %s expected error %s", err, errMoreThanOnePK)
 	}

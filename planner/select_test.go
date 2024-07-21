@@ -57,7 +57,7 @@ func TestGetPlan(t *testing.T) {
 	mockCatalog := &mockSelectCatalog{}
 	mockCatalog.primaryKeyColumnName = "id"
 	mockCatalog.columns = []string{"name", "id", "age"}
-	plan, err := NewSelect(mockCatalog).GetPlan(ast)
+	plan, err := NewSelect(mockCatalog, ast).ExecutionPlan()
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
@@ -91,7 +91,7 @@ func TestGetPlanPKMiddleOrdinal(t *testing.T) {
 	}
 	mockCatalog := &mockSelectCatalog{}
 	mockCatalog.primaryKeyColumnName = "id"
-	plan, err := NewSelect(mockCatalog).GetPlan(ast)
+	plan, err := NewSelect(mockCatalog, ast).ExecutionPlan()
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
@@ -121,7 +121,7 @@ func TestGetCountAggregate(t *testing.T) {
 		},
 	}
 	mockCatalog := &mockSelectCatalog{}
-	plan, err := NewSelect(mockCatalog).GetPlan(ast)
+	plan, err := NewSelect(mockCatalog, ast).ExecutionPlan()
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
@@ -154,7 +154,7 @@ func TestGetPlanNoPrimaryKey(t *testing.T) {
 		},
 	}
 	mockCatalog := &mockSelectCatalog{}
-	plan, err := NewSelect(mockCatalog).GetPlan(ast)
+	plan, err := NewSelect(mockCatalog, ast).ExecutionPlan()
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}

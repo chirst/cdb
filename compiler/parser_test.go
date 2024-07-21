@@ -6,6 +6,7 @@ import (
 )
 
 type selectTestCase struct {
+	name   string
 	tokens []token
 	expect Stmt
 }
@@ -13,6 +14,7 @@ type selectTestCase struct {
 func TestParseSelect(t *testing.T) {
 	cases := []selectTestCase{
 		{
+			name: "with explain",
 			tokens: []token{
 				{tkKeyword, "EXPLAIN"},
 				{tkWhitespace, " "},
@@ -37,6 +39,37 @@ func TestParseSelect(t *testing.T) {
 			},
 		},
 		{
+			name: "with explain query plan",
+			tokens: []token{
+				{tkKeyword, "EXPLAIN"},
+				{tkWhitespace, " "},
+				{tkKeyword, "QUERY"},
+				{tkWhitespace, " "},
+				{tkKeyword, "PLAN"},
+				{tkWhitespace, " "},
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkPunctuator, "*"},
+				{tkWhitespace, " "},
+				{tkKeyword, "FROM"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+			},
+			expect: &SelectStmt{
+				StmtBase: &StmtBase{
+					Explain:          false,
+					ExplainQueryPlan: true,
+				},
+				From: &From{
+					TableName: "foo",
+				},
+				ResultColumn: ResultColumn{
+					All: true,
+				},
+			},
+		},
+		{
+			name: "with count",
 			tokens: []token{
 				{tkKeyword, "SELECT"},
 				{tkWhitespace, " "},
@@ -64,13 +97,15 @@ func TestParseSelect(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		ret, err := NewParser(c.tokens).Parse()
-		if err != nil {
-			t.Errorf("want no err got err %s", err.Error())
-		}
-		if !reflect.DeepEqual(ret, c.expect) {
-			t.Errorf("got %#v want %#v", ret, c.expect)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			ret, err := NewParser(c.tokens).Parse()
+			if err != nil {
+				t.Errorf("want no err got err %s", err.Error())
+			}
+			if !reflect.DeepEqual(ret, c.expect) {
+				t.Errorf("got %#v want %#v", ret, c.expect)
+			}
+		})
 	}
 }
 

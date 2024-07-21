@@ -1,18 +1,8 @@
 package planner
 
-// TODO
-// This planner will eventually consist of smaller parts.
-// 1. Something like a binder may be necessary which would validate the values
-//    in the statement make sense given the current schema.
-// 2. A logical query planner which would transform the ast into a relational
-//    algebra like structure. This structure would allow for optimizations like
-//    predicate push down.
-// 3. Perhaps a physical planner which would maybe take into account statistics
-//    and indexes.
-// Somewhere in these structures would be the ability to print a query plan that
-// is higher level than the bytecode operations. A typical explain tree.
-
 import (
+	"errors"
+
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
 )
@@ -25,68 +15,207 @@ type selectCatalog interface {
 	GetPrimaryKeyColumn(tableName string) (string, error)
 }
 
+// selectPlanner is capable of generating a logical query plan and a physical
+// execution plan for a select statement. The planners within are separated by
+// their responsibility. Notice a statement or catalog is not shared with with
+// the execution planner. This is by design since the logical query planner also
+// performs binding.
 type selectPlanner struct {
+	qp *selectQueryPlanner
+	ep *selectExecutionPlanner
+}
+
+// selectQueryPlanner converts an AST to a logical query plan. Along the way it
+// also validates the AST makes sense with the catalog (a process known as
+// binding).
+type selectQueryPlanner struct {
+	// catalog contains the schema
 	catalog selectCatalog
+	// stmt contains the AST
+	stmt *compiler.SelectStmt
+	// queryPlan contains the logical plan. The root node must be a projection.
+	queryPlan *projectNode
 }
 
-func NewSelect(catalog selectCatalog) *selectPlanner {
+// selectExecutionPlanner converts logical nodes in a query plan tree to
+// bytecode that can be run by the vm.
+type selectExecutionPlanner struct {
+	// queryPlan contains the logical plan. This node is populated by calling
+	// the QueryPlan method.
+	queryPlan *projectNode
+	// executionPlan contains the execution plan for the vm. This is built by
+	// calling ExecutionPlan.
+	executionPlan *vm.ExecutionPlan
+}
+
+// NewSelect returns an instance of a select planner for the given AST.
+func NewSelect(catalog selectCatalog, stmt *compiler.SelectStmt) *selectPlanner {
 	return &selectPlanner{
-		catalog: catalog,
+		qp: &selectQueryPlanner{
+			catalog: catalog,
+			stmt:    stmt,
+		},
+		ep: &selectExecutionPlanner{
+			executionPlan: vm.NewExecutionPlan(
+				catalog.GetVersion(),
+				stmt.Explain,
+			),
+		},
 	}
 }
 
-func (p *selectPlanner) GetPlan(s *compiler.SelectStmt) (*vm.ExecutionPlan, error) {
-	executionPlan := vm.NewExecutionPlan(p.catalog.GetVersion())
-	executionPlan.Explain = s.Explain
-	resultHeader := []string{}
-	cols, err := p.catalog.GetColumns(s.From.TableName)
+// QueryPlan generates the query plan tree for the planner.
+func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
+	tableName := p.qp.stmt.From.TableName
+	rootPageNumber, err := p.qp.catalog.GetRootPageNumber(tableName)
 	if err != nil {
 		return nil, err
 	}
-	if s.ResultColumn.All {
-		resultHeader = append(resultHeader, cols...)
-	} else if s.ResultColumn.Count {
-		resultHeader = append(resultHeader, "")
-	}
-	rootPage, err := p.catalog.GetRootPageNumber(s.From.TableName)
-	if err != nil {
-		return nil, err
-	}
-	cursorId := 1
-	commands := []vm.Command{}
-	commands = append(commands, &vm.InitCmd{P2: 1})
-	commands = append(commands, &vm.TransactionCmd{P2: 0})
-	commands = append(commands, &vm.OpenReadCmd{P1: cursorId, P2: rootPage})
-	if s.ResultColumn.All {
-		rwc := &vm.RewindCmd{P1: cursorId}
-		commands = append(commands, rwc)
-		pkColName, err := p.catalog.GetPrimaryKeyColumn(s.From.TableName)
+	var child logicalNode
+	if p.qp.stmt.ResultColumn.All {
+		scanColumns, err := p.qp.getScanColumns()
 		if err != nil {
 			return nil, err
 		}
-		registerIdx := 1
-		gap := 0
-		colIdx := 0
-		for _, c := range cols {
-			if c == pkColName {
-				commands = append(commands, &vm.RowIdCmd{P1: cursorId, P2: registerIdx})
-			} else {
-				commands = append(commands, &vm.ColumnCmd{P1: cursorId, P2: colIdx, P3: registerIdx})
-				colIdx += 1
-			}
-			registerIdx += 1
-			gap += 1
+		child = &scanNode{
+			tableName:   tableName,
+			rootPage:    rootPageNumber,
+			scanColumns: scanColumns,
 		}
-		commands = append(commands, &vm.ResultRowCmd{P1: 1, P2: gap})
-		commands = append(commands, &vm.NextCmd{P1: cursorId, P2: 4})
-		commands = append(commands, &vm.HaltCmd{})
-		rwc.P2 = len(commands) - 1
 	} else {
-		commands = append(commands, &vm.CountCmd{P1: cursorId, P2: 1})
-		commands = append(commands, &vm.ResultRowCmd{P1: 1, P2: 1})
-		commands = append(commands, &vm.HaltCmd{})
+		child = &countNode{
+			tableName: tableName,
+			rootPage:  rootPageNumber,
+		}
 	}
-	executionPlan.Commands = commands
-	executionPlan.ResultHeader = resultHeader
-	return executionPlan, nil
+	projections, err := p.qp.getProjections()
+	if err != nil {
+		return nil, err
+	}
+	p.qp.queryPlan = &projectNode{
+		projections: projections,
+		child:       child,
+	}
+	p.ep.queryPlan = p.qp.queryPlan
+	return newQueryPlan(p.qp.queryPlan, p.qp.stmt.ExplainQueryPlan), nil
+}
+
+func (p *selectQueryPlanner) getScanColumns() ([]scanColumn, error) {
+	pkColName, err := p.catalog.GetPrimaryKeyColumn(p.stmt.From.TableName)
+	if err != nil {
+		return nil, err
+	}
+	cols, err := p.catalog.GetColumns(p.stmt.From.TableName)
+	if err != nil {
+		return nil, err
+	}
+	scanColumns := []scanColumn{}
+	idx := 0
+	for _, c := range cols {
+		if c == pkColName {
+			scanColumns = append(scanColumns, scanColumn{
+				isPrimaryKey: c == pkColName,
+			})
+		} else {
+			scanColumns = append(scanColumns, scanColumn{
+				colIdx: idx,
+			})
+			idx += 1
+		}
+	}
+	return scanColumns, nil
+}
+
+func (p *selectQueryPlanner) getProjections() ([]projection, error) {
+	if p.stmt.ResultColumn.All {
+		cols, err := p.catalog.GetColumns(p.stmt.From.TableName)
+		if err != nil {
+			return nil, err
+		}
+		projections := []projection{}
+		for _, c := range cols {
+			projections = append(projections, projection{
+				colName: c,
+			})
+		}
+		return projections, nil
+	} else if p.stmt.ResultColumn.Count {
+		return []projection{
+			{
+				isCount: true,
+			},
+		}, nil
+	}
+	return nil, errors.New("unhandled projection")
+}
+
+// ExecutionPlan returns the bytecode execution plan for the planner. Calling
+// QueryPlan is not a prerequisite to this method as it will be called by
+// ExecutionPlan if needed.
+func (sp *selectPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
+	if sp.qp.queryPlan == nil {
+		_, err := sp.QueryPlan()
+		if err != nil {
+			return nil, err
+		}
+	}
+	p := sp.ep
+	p.resultHeader()
+	p.buildInit()
+
+	switch c := p.queryPlan.child.(type) {
+	case *scanNode:
+		if err := p.buildScan(c); err != nil {
+			return nil, err
+		}
+	case *countNode:
+		p.buildOptimizedCountScan(c)
+	default:
+		panic("unhandled node")
+	}
+	p.executionPlan.Append(&vm.HaltCmd{})
+	return p.executionPlan, nil
+}
+
+func (p *selectExecutionPlanner) resultHeader() {
+	resultHeader := []string{}
+	for _, p := range p.queryPlan.projections {
+		resultHeader = append(resultHeader, p.colName)
+	}
+	p.executionPlan.ResultHeader = resultHeader
+}
+
+func (p *selectExecutionPlanner) buildInit() {
+	p.executionPlan.Append(&vm.InitCmd{P2: 1})
+	p.executionPlan.Append(&vm.TransactionCmd{P2: 0})
+}
+
+func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
+	const cursorId = 1
+	p.executionPlan.Append(&vm.OpenReadCmd{P1: cursorId, P2: n.rootPage})
+
+	rwc := &vm.RewindCmd{P1: cursorId}
+	p.executionPlan.Append(rwc)
+
+	for i, c := range n.scanColumns {
+		register := i + 1
+		if c.isPrimaryKey {
+			p.executionPlan.Append(&vm.RowIdCmd{P1: cursorId, P2: register})
+		} else {
+			p.executionPlan.Append(&vm.ColumnCmd{P1: cursorId, P2: c.colIdx, P3: register})
+		}
+	}
+	p.executionPlan.Append(&vm.ResultRowCmd{P1: 1, P2: len(n.scanColumns)})
+
+	p.executionPlan.Append(&vm.NextCmd{P1: cursorId, P2: 4})
+
+	rwc.P2 = len(p.executionPlan.Commands)
+	return nil
+}
+
+func (p *selectExecutionPlanner) buildOptimizedCountScan(n *countNode) {
+	const cursorId = 1
+	p.executionPlan.Append(&vm.OpenReadCmd{P1: cursorId, P2: n.rootPage})
+	p.executionPlan.Append(&vm.CountCmd{P1: cursorId, P2: 1})
+	p.executionPlan.Append(&vm.ResultRowCmd{P1: 1, P2: 1})
 }

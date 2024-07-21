@@ -74,10 +74,15 @@ type ExecutionPlan struct {
 	Version string
 }
 
-func NewExecutionPlan(version string) *ExecutionPlan {
+func NewExecutionPlan(version string, explain bool) *ExecutionPlan {
 	return &ExecutionPlan{
 		Version: version,
+		Explain: explain,
 	}
+}
+
+func (e *ExecutionPlan) Append(command Command) {
+	e.Commands = append(e.Commands, command)
 }
 
 // Execute performs the execution plan provided. If the execution plan is an

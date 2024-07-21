@@ -5,7 +5,6 @@ package db
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/kv"
@@ -15,6 +14,11 @@ import (
 
 type executor interface {
 	Execute(*vm.ExecutionPlan) *vm.ExecuteResult
+}
+
+type statementPlanner interface {
+	ExecutionPlan() (*vm.ExecutionPlan, error)
+	QueryPlan() (*planner.QueryPlan, error)
 }
 
 type dbCatalog interface {
@@ -49,9 +53,21 @@ func (db *DB) Execute(sql string) vm.ExecuteResult {
 	if err != nil {
 		return vm.ExecuteResult{Err: err}
 	}
+
+	planner := db.getPlannerFor(statement)
+	qp, err := planner.QueryPlan()
+	if err != nil {
+		return vm.ExecuteResult{Err: err}
+	}
+	if qp.ExplainQueryPlan {
+		return vm.ExecuteResult{
+			Text: qp.ToString(),
+		}
+	}
+
 	var executeResult vm.ExecuteResult
 	for {
-		executionPlan, err := db.getExecutionPlanFor(statement)
+		executionPlan, err := planner.ExecutionPlan()
 		if err != nil {
 			return vm.ExecuteResult{Err: err}
 		}
@@ -63,14 +79,14 @@ func (db *DB) Execute(sql string) vm.ExecuteResult {
 	return executeResult
 }
 
-func (db *DB) getExecutionPlanFor(statement compiler.Stmt) (*vm.ExecutionPlan, error) {
+func (db *DB) getPlannerFor(statement compiler.Stmt) statementPlanner {
 	switch s := statement.(type) {
 	case *compiler.SelectStmt:
-		return planner.NewSelect(db.catalog).GetPlan(s)
+		return planner.NewSelect(db.catalog, s)
 	case *compiler.CreateStmt:
-		return planner.NewCreate(db.catalog).GetPlan(s)
+		return planner.NewCreate(db.catalog, s)
 	case *compiler.InsertStmt:
-		return planner.NewInsert(db.catalog).GetPlan(s)
+		return planner.NewInsert(db.catalog, s)
 	}
-	return nil, fmt.Errorf("statement not supported")
+	panic("statement not supported")
 }

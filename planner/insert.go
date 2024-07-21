@@ -23,84 +23,121 @@ type insertCatalog interface {
 }
 
 type insertPlanner struct {
-	catalog insertCatalog
+	qp *insertQueryPlanner
+	ep *insertExecutionPlanner
 }
 
-func NewInsert(catalog insertCatalog) *insertPlanner {
+type insertQueryPlanner struct {
+	catalog   insertCatalog
+	stmt      *compiler.InsertStmt
+	queryPlan *insertNode
+}
+
+type insertExecutionPlanner struct {
+	queryPlan     *insertNode
+	executionPlan *vm.ExecutionPlan
+}
+
+func NewInsert(catalog insertCatalog, stmt *compiler.InsertStmt) *insertPlanner {
 	return &insertPlanner{
-		catalog: catalog,
+		qp: &insertQueryPlanner{
+			catalog: catalog,
+			stmt:    stmt,
+		},
+		ep: &insertExecutionPlanner{
+			executionPlan: vm.NewExecutionPlan(
+				catalog.GetVersion(),
+				stmt.Explain,
+			),
+		},
 	}
 }
 
-func (p *insertPlanner) GetPlan(s *compiler.InsertStmt) (*vm.ExecutionPlan, error) {
-	executionPlan := vm.NewExecutionPlan(p.catalog.GetVersion())
-	executionPlan.Explain = s.Explain
-	rootPageNumber, err := p.catalog.GetRootPageNumber(s.TableName)
+func (ip *insertPlanner) QueryPlan() (*QueryPlan, error) {
+	p := ip.qp
+	rootPage, err := p.catalog.GetRootPageNumber(p.stmt.TableName)
 	if err != nil {
 		return nil, errTableNotExist
 	}
-	catalogColumnNames, err := p.catalog.GetColumns(s.TableName)
+	catalogColumnNames, err := p.catalog.GetColumns(p.stmt.TableName)
 	if err != nil {
 		return nil, err
 	}
+	if err := checkValuesMatchColumns(p.stmt); err != nil {
+		return nil, err
+	}
+	pkColumn, err := p.catalog.GetPrimaryKeyColumn(p.stmt.TableName)
+	if err != nil {
+		return nil, err
+	}
+	insertNode := &insertNode{
+		rootPage:           rootPage,
+		catalogColumnNames: catalogColumnNames,
+		pkColumn:           pkColumn,
+		colNames:           p.stmt.ColNames,
+		colValues:          p.stmt.ColValues,
+	}
+	p.queryPlan = insertNode
+	ip.ep.queryPlan = insertNode
+	return newQueryPlan(insertNode, p.stmt.ExplainQueryPlan), nil
+}
+
+func (ip *insertPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
+	if ip.qp.queryPlan == nil {
+		_, err := ip.QueryPlan()
+		if err != nil {
+			return nil, err
+		}
+	}
+	ep := ip.ep
 	cursorId := 1
-	commands := []vm.Command{}
-	commands = append(commands, &vm.InitCmd{P2: 1})
-	commands = append(commands, &vm.TransactionCmd{P2: 1})
-	commands = append(commands, &vm.OpenWriteCmd{P1: cursorId, P2: rootPageNumber})
+	ep.executionPlan.Append(&vm.InitCmd{P2: 1})
+	ep.executionPlan.Append(&vm.TransactionCmd{P2: 1})
+	ep.executionPlan.Append(&vm.OpenWriteCmd{P1: cursorId, P2: ep.queryPlan.rootPage})
 
-	if err := checkValuesMatchColumns(s); err != nil {
-		return nil, err
-	}
-
-	pkColumn, err := p.catalog.GetPrimaryKeyColumn(s.TableName)
-	if err != nil {
-		return nil, err
-	}
-	for valueIdx := range len(s.ColValues) / len(s.ColNames) {
+	for valueIdx := range len(ep.queryPlan.colValues) / len(ep.queryPlan.colNames) {
 		keyRegister := 1
 		statementIDIdx := -1
-		if pkColumn != "" {
-			statementIDIdx = slices.IndexFunc(s.ColNames, func(s string) bool {
-				return s == pkColumn
+		if ep.queryPlan.pkColumn != "" {
+			statementIDIdx = slices.IndexFunc(ep.queryPlan.colNames, func(s string) bool {
+				return s == ep.queryPlan.pkColumn
 			})
 		}
 		if statementIDIdx == -1 {
-			commands = append(commands, &vm.NewRowIdCmd{P1: rootPageNumber, P2: keyRegister})
+			ep.executionPlan.Append(&vm.NewRowIdCmd{P1: ep.queryPlan.rootPage, P2: keyRegister})
 		} else {
-			rowId, err := strconv.Atoi(s.ColValues[statementIDIdx+valueIdx*len(s.ColNames)])
+			rowId, err := strconv.Atoi(ep.queryPlan.colValues[statementIDIdx+valueIdx*len(ep.queryPlan.colNames)])
 			if err != nil {
 				return nil, err
 			}
-			integerCmdIdx := len(commands) + 2
-			commands = append(commands, &vm.NotExistsCmd{P1: rootPageNumber, P2: integerCmdIdx, P3: rowId})
-			commands = append(commands, &vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"})
-			commands = append(commands, &vm.IntegerCmd{P1: rowId, P2: keyRegister})
+			integerCmdIdx := len(ep.executionPlan.Commands) + 2
+			ep.executionPlan.Append(&vm.NotExistsCmd{P1: ep.queryPlan.rootPage, P2: integerCmdIdx, P3: rowId})
+			ep.executionPlan.Append(&vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"})
+			ep.executionPlan.Append(&vm.IntegerCmd{P1: rowId, P2: keyRegister})
 		}
 		registerIdx := keyRegister
-		for _, catalogColumnName := range catalogColumnNames {
-			if catalogColumnName != "" && catalogColumnName == pkColumn {
+		for _, catalogColumnName := range ep.queryPlan.catalogColumnNames {
+			if catalogColumnName != "" && catalogColumnName == ep.queryPlan.pkColumn {
 				continue
 			}
 			registerIdx += 1
 			vIdx := -1
-			for i, statementColumnName := range s.ColNames {
+			for i, statementColumnName := range ep.queryPlan.colNames {
 				if statementColumnName == catalogColumnName {
-					vIdx = i + (valueIdx * len(s.ColNames))
+					vIdx = i + (valueIdx * len(ep.queryPlan.colNames))
 				}
 			}
 			if vIdx == -1 {
 				return nil, fmt.Errorf("%w %s", errMissingColumnName, catalogColumnName)
 			}
-			commands = append(commands, &vm.StringCmd{P1: registerIdx, P4: s.ColValues[vIdx]})
+			ep.executionPlan.Append(&vm.StringCmd{P1: registerIdx, P4: ep.queryPlan.colValues[vIdx]})
 		}
-		commands = append(commands, &vm.MakeRecordCmd{P1: 2, P2: registerIdx - 1, P3: registerIdx + 1})
-		commands = append(commands, &vm.InsertCmd{P1: rootPageNumber, P2: registerIdx + 1, P3: keyRegister})
+		ep.executionPlan.Append(&vm.MakeRecordCmd{P1: 2, P2: registerIdx - 1, P3: registerIdx + 1})
+		ep.executionPlan.Append(&vm.InsertCmd{P1: ep.queryPlan.rootPage, P2: registerIdx + 1, P3: keyRegister})
 	}
 
-	commands = append(commands, &vm.HaltCmd{})
-	executionPlan.Commands = commands
-	return executionPlan, nil
+	ep.executionPlan.Append(&vm.HaltCmd{})
+	return ep.executionPlan, nil
 }
 
 func checkValuesMatchColumns(s *compiler.InsertStmt) error {
