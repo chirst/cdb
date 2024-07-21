@@ -22,72 +22,75 @@ type createCatalog interface {
 }
 
 type createPlanner struct {
-	catalog createCatalog
-	stmt    *compiler.CreateStmt
+	qp *createQueryPlanner
+	ep *createExecutionPlanner
 }
 
-func NewCreate(catalog createCatalog, s *compiler.CreateStmt) *createPlanner {
+type createQueryPlanner struct {
+	catalog   createCatalog
+	stmt      *compiler.CreateStmt
+	queryPlan logicalNode
+}
+
+type createExecutionPlanner struct {
+	queryPlan     logicalNode
+	executionPlan *vm.ExecutionPlan
+}
+
+func NewCreate(catalog createCatalog, stmt *compiler.CreateStmt) *createPlanner {
 	return &createPlanner{
-		catalog: catalog,
-		stmt:    s,
+		qp: &createQueryPlanner{
+			catalog: catalog,
+			stmt:    stmt,
+		},
+		ep: &createExecutionPlanner{
+			executionPlan: vm.NewExecutionPlan(
+				catalog.GetVersion(),
+				stmt.Explain,
+			),
+		},
 	}
 }
 
-func (c *createPlanner) QueryPlan() (*QueryPlan, error) {
-	return &QueryPlan{}, nil
-}
-
-func (c *createPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
-	executionPlan := vm.NewExecutionPlan(c.catalog.GetVersion())
-	executionPlan.Explain = c.stmt.Explain
-	err := c.ensureTableDoesNotExist(c.stmt)
+func (p *createPlanner) QueryPlan() (*QueryPlan, error) {
+	tableName, err := p.qp.ensureTableDoesNotExist()
 	if err != nil {
 		return nil, err
 	}
-	jSchema, err := getSchemaString(c.stmt)
+	jSchema, err := p.qp.getSchemaString()
 	if err != nil {
 		return nil, err
 	}
-	// objectType could be an index, trigger, or in this case a table.
-	objectType := "table"
-	// objectName is the name of the index, trigger, or table.
-	objectName := c.stmt.TableName
-	// tableName is name of the table this object is associated with.
-	tableName := c.stmt.TableName
-	commands := []vm.Command{}
-	commands = append(commands, &vm.InitCmd{P2: 1})
-	commands = append(commands, &vm.TransactionCmd{P2: 1})
-	commands = append(commands, &vm.CreateBTreeCmd{P2: 1})
-	commands = append(commands, &vm.OpenWriteCmd{P1: 1, P2: 1})
-	commands = append(commands, &vm.NewRowIdCmd{P1: 1, P2: 2})
-	commands = append(commands, &vm.StringCmd{P1: 3, P4: objectType})
-	commands = append(commands, &vm.StringCmd{P1: 4, P4: objectName})
-	commands = append(commands, &vm.StringCmd{P1: 5, P4: tableName})
-	commands = append(commands, &vm.CopyCmd{P1: 1, P2: 6})
-	commands = append(commands, &vm.StringCmd{P1: 7, P4: string(jSchema)})
-	commands = append(commands, &vm.MakeRecordCmd{P1: 3, P2: 5, P3: 8})
-	commands = append(commands, &vm.InsertCmd{P1: 1, P2: 8, P3: 2})
-	commands = append(commands, &vm.ParseSchemaCmd{})
-	commands = append(commands, &vm.HaltCmd{})
-	executionPlan.Commands = commands
-	return executionPlan, nil
+	createNode := &createNode{
+		objectType: "table",
+		objectName: tableName,
+		tableName:  tableName,
+		schema:     jSchema,
+	}
+	qp := &QueryPlan{
+		root:             createNode,
+		ExplainQueryPlan: p.qp.stmt.ExplainQueryPlan,
+	}
+	p.ep.queryPlan = createNode
+	return qp, nil
 }
 
-func (c *createPlanner) ensureTableDoesNotExist(s *compiler.CreateStmt) error {
-	if c.catalog.TableExists(s.TableName) {
-		return errTableExists
+func (p *createQueryPlanner) ensureTableDoesNotExist() (string, error) {
+	tableName := p.stmt.TableName
+	if p.catalog.TableExists(tableName) {
+		return "", errTableExists
 	}
-	return nil
+	return tableName, nil
 }
 
-func getSchemaString(s *compiler.CreateStmt) (string, error) {
-	if err := ensurePrimaryKeyCount(s); err != nil {
+func (p *createQueryPlanner) getSchemaString() (string, error) {
+	if err := p.ensurePrimaryKeyCount(); err != nil {
 		return "", err
 	}
-	if err := ensurePrimaryKeyInteger(s); err != nil {
+	if err := p.ensurePrimaryKeyInteger(); err != nil {
 		return "", err
 	}
-	jSchema, err := schemaFrom(s).ToJSON()
+	jSchema, err := p.schemaFrom().ToJSON()
 	if err != nil {
 		return "", err
 	}
@@ -97,14 +100,14 @@ func getSchemaString(s *compiler.CreateStmt) (string, error) {
 // The id column must be an integer. The index key is capable of being something
 // other than an integer, but is not worth implementing at the moment. Integer
 // primary keys are superior for auto incrementing and being unique.
-func ensurePrimaryKeyInteger(s *compiler.CreateStmt) error {
-	hasPK := slices.ContainsFunc(s.ColDefs, func(cd compiler.ColDef) bool {
+func (p *createQueryPlanner) ensurePrimaryKeyInteger() error {
+	hasPK := slices.ContainsFunc(p.stmt.ColDefs, func(cd compiler.ColDef) bool {
 		return cd.PrimaryKey
 	})
 	if !hasPK {
 		return nil
 	}
-	hasIntegerPK := slices.ContainsFunc(s.ColDefs, func(cd compiler.ColDef) bool {
+	hasIntegerPK := slices.ContainsFunc(p.stmt.ColDefs, func(cd compiler.ColDef) bool {
 		return cd.PrimaryKey && cd.ColType == "INTEGER"
 	})
 	if !hasIntegerPK {
@@ -114,9 +117,9 @@ func ensurePrimaryKeyInteger(s *compiler.CreateStmt) error {
 }
 
 // Only one primary key is supported at this time.
-func ensurePrimaryKeyCount(s *compiler.CreateStmt) error {
+func (p *createQueryPlanner) ensurePrimaryKeyCount() error {
 	count := 0
-	for _, cd := range s.ColDefs {
+	for _, cd := range p.stmt.ColDefs {
 		if cd.PrimaryKey {
 			count += 1
 		}
@@ -127,11 +130,11 @@ func ensurePrimaryKeyCount(s *compiler.CreateStmt) error {
 	return nil
 }
 
-func schemaFrom(s *compiler.CreateStmt) *kv.TableSchema {
+func (p *createQueryPlanner) schemaFrom() *kv.TableSchema {
 	schema := kv.TableSchema{
 		Columns: []kv.TableColumn{},
 	}
-	for _, cd := range s.ColDefs {
+	for _, cd := range p.stmt.ColDefs {
 		schema.Columns = append(schema.Columns, kv.TableColumn{
 			Name:       cd.ColName,
 			ColType:    cd.ColType,
@@ -139,4 +142,33 @@ func schemaFrom(s *compiler.CreateStmt) *kv.TableSchema {
 		})
 	}
 	return &schema
+}
+
+func (cp *createPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
+	if cp.qp.queryPlan == nil {
+		_, err := cp.QueryPlan()
+		if err != nil {
+			return nil, err
+		}
+	}
+	p := cp.ep
+	createNode, ok := p.queryPlan.(*createNode)
+	if !ok {
+		panic("expected create node")
+	}
+	p.executionPlan.Append(&vm.InitCmd{P2: 1})
+	p.executionPlan.Append(&vm.TransactionCmd{P2: 1})
+	p.executionPlan.Append(&vm.CreateBTreeCmd{P2: 1})
+	p.executionPlan.Append(&vm.OpenWriteCmd{P1: 1, P2: 1})
+	p.executionPlan.Append(&vm.NewRowIdCmd{P1: 1, P2: 2})
+	p.executionPlan.Append(&vm.StringCmd{P1: 3, P4: createNode.objectType})
+	p.executionPlan.Append(&vm.StringCmd{P1: 4, P4: createNode.objectName})
+	p.executionPlan.Append(&vm.StringCmd{P1: 5, P4: createNode.tableName})
+	p.executionPlan.Append(&vm.CopyCmd{P1: 1, P2: 6})
+	p.executionPlan.Append(&vm.StringCmd{P1: 7, P4: string(createNode.schema)})
+	p.executionPlan.Append(&vm.MakeRecordCmd{P1: 3, P2: 5, P3: 8})
+	p.executionPlan.Append(&vm.InsertCmd{P1: 1, P2: 8, P3: 2})
+	p.executionPlan.Append(&vm.ParseSchemaCmd{})
+	p.executionPlan.Append(&vm.HaltCmd{})
+	return p.executionPlan, nil
 }

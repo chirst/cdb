@@ -39,8 +39,7 @@ func (p *insertPlanner) QueryPlan() (*QueryPlan, error) {
 }
 
 func (p *insertPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
-	executionPlan := vm.NewExecutionPlan(p.catalog.GetVersion())
-	executionPlan.Explain = p.stmt.Explain
+	executionPlan := vm.NewExecutionPlan(p.catalog.GetVersion(), p.stmt.Explain)
 	rootPageNumber, err := p.catalog.GetRootPageNumber(p.stmt.TableName)
 	if err != nil {
 		return nil, errTableNotExist

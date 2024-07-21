@@ -99,6 +99,10 @@ func (j *joinNode) print() string {
 	return fmt.Sprint(j.operation)
 }
 
+func (c *createNode) print() string {
+	return fmt.Sprintf("create table %s", c.tableName)
+}
+
 func (p *projectNode) children() []logicalNode {
 	return []logicalNode{p.child}
 }
@@ -113,4 +117,8 @@ func (c *countNode) children() []logicalNode {
 
 func (j *joinNode) children() []logicalNode {
 	return []logicalNode{j.left, j.right}
+}
+
+func (c *createNode) children() []logicalNode {
+	return []logicalNode{}
 }

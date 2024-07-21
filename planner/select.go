@@ -46,11 +46,6 @@ type selectExecutionPlanner struct {
 	// executionPlan contains the execution plan for the vm. This is built by
 	// calling ExecutionPlan.
 	executionPlan *vm.ExecutionPlan
-	// catalogVersion contains the version of catalog this query plan was
-	// generated with. The catalog version is used for concurrency control.
-	catalogVersion string
-	// explain is whether the statement is prefixed with EXPLAIN.
-	explain bool
 }
 
 // NewSelect returns an instance of a select planner for the given AST.
@@ -61,8 +56,10 @@ func NewSelect(catalog selectCatalog, stmt *compiler.SelectStmt) *selectPlanner 
 			stmt:    stmt,
 		},
 		ep: &selectExecutionPlanner{
-			catalogVersion: catalog.GetVersion(),
-			explain:        stmt.Explain,
+			executionPlan: vm.NewExecutionPlan(
+				catalog.GetVersion(),
+				stmt.Explain,
+			),
 		},
 	}
 }
@@ -166,7 +163,6 @@ func (sp *selectPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
 		}
 	}
 	p := sp.ep
-	p.newExecutionPlan()
 	p.resultHeader()
 	p.buildInit()
 
@@ -182,11 +178,6 @@ func (sp *selectPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
 	}
 	p.executionPlan.Append(&vm.HaltCmd{})
 	return p.executionPlan, nil
-}
-
-func (p *selectExecutionPlanner) newExecutionPlan() {
-	p.executionPlan = vm.NewExecutionPlan(p.catalogVersion)
-	p.executionPlan.Explain = p.explain
 }
 
 func (p *selectExecutionPlanner) resultHeader() {

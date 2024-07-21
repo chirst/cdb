@@ -14,7 +14,7 @@ func TestExec(t *testing.T) {
 		log.Fatal(err.Error())
 	}
 	vm := New(kv)
-	ep := NewExecutionPlan(kv.GetCatalog().GetVersion())
+	ep := NewExecutionPlan(kv.GetCatalog().GetVersion(), false)
 	ep.Commands = []Command{
 		&InitCmd{P2: 1},
 		&TransactionCmd{},
@@ -40,7 +40,7 @@ func TestExecReturnsVersionErr(t *testing.T) {
 	vm := New(kv)
 
 	t.Run("for read", func(t *testing.T) {
-		ep := NewExecutionPlan("FakeVersion")
+		ep := NewExecutionPlan("FakeVersion", false)
 		ep.Commands = []Command{
 			&InitCmd{P2: 1},
 			&TransactionCmd{P2: 0},
@@ -54,7 +54,7 @@ func TestExecReturnsVersionErr(t *testing.T) {
 	})
 
 	t.Run("for write", func(t *testing.T) {
-		ep := NewExecutionPlan("FakeVersion")
+		ep := NewExecutionPlan("FakeVersion", false)
 		ep.Commands = []Command{
 			&InitCmd{P2: 1},
 			&TransactionCmd{P2: 1},

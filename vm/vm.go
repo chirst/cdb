@@ -74,9 +74,10 @@ type ExecutionPlan struct {
 	Version string
 }
 
-func NewExecutionPlan(version string) *ExecutionPlan {
+func NewExecutionPlan(version string, explain bool) *ExecutionPlan {
 	return &ExecutionPlan{
 		Version: version,
+		Explain: explain,
 	}
 }
 

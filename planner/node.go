@@ -48,3 +48,14 @@ type joinNode struct {
 	right     logicalNode
 	operation string
 }
+
+type createNode struct {
+	// objectName is the name of the index, trigger, or table.
+	objectName string
+	// objectType could be an index, trigger, or in this case a table.
+	objectType string
+	// tableName is name of the table this object is associated with.
+	tableName string
+	// schema is the json serialized schema definition for the object.
+	schema string
+}
