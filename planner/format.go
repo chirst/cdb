@@ -79,10 +79,10 @@ func (p *projectNode) print() string {
 }
 
 func (p *projection) print() string {
-	if p.isAll {
-		return "*"
+	if p.isCount {
+		return "count(*)"
 	}
-	return "count(*)"
+	return p.colName
 }
 
 func (s *scanNode) print() string {

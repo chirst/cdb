@@ -1,6 +1,8 @@
 package planner
 
 import (
+	"errors"
+
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
 )
@@ -45,9 +47,14 @@ func (p *selectPlanner) getQueryPlan() error {
 	}
 	var child logicalNode
 	if p.stmt.ResultColumn.All {
+		scanColumns, err := p.getScanColumns()
+		if err != nil {
+			return err
+		}
 		child = &scanNode{
-			tableName: tableName,
-			rootPage:  rootPageNumber,
+			tableName:   tableName,
+			rootPage:    rootPageNumber,
+			scanColumns: scanColumns,
 		}
 	} else {
 		child = &countNode{
@@ -55,16 +62,64 @@ func (p *selectPlanner) getQueryPlan() error {
 			rootPage:  rootPageNumber,
 		}
 	}
+	projections, err := p.getProjections()
+	if err != nil {
+		return err
+	}
 	p.queryPlan = &projectNode{
-		projections: []projection{
-			{
-				isAll:   p.stmt.ResultColumn.All,
-				isCount: p.stmt.ResultColumn.Count,
-			},
-		},
-		child: child,
+		projections: projections,
+		child:       child,
 	}
 	return nil
+}
+
+func (p *selectPlanner) getScanColumns() ([]scanColumn, error) {
+	pkColName, err := p.catalog.GetPrimaryKeyColumn(p.stmt.From.TableName)
+	if err != nil {
+		return nil, err
+	}
+	cols, err := p.catalog.GetColumns(p.stmt.From.TableName)
+	if err != nil {
+		return nil, err
+	}
+	scanColumns := []scanColumn{}
+	idx := 0
+	for _, c := range cols {
+		if c == pkColName {
+			scanColumns = append(scanColumns, scanColumn{
+				isPrimaryKey: c == pkColName,
+			})
+		} else {
+			scanColumns = append(scanColumns, scanColumn{
+				colIdx: idx,
+			})
+			idx += 1
+		}
+	}
+	return scanColumns, nil
+}
+
+func (p *selectPlanner) getProjections() ([]projection, error) {
+	if p.stmt.ResultColumn.All {
+		cols, err := p.catalog.GetColumns(p.stmt.From.TableName)
+		if err != nil {
+			return nil, err
+		}
+		projections := []projection{}
+		for _, c := range cols {
+			projections = append(projections, projection{
+				colName: c,
+			})
+		}
+		return projections, nil
+	} else if p.stmt.ResultColumn.Count {
+		return []projection{
+			{
+				isCount: true,
+			},
+		}, nil
+	}
+	return nil, errors.New("unhandled projection")
 }
 
 // GetPlan returns the bytecode execution plan for the planner.
@@ -73,14 +128,9 @@ func (p *selectPlanner) GetPlan() (*vm.ExecutionPlan, error) {
 		return nil, err
 	}
 	p.newExecutionPlan()
-	if err := p.resultHeader(); err != nil {
-		return nil, err
-	}
+	p.resultHeader()
 	p.buildInit()
 
-	// TODO should handle more than one projection. Possibly needs to work with
-	// result header.
-	// projection := p.queryPlan.projections[0]
 	switch c := p.queryPlan.child.(type) {
 	case *scanNode:
 		if err := p.buildScan(c); err != nil {
@@ -103,19 +153,12 @@ func (p *selectPlanner) newExecutionPlan() {
 	}
 }
 
-func (p *selectPlanner) resultHeader() error {
+func (p *selectPlanner) resultHeader() {
 	resultHeader := []string{}
-	cols, err := p.catalog.GetColumns(p.stmt.From.TableName)
-	if err != nil {
-		return err
-	}
-	if p.stmt.ResultColumn.All {
-		resultHeader = append(resultHeader, cols...)
-	} else if p.stmt.ResultColumn.Count {
-		resultHeader = append(resultHeader, "")
+	for _, p := range p.queryPlan.projections {
+		resultHeader = append(resultHeader, p.colName)
 	}
 	p.executionPlan.ResultHeader = resultHeader
-	return nil
 }
 
 func (p *selectPlanner) buildInit() {
@@ -124,42 +167,24 @@ func (p *selectPlanner) buildInit() {
 }
 
 func (p *selectPlanner) buildScan(n *scanNode) error {
-	// Open read cursor
 	const cursorId = 1
 	p.executionPlan.Append(&vm.OpenReadCmd{P1: cursorId, P2: n.rootPage})
 
-	// Rewind to begin loop for scan
 	rwc := &vm.RewindCmd{P1: cursorId}
 	p.executionPlan.Append(rwc)
 
-	// Projections within loop
-	pkColName, err := p.catalog.GetPrimaryKeyColumn(p.stmt.From.TableName)
-	if err != nil {
-		return err
-	}
-	cols, err := p.catalog.GetColumns(p.stmt.From.TableName)
-	if err != nil {
-		return err
-	}
-	registerIdx := 1
-	gap := 0
-	colIdx := 0
-	for _, c := range cols {
-		if c == pkColName {
-			p.executionPlan.Append(&vm.RowIdCmd{P1: cursorId, P2: registerIdx})
+	for i, c := range n.scanColumns {
+		register := i + 1
+		if c.isPrimaryKey {
+			p.executionPlan.Append(&vm.RowIdCmd{P1: cursorId, P2: register})
 		} else {
-			p.executionPlan.Append(&vm.ColumnCmd{P1: cursorId, P2: colIdx, P3: registerIdx})
-			colIdx += 1
+			p.executionPlan.Append(&vm.ColumnCmd{P1: cursorId, P2: c.colIdx, P3: register})
 		}
-		registerIdx += 1
-		gap += 1
 	}
-	p.executionPlan.Append(&vm.ResultRowCmd{P1: 1, P2: gap})
+	p.executionPlan.Append(&vm.ResultRowCmd{P1: 1, P2: len(n.scanColumns)})
 
-	// Loop or break
 	p.executionPlan.Append(&vm.NextCmd{P1: cursorId, P2: 4})
 
-	// Set rewind to jump to the address after NextCmd if the table is empty.
 	rwc.P2 = len(p.executionPlan.Commands)
 	return nil
 }

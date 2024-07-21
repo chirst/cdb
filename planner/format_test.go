@@ -5,10 +5,9 @@ import "testing"
 func TestExplainQueryPlan(t *testing.T) {
 	root := &projectNode{
 		projections: []projection{
-			{
-				isAll:   true,
-				isCount: false,
-			},
+			{colName: "id"},
+			{colName: "first_name"},
+			{colName: "last_name"},
 		},
 		child: &joinNode{
 			operation: "join",
@@ -34,7 +33,7 @@ func TestExplainQueryPlan(t *testing.T) {
 	}
 	formattedResult := formatLogicalPlan(root)
 	expectedResult := "" +
-		"     └─ project(*)\n" +
+		"     └─ project(id, first_name, last_name)\n" +
 		"         └─ join\n" +
 		"             ├─ join\n" +
 		"             |   ├─ scan table foo\n" +
