@@ -24,22 +24,28 @@ type insertCatalog interface {
 
 type insertPlanner struct {
 	catalog insertCatalog
+	stmt    *compiler.InsertStmt
 }
 
-func NewInsert(catalog insertCatalog) *insertPlanner {
+func NewInsert(catalog insertCatalog, stmt *compiler.InsertStmt) *insertPlanner {
 	return &insertPlanner{
 		catalog: catalog,
+		stmt:    stmt,
 	}
 }
 
-func (p *insertPlanner) GetPlan(s *compiler.InsertStmt) (*vm.ExecutionPlan, error) {
+func (p *insertPlanner) QueryPlan() (*QueryPlan, error) {
+	return &QueryPlan{}, nil
+}
+
+func (p *insertPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
 	executionPlan := vm.NewExecutionPlan(p.catalog.GetVersion())
-	executionPlan.Explain = s.Explain
-	rootPageNumber, err := p.catalog.GetRootPageNumber(s.TableName)
+	executionPlan.Explain = p.stmt.Explain
+	rootPageNumber, err := p.catalog.GetRootPageNumber(p.stmt.TableName)
 	if err != nil {
 		return nil, errTableNotExist
 	}
-	catalogColumnNames, err := p.catalog.GetColumns(s.TableName)
+	catalogColumnNames, err := p.catalog.GetColumns(p.stmt.TableName)
 	if err != nil {
 		return nil, err
 	}
@@ -49,26 +55,26 @@ func (p *insertPlanner) GetPlan(s *compiler.InsertStmt) (*vm.ExecutionPlan, erro
 	commands = append(commands, &vm.TransactionCmd{P2: 1})
 	commands = append(commands, &vm.OpenWriteCmd{P1: cursorId, P2: rootPageNumber})
 
-	if err := checkValuesMatchColumns(s); err != nil {
+	if err := checkValuesMatchColumns(p.stmt); err != nil {
 		return nil, err
 	}
 
-	pkColumn, err := p.catalog.GetPrimaryKeyColumn(s.TableName)
+	pkColumn, err := p.catalog.GetPrimaryKeyColumn(p.stmt.TableName)
 	if err != nil {
 		return nil, err
 	}
-	for valueIdx := range len(s.ColValues) / len(s.ColNames) {
+	for valueIdx := range len(p.stmt.ColValues) / len(p.stmt.ColNames) {
 		keyRegister := 1
 		statementIDIdx := -1
 		if pkColumn != "" {
-			statementIDIdx = slices.IndexFunc(s.ColNames, func(s string) bool {
+			statementIDIdx = slices.IndexFunc(p.stmt.ColNames, func(s string) bool {
 				return s == pkColumn
 			})
 		}
 		if statementIDIdx == -1 {
 			commands = append(commands, &vm.NewRowIdCmd{P1: rootPageNumber, P2: keyRegister})
 		} else {
-			rowId, err := strconv.Atoi(s.ColValues[statementIDIdx+valueIdx*len(s.ColNames)])
+			rowId, err := strconv.Atoi(p.stmt.ColValues[statementIDIdx+valueIdx*len(p.stmt.ColNames)])
 			if err != nil {
 				return nil, err
 			}
@@ -84,15 +90,15 @@ func (p *insertPlanner) GetPlan(s *compiler.InsertStmt) (*vm.ExecutionPlan, erro
 			}
 			registerIdx += 1
 			vIdx := -1
-			for i, statementColumnName := range s.ColNames {
+			for i, statementColumnName := range p.stmt.ColNames {
 				if statementColumnName == catalogColumnName {
-					vIdx = i + (valueIdx * len(s.ColNames))
+					vIdx = i + (valueIdx * len(p.stmt.ColNames))
 				}
 			}
 			if vIdx == -1 {
 				return nil, fmt.Errorf("%w %s", errMissingColumnName, catalogColumnName)
 			}
-			commands = append(commands, &vm.StringCmd{P1: registerIdx, P4: s.ColValues[vIdx]})
+			commands = append(commands, &vm.StringCmd{P1: registerIdx, P4: p.stmt.ColValues[vIdx]})
 		}
 		commands = append(commands, &vm.MakeRecordCmd{P1: 2, P2: registerIdx - 1, P3: registerIdx + 1})
 		commands = append(commands, &vm.InsertCmd{P1: rootPageNumber, P2: registerIdx + 1, P3: keyRegister})

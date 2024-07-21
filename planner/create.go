@@ -23,31 +23,37 @@ type createCatalog interface {
 
 type createPlanner struct {
 	catalog createCatalog
+	stmt    *compiler.CreateStmt
 }
 
-func NewCreate(catalog createCatalog) *createPlanner {
+func NewCreate(catalog createCatalog, s *compiler.CreateStmt) *createPlanner {
 	return &createPlanner{
 		catalog: catalog,
+		stmt:    s,
 	}
 }
 
-func (c *createPlanner) GetPlan(s *compiler.CreateStmt) (*vm.ExecutionPlan, error) {
+func (c *createPlanner) QueryPlan() (*QueryPlan, error) {
+	return &QueryPlan{}, nil
+}
+
+func (c *createPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
 	executionPlan := vm.NewExecutionPlan(c.catalog.GetVersion())
-	executionPlan.Explain = s.Explain
-	err := c.ensureTableDoesNotExist(s)
+	executionPlan.Explain = c.stmt.Explain
+	err := c.ensureTableDoesNotExist(c.stmt)
 	if err != nil {
 		return nil, err
 	}
-	jSchema, err := getSchemaString(s)
+	jSchema, err := getSchemaString(c.stmt)
 	if err != nil {
 		return nil, err
 	}
 	// objectType could be an index, trigger, or in this case a table.
 	objectType := "table"
 	// objectName is the name of the index, trigger, or table.
-	objectName := s.TableName
+	objectName := c.stmt.TableName
 	// tableName is name of the table this object is associated with.
-	tableName := s.TableName
+	tableName := c.stmt.TableName
 	commands := []vm.Command{}
 	commands = append(commands, &vm.InitCmd{P2: 1})
 	commands = append(commands, &vm.TransactionCmd{P2: 1})

@@ -15,41 +15,70 @@ type selectCatalog interface {
 	GetPrimaryKeyColumn(tableName string) (string, error)
 }
 
+// selectPlanner is capable of generating a logical query plan and a physical
+// execution plan for a select statement. The planners within are separated by
+// their responsibility. Notice a statement or catalog is not shared with with
+// the execution planner. This is by design since the logical query planner also
+// performs binding.
 type selectPlanner struct {
+	qp *selectQueryPlanner
+	ep *selectExecutionPlanner
+}
+
+// selectQueryPlanner converts an AST to a logical query plan. Along the way it
+// also validates the AST makes sense with the catalog (a process known as
+// binding).
+type selectQueryPlanner struct {
 	// catalog contains the schema
 	catalog selectCatalog
 	// stmt contains the AST
 	stmt *compiler.SelectStmt
 	// queryPlan contains the logical plan. The root node must be a projection.
 	queryPlan *projectNode
-	// executionPlan contains the execution plan for the vm
+}
+
+// selectExecutionPlanner converts logical nodes in a query plan tree to
+// bytecode that can be run by the vm.
+type selectExecutionPlanner struct {
+	// queryPlan contains the logical plan. This node is populated by calling
+	// the QueryPlan method.
+	queryPlan *projectNode
+	// executionPlan contains the execution plan for the vm. This is built by
+	// calling ExecutionPlan.
 	executionPlan *vm.ExecutionPlan
 	// catalogVersion contains the version of catalog this query plan was
 	// generated with. The catalog version is used for concurrency control.
 	catalogVersion string
+	// explain is whether the statement is prefixed with EXPLAIN.
+	explain bool
 }
 
 // NewSelect returns an instance of a select planner for the given AST.
 func NewSelect(catalog selectCatalog, stmt *compiler.SelectStmt) *selectPlanner {
 	return &selectPlanner{
-		catalog:        catalog,
-		stmt:           stmt,
-		catalogVersion: catalog.GetVersion(),
+		qp: &selectQueryPlanner{
+			catalog: catalog,
+			stmt:    stmt,
+		},
+		ep: &selectExecutionPlanner{
+			catalogVersion: catalog.GetVersion(),
+			explain:        stmt.Explain,
+		},
 	}
 }
 
-// getQueryPlan generates the query plan tree for the planner.
-func (p *selectPlanner) getQueryPlan() error {
-	tableName := p.stmt.From.TableName
-	rootPageNumber, err := p.catalog.GetRootPageNumber(tableName)
+// QueryPlan generates the query plan tree for the planner.
+func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
+	tableName := p.qp.stmt.From.TableName
+	rootPageNumber, err := p.qp.catalog.GetRootPageNumber(tableName)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var child logicalNode
-	if p.stmt.ResultColumn.All {
-		scanColumns, err := p.getScanColumns()
+	if p.qp.stmt.ResultColumn.All {
+		scanColumns, err := p.qp.getScanColumns()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		child = &scanNode{
 			tableName:   tableName,
@@ -62,18 +91,22 @@ func (p *selectPlanner) getQueryPlan() error {
 			rootPage:  rootPageNumber,
 		}
 	}
-	projections, err := p.getProjections()
+	projections, err := p.qp.getProjections()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	p.queryPlan = &projectNode{
+	p.qp.queryPlan = &projectNode{
 		projections: projections,
 		child:       child,
 	}
-	return nil
+	p.ep.queryPlan = p.qp.queryPlan
+	return &QueryPlan{
+		root:             p.qp.queryPlan,
+		ExplainQueryPlan: p.qp.stmt.ExplainQueryPlan,
+	}, nil
 }
 
-func (p *selectPlanner) getScanColumns() ([]scanColumn, error) {
+func (p *selectQueryPlanner) getScanColumns() ([]scanColumn, error) {
 	pkColName, err := p.catalog.GetPrimaryKeyColumn(p.stmt.From.TableName)
 	if err != nil {
 		return nil, err
@@ -99,7 +132,7 @@ func (p *selectPlanner) getScanColumns() ([]scanColumn, error) {
 	return scanColumns, nil
 }
 
-func (p *selectPlanner) getProjections() ([]projection, error) {
+func (p *selectQueryPlanner) getProjections() ([]projection, error) {
 	if p.stmt.ResultColumn.All {
 		cols, err := p.catalog.GetColumns(p.stmt.From.TableName)
 		if err != nil {
@@ -122,11 +155,17 @@ func (p *selectPlanner) getProjections() ([]projection, error) {
 	return nil, errors.New("unhandled projection")
 }
 
-// GetPlan returns the bytecode execution plan for the planner.
-func (p *selectPlanner) GetPlan() (*vm.ExecutionPlan, error) {
-	if err := p.getQueryPlan(); err != nil {
-		return nil, err
+// ExecutionPlan returns the bytecode execution plan for the planner. Calling
+// QueryPlan is not a prerequisite to this method as it will be called by
+// ExecutionPlan if needed.
+func (sp *selectPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
+	if sp.qp.queryPlan == nil {
+		_, err := sp.QueryPlan()
+		if err != nil {
+			return nil, err
+		}
 	}
+	p := sp.ep
 	p.newExecutionPlan()
 	p.resultHeader()
 	p.buildInit()
@@ -145,15 +184,12 @@ func (p *selectPlanner) GetPlan() (*vm.ExecutionPlan, error) {
 	return p.executionPlan, nil
 }
 
-func (p *selectPlanner) newExecutionPlan() {
+func (p *selectExecutionPlanner) newExecutionPlan() {
 	p.executionPlan = vm.NewExecutionPlan(p.catalogVersion)
-	p.executionPlan.Explain = p.stmt.Explain
-	if p.stmt.ExplainQueryPlan {
-		p.executionPlan.FormattedTree = formatLogicalPlan(p.queryPlan)
-	}
+	p.executionPlan.Explain = p.explain
 }
 
-func (p *selectPlanner) resultHeader() {
+func (p *selectExecutionPlanner) resultHeader() {
 	resultHeader := []string{}
 	for _, p := range p.queryPlan.projections {
 		resultHeader = append(resultHeader, p.colName)
@@ -161,12 +197,12 @@ func (p *selectPlanner) resultHeader() {
 	p.executionPlan.ResultHeader = resultHeader
 }
 
-func (p *selectPlanner) buildInit() {
+func (p *selectExecutionPlanner) buildInit() {
 	p.executionPlan.Append(&vm.InitCmd{P2: 1})
 	p.executionPlan.Append(&vm.TransactionCmd{P2: 0})
 }
 
-func (p *selectPlanner) buildScan(n *scanNode) error {
+func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
 	const cursorId = 1
 	p.executionPlan.Append(&vm.OpenReadCmd{P1: cursorId, P2: n.rootPage})
 
@@ -189,7 +225,7 @@ func (p *selectPlanner) buildScan(n *scanNode) error {
 	return nil
 }
 
-func (p *selectPlanner) buildOptimizedCountScan(n *countNode) {
+func (p *selectExecutionPlanner) buildOptimizedCountScan(n *countNode) {
 	const cursorId = 1
 	p.executionPlan.Append(&vm.OpenReadCmd{P1: cursorId, P2: n.rootPage})
 	p.executionPlan.Append(&vm.CountCmd{P1: cursorId, P2: 1})

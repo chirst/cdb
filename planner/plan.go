@@ -6,26 +6,28 @@ import (
 	"unicode/utf8"
 )
 
-type planPrinter struct {
-	plan string
+// QueryPlan contains the query plan tree. It is capable of converting  the tree
+// to a string representation for a query prefixed with `EXPLAIN QUERY PLAN`.
+type QueryPlan struct {
+	plan             string
+	root             logicalNode
+	ExplainQueryPlan bool
 }
 
-// formatLogicalPlan returns a string representation of a query plan. Displayed
-// for statements prefixed with `EXPLAIN QUERY PLAN`.
-func formatLogicalPlan(root logicalNode) string {
-	printer := &planPrinter{}
-	printer.walkLogicalTree(root, 0)
-	return printer.connectSiblings()
+func (p *QueryPlan) ToString() string {
+	qp := &QueryPlan{}
+	qp.walk(p.root, 0)
+	return qp.connectSiblings()
 }
 
-func (p *planPrinter) walkLogicalTree(root logicalNode, depth int) {
+func (p *QueryPlan) walk(root logicalNode, depth int) {
 	p.visit(root, depth+1)
 	for _, c := range root.children() {
-		p.walkLogicalTree(c, depth+1)
+		p.walk(c, depth+1)
 	}
 }
 
-func (p *planPrinter) visit(ln logicalNode, depth int) {
+func (p *QueryPlan) visit(ln logicalNode, depth int) {
 	padding := ""
 	for i := 0; i < depth; i += 1 {
 		padding += "    "
@@ -38,7 +40,7 @@ func (p *planPrinter) visit(ln logicalNode, depth int) {
 	p.plan += fmt.Sprintf("%s%s\n", padding, ln.print())
 }
 
-func (p *planPrinter) connectSiblings() string {
+func (p *QueryPlan) connectSiblings() string {
 	planMatrix := strings.Split(p.plan, "\n")
 	for rowIdx := len(planMatrix) - 1; 0 < rowIdx; rowIdx -= 1 {
 		row := planMatrix[rowIdx]

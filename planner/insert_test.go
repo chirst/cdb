@@ -77,7 +77,7 @@ func TestInsertWithoutPrimaryKey(t *testing.T) {
 	}
 	mockCatalog := &mockInsertCatalog{}
 	mockCatalog.columnsReturn = []string{"first", "last"}
-	plan, err := NewInsert(mockCatalog).GetPlan(ast)
+	plan, err := NewInsert(mockCatalog, ast).ExecutionPlan()
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
@@ -117,7 +117,7 @@ func TestInsertWithPrimaryKey(t *testing.T) {
 		columnsReturn: []string{"id", "first"},
 		pkColumnName:  "id",
 	}
-	plan, err := NewInsert(mockCatalog).GetPlan(ast)
+	plan, err := NewInsert(mockCatalog, ast).ExecutionPlan()
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
@@ -157,7 +157,7 @@ func TestInsertWithPrimaryKeyMiddleOrder(t *testing.T) {
 		columnsReturn: []string{"id", "first"},
 		pkColumnName:  "id",
 	}
-	plan, err := NewInsert(mockCatalog).GetPlan(ast)
+	plan, err := NewInsert(mockCatalog, ast).ExecutionPlan()
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
@@ -176,7 +176,7 @@ func TestInsertIntoNonExistingTable(t *testing.T) {
 		ColValues: []string{},
 	}
 	mockCatalog := &mockInsertCatalog{}
-	_, err := NewInsert(mockCatalog).GetPlan(ast)
+	_, err := NewInsert(mockCatalog, ast).ExecutionPlan()
 	if !errors.Is(err, errTableNotExist) {
 		t.Fatalf("expected err %s got err %s", errTableNotExist, err)
 	}
@@ -197,7 +197,7 @@ func TestInsertValuesNotMatchingColumns(t *testing.T) {
 		},
 	}
 	mockCatalog := &mockInsertCatalog{}
-	_, err := NewInsert(mockCatalog).GetPlan(ast)
+	_, err := NewInsert(mockCatalog, ast).ExecutionPlan()
 	if !errors.Is(err, errValuesNotMatch) {
 		t.Fatalf("expected err %s got err %s", errValuesNotMatch, err)
 	}
@@ -215,7 +215,7 @@ func TestInsertIntoNonExistingColumn(t *testing.T) {
 		},
 	}
 	mockCatalog := &mockInsertCatalog{}
-	_, err := NewInsert(mockCatalog).GetPlan(ast)
+	_, err := NewInsert(mockCatalog, ast).ExecutionPlan()
 	if !errors.Is(err, errMissingColumnName) {
 		t.Fatalf("expected err %s got err %s", errMissingColumnName, err)
 	}
