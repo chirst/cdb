@@ -34,14 +34,14 @@ func TestExplainQueryPlan(t *testing.T) {
 	qp := newQueryPlan(root, true)
 	formattedResult := qp.ToString()
 	expectedResult := "" +
-		"     └─ project(id, first_name, last_name)\n" +
-		"         └─ join\n" +
-		"             ├─ join\n" +
-		"             |   ├─ scan table foo\n" +
-		"             |   └─ join\n" +
-		"             |       ├─ scan table baz\n" +
-		"             |       └─ scan table buzz\n" +
-		"             └─ scan table bar\n"
+		" ── project(id, first_name, last_name)\n" +
+		"     └─ join\n" +
+		"         ├─ join\n" +
+		"         |   ├─ scan table foo\n" +
+		"         |   └─ join\n" +
+		"         |       ├─ scan table baz\n" +
+		"         |       └─ scan table buzz\n" +
+		"         └─ scan table bar\n"
 	if formattedResult != expectedResult {
 		t.Fatalf("got\n%s\nwant\n%s", formattedResult, expectedResult)
 	}

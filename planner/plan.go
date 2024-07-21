@@ -24,6 +24,7 @@ func newQueryPlan(root logicalNode, explainQueryPlan bool) *QueryPlan {
 func (p *QueryPlan) ToString() string {
 	qp := &QueryPlan{}
 	qp.walk(p.root, 0)
+	qp.trimLeft()
 	return qp.connectSiblings()
 }
 
@@ -39,12 +40,25 @@ func (p *QueryPlan) visit(ln logicalNode, depth int) {
 	for i := 0; i < depth; i += 1 {
 		padding += "    "
 	}
-	if depth != 0 {
-		padding += " └─ "
-	} else {
+	if depth == 1 {
 		padding += " ── "
+	} else {
+		padding += " └─ "
 	}
 	p.plan += fmt.Sprintf("%s%s\n", padding, ln.print())
+}
+
+func (p *QueryPlan) trimLeft() {
+	trimBy := 4
+	newPlan := []string{}
+	for _, row := range strings.Split(p.plan, "\n") {
+		newRow := row
+		if len(row) >= trimBy {
+			newRow = row[trimBy:]
+		}
+		newPlan = append(newPlan, newRow)
+	}
+	p.plan = strings.Join(newPlan, "\n")
 }
 
 func (p *QueryPlan) connectSiblings() string {
