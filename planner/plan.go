@@ -6,11 +6,15 @@ import (
 	"unicode/utf8"
 )
 
-// QueryPlan contains the query plan tree. It is capable of converting  the tree
+// QueryPlan contains the query plan tree. It is capable of converting the tree
 // to a string representation for a query prefixed with `EXPLAIN QUERY PLAN`.
 type QueryPlan struct {
-	plan             string
-	root             logicalNode
+	// plan holds the string representation also known as the tree.
+	plan string
+	// root holds the root node of the query plan
+	root logicalNode
+	// ExplainQueryPlan is a flag indicating if the SQL asked for the query plan
+	// to be printed as a string representation with `EXPLAIN QUERY PLAN`.
 	ExplainQueryPlan bool
 }
 
@@ -21,6 +25,7 @@ func newQueryPlan(root logicalNode, explainQueryPlan bool) *QueryPlan {
 	}
 }
 
+// ToString evaluates and returns the query plan as a string representation.
 func (p *QueryPlan) ToString() string {
 	qp := &QueryPlan{}
 	qp.walk(p.root, 0)
@@ -48,6 +53,7 @@ func (p *QueryPlan) visit(ln logicalNode, depth int) {
 	p.plan += fmt.Sprintf("%s%s\n", padding, ln.print())
 }
 
+// trimLeft performs extra formatting after the initial walk is completed.
 func (p *QueryPlan) trimLeft() {
 	trimBy := 4
 	newPlan := []string{}
@@ -61,6 +67,12 @@ func (p *QueryPlan) trimLeft() {
 	p.plan = strings.Join(newPlan, "\n")
 }
 
+// connectSiblings is a messy method to perform extra formatting after the
+// initial recursive walk is completed. connectSiblings goes over the string
+// representation in reverse row order and forwards column order. When a '└'
+// character is found connectSiblings moves upwards on the current column making
+// replacements until the top is reached. Once reached the column and row search
+// continue.
 func (p *QueryPlan) connectSiblings() string {
 	planMatrix := strings.Split(p.plan, "\n")
 	for rowIdx := len(planMatrix) - 1; 0 < rowIdx; rowIdx -= 1 {
