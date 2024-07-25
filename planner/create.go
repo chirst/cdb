@@ -9,9 +9,11 @@ import (
 	"github.com/chirst/cdb/vm"
 )
 
-var errInvalidPKColumnType = errors.New("primary key must be INTEGER type")
-var errTableExists = errors.New("table exists")
-var errMoreThanOnePK = errors.New("more than one primary key specified")
+var (
+	errInvalidPKColumnType = errors.New("primary key must be INTEGER type")
+	errTableExists         = errors.New("table exists")
+	errMoreThanOnePK       = errors.New("more than one primary key specified")
+)
 
 // createCatalog defines the catalog methods needed by the create planner
 type createCatalog interface {
@@ -21,29 +23,52 @@ type createCatalog interface {
 	GetVersion() string
 }
 
+// createPlanner is capable of generating a logical query plan and a physical
+// executionPlan for a create statement. The planners within are separated by
+// their responsibility.
 type createPlanner struct {
-	qp *createQueryPlanner
-	ep *createExecutionPlanner
+	// queryPlanner is responsible for transforming the AST to a logical query
+	// plan tree. This tree is made up of nodes similar to a relational algebra
+	// tree. The query planner also performs binding and validation.
+	queryPlanner *createQueryPlanner
+	// executionPlanner is responsible for converting the logical query plan
+	// tree to a bytecode execution plan capable of being run by the virtual
+	// machine.
+	executionPlanner *createExecutionPlanner
 }
 
+// createQueryPlanner converts the AST to a logical query plan. Along the way it
+// validates the statement makes sense with the catalog a process known as
+// binding.
 type createQueryPlanner struct {
-	catalog   createCatalog
-	stmt      *compiler.CreateStmt
+	// catalog contains the schema
+	catalog createCatalog
+	// stmt contains the AST
+	stmt *compiler.CreateStmt
+	// queryPlan contains the query plan being constructed. The root node must
+	// be createNode.
 	queryPlan *createNode
 }
 
+// createExecutionPlanner converts logical nodes to a bytecode execution plan
+// that can be run by the vm.
 type createExecutionPlanner struct {
-	queryPlan     *createNode
+	// queryPlan contains the logical query plan. The is populated by calling
+	// QueryPlan.
+	queryPlan *createNode
+	// executionPlan contains the bytecode execution plan being constructed.
+	// This is populated by calling ExecutionPlan.
 	executionPlan *vm.ExecutionPlan
 }
 
+// NewCreate creates a planner for the given create statement.
 func NewCreate(catalog createCatalog, stmt *compiler.CreateStmt) *createPlanner {
 	return &createPlanner{
-		qp: &createQueryPlanner{
+		queryPlanner: &createQueryPlanner{
 			catalog: catalog,
 			stmt:    stmt,
 		},
-		ep: &createExecutionPlanner{
+		executionPlanner: &createExecutionPlanner{
 			executionPlan: vm.NewExecutionPlan(
 				catalog.GetVersion(),
 				stmt.Explain,
@@ -52,12 +77,22 @@ func NewCreate(catalog createCatalog, stmt *compiler.CreateStmt) *createPlanner 
 	}
 }
 
+// QueryPlan generates the query plan for the planner.
 func (p *createPlanner) QueryPlan() (*QueryPlan, error) {
-	tableName, err := p.qp.ensureTableDoesNotExist()
+	qp, err := p.queryPlanner.getQueryPlan()
 	if err != nil {
 		return nil, err
 	}
-	jSchema, err := p.qp.getSchemaString()
+	p.executionPlanner.queryPlan = p.queryPlanner.queryPlan
+	return qp, err
+}
+
+func (p *createQueryPlanner) getQueryPlan() (*QueryPlan, error) {
+	tableName, err := p.ensureTableDoesNotExist()
+	if err != nil {
+		return nil, err
+	}
+	jSchema, err := p.getSchemaString()
 	if err != nil {
 		return nil, err
 	}
@@ -67,9 +102,8 @@ func (p *createPlanner) QueryPlan() (*QueryPlan, error) {
 		tableName:  tableName,
 		schema:     jSchema,
 	}
-	qp := newQueryPlan(createNode, p.qp.stmt.ExplainQueryPlan)
-	p.ep.queryPlan = createNode
-	return qp, nil
+	p.queryPlan = createNode
+	return newQueryPlan(createNode, p.stmt.ExplainQueryPlan), nil
 }
 
 func (p *createQueryPlanner) ensureTableDoesNotExist() (string, error) {
@@ -141,14 +175,20 @@ func (p *createQueryPlanner) schemaFrom() *kv.TableSchema {
 	return &schema
 }
 
-func (cp *createPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
-	if cp.qp.queryPlan == nil {
-		_, err := cp.QueryPlan()
+// ExecutionPlan returns the bytecode execution plan for the planner. Calling
+// QueryPlan is not a prerequisite to this method as it will be called by
+// ExecutionPlan if needed.
+func (p *createPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
+	if p.queryPlanner.queryPlan == nil {
+		_, err := p.QueryPlan()
 		if err != nil {
 			return nil, err
 		}
 	}
-	p := cp.ep
+	return p.executionPlanner.getExecutionPlan()
+}
+
+func (p *createExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 	p.executionPlan.Append(&vm.InitCmd{P2: 1})
 	p.executionPlan.Append(&vm.TransactionCmd{P2: 1})
 	p.executionPlan.Append(&vm.CreateBTreeCmd{P2: 1})
