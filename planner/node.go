@@ -1,5 +1,7 @@
 package planner
 
+// This file defines the relational nodes in a logical query plan.
+
 // logicalNode defines the interface for a node in the query plan tree.
 type logicalNode interface {
 	children() []logicalNode
@@ -12,8 +14,11 @@ type projectNode struct {
 	child       logicalNode
 }
 
+// projection is part of the sum of projections in a project node.
 type projection struct {
+	// isCount signifies the projection is the count function.
 	isCount bool
+	// colName is the name of the column to be projected.
 	colName string
 }
 
@@ -43,12 +48,19 @@ type countNode struct {
 	rootPage int
 }
 
+// TODO joinNode is unused, but remains as a prototype binary operation node.
 type joinNode struct {
-	left      logicalNode
-	right     logicalNode
+	// left is the left subtree of the join.
+	left logicalNode
+	// right is the right subtree of the join.
+	right logicalNode
+	// TODO operation is the type of join to be performed. Possibly left, right
+	// or inner join. Could also have a field for join algorithm i.e. loop.
 	operation string
 }
 
+// createNode represents a operation to create an object in the system catalog.
+// For example a table, index, or trigger.
 type createNode struct {
 	// objectName is the name of the index, trigger, or table.
 	objectName string
@@ -60,10 +72,18 @@ type createNode struct {
 	schema string
 }
 
+// insertNode represents an insert operation.
 type insertNode struct {
-	rootPage           int
+	// rootPage is the rootPage of the table the insert is performed on.
+	rootPage int
+	// catalogColumnNames are all of the names of columns associated with the
+	// table.
 	catalogColumnNames []string
-	pkColumn           string
-	colNames           []string
-	colValues          []string
+	// pkColumn is the name of the primary key column in the catalog. The value
+	// is empty if no user defined pk.
+	pkColumn string
+	// colNames are the names of columns specified in the insert statement.
+	colNames []string
+	// colValues are the values specified in the insert statement.
+	colValues []string
 }

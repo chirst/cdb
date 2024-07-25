@@ -1,8 +1,6 @@
 package planner
 
 import (
-	"errors"
-
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
 )
@@ -17,12 +15,15 @@ type selectCatalog interface {
 
 // selectPlanner is capable of generating a logical query plan and a physical
 // execution plan for a select statement. The planners within are separated by
-// their responsibility. Notice a statement or catalog is not shared with with
-// the execution planner. This is by design since the logical query planner also
-// performs binding.
+// their responsibility.
 type selectPlanner struct {
-	qp *selectQueryPlanner
-	ep *selectExecutionPlanner
+	// queryPlanner is responsible for transforming the AST to a logical query
+	// plan tree. This tree is made up of nodes that map closely to a relational
+	// algebra tree. The query planner also performs binding and validation.
+	queryPlanner *selectQueryPlanner
+	// executionPlanner transforms the logical query tree to a bytecode routine,
+	// built to be ran by the virtual machine.
+	executionPlanner *selectExecutionPlanner
 }
 
 // selectQueryPlanner converts an AST to a logical query plan. Along the way it
@@ -33,7 +34,8 @@ type selectQueryPlanner struct {
 	catalog selectCatalog
 	// stmt contains the AST
 	stmt *compiler.SelectStmt
-	// queryPlan contains the logical plan. The root node must be a projection.
+	// queryPlan contains the logical plan being built. The root node must be a
+	// projection.
 	queryPlan *projectNode
 }
 
@@ -51,11 +53,11 @@ type selectExecutionPlanner struct {
 // NewSelect returns an instance of a select planner for the given AST.
 func NewSelect(catalog selectCatalog, stmt *compiler.SelectStmt) *selectPlanner {
 	return &selectPlanner{
-		qp: &selectQueryPlanner{
+		queryPlanner: &selectQueryPlanner{
 			catalog: catalog,
 			stmt:    stmt,
 		},
-		ep: &selectExecutionPlanner{
+		executionPlanner: &selectExecutionPlanner{
 			executionPlan: vm.NewExecutionPlan(
 				catalog.GetVersion(),
 				stmt.Explain,
@@ -66,14 +68,23 @@ func NewSelect(catalog selectCatalog, stmt *compiler.SelectStmt) *selectPlanner 
 
 // QueryPlan generates the query plan tree for the planner.
 func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
-	tableName := p.qp.stmt.From.TableName
-	rootPageNumber, err := p.qp.catalog.GetRootPageNumber(tableName)
+	qp, err := p.queryPlanner.getQueryPlan()
+	if err != nil {
+		return nil, err
+	}
+	p.executionPlanner.queryPlan = p.queryPlanner.queryPlan
+	return qp, err
+}
+
+func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
+	tableName := p.stmt.From.TableName
+	rootPageNumber, err := p.catalog.GetRootPageNumber(tableName)
 	if err != nil {
 		return nil, err
 	}
 	var child logicalNode
-	if p.qp.stmt.ResultColumn.All {
-		scanColumns, err := p.qp.getScanColumns()
+	if p.stmt.ResultColumn.All {
+		scanColumns, err := p.getScanColumns()
 		if err != nil {
 			return nil, err
 		}
@@ -88,16 +99,15 @@ func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
 			rootPage:  rootPageNumber,
 		}
 	}
-	projections, err := p.qp.getProjections()
+	projections, err := p.getProjections()
 	if err != nil {
 		return nil, err
 	}
-	p.qp.queryPlan = &projectNode{
+	p.queryPlan = &projectNode{
 		projections: projections,
 		child:       child,
 	}
-	p.ep.queryPlan = p.qp.queryPlan
-	return newQueryPlan(p.qp.queryPlan, p.qp.stmt.ExplainQueryPlan), nil
+	return newQueryPlan(p.queryPlan, p.stmt.ExplainQueryPlan), nil
 }
 
 func (p *selectQueryPlanner) getScanColumns() ([]scanColumn, error) {
@@ -139,30 +149,33 @@ func (p *selectQueryPlanner) getProjections() ([]projection, error) {
 			})
 		}
 		return projections, nil
-	} else if p.stmt.ResultColumn.Count {
+	}
+	if p.stmt.ResultColumn.Count {
 		return []projection{
 			{
 				isCount: true,
 			},
 		}, nil
 	}
-	return nil, errors.New("unhandled projection")
+	panic("unhandled projection")
 }
 
 // ExecutionPlan returns the bytecode execution plan for the planner. Calling
 // QueryPlan is not a prerequisite to this method as it will be called by
 // ExecutionPlan if needed.
 func (sp *selectPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
-	if sp.qp.queryPlan == nil {
+	if sp.queryPlanner.queryPlan == nil {
 		_, err := sp.QueryPlan()
 		if err != nil {
 			return nil, err
 		}
 	}
-	p := sp.ep
-	p.resultHeader()
-	p.buildInit()
+	return sp.executionPlanner.getExecutionPlan()
+}
 
+func (p *selectExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
+	p.setResultHeader()
+	p.buildInit()
 	switch c := p.queryPlan.child.(type) {
 	case *scanNode:
 		if err := p.buildScan(c); err != nil {
@@ -177,7 +190,7 @@ func (sp *selectPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
 	return p.executionPlan, nil
 }
 
-func (p *selectExecutionPlanner) resultHeader() {
+func (p *selectExecutionPlanner) setResultHeader() {
 	resultHeader := []string{}
 	for _, p := range p.queryPlan.projections {
 		resultHeader = append(resultHeader, p.colName)
@@ -213,6 +226,10 @@ func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
 	return nil
 }
 
+// buildOptimizedCountScan is a special optimization made when a table only has
+// a count aggregate and no other projections. Since the optimized scan
+// aggregates the count of tuples on each page, but does not look at individual
+// tuples.
 func (p *selectExecutionPlanner) buildOptimizedCountScan(n *countNode) {
 	const cursorId = 1
 	p.executionPlan.Append(&vm.OpenReadCmd{P1: cursorId, P2: n.rootPage})
