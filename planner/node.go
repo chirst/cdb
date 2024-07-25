@@ -76,10 +76,11 @@ type createNode struct {
 type insertNode struct {
 	// rootPage is the rootPage of the table the insert is performed on.
 	rootPage int
-	// catalogColumnNames are the names of columns associated with the table.
+	// catalogColumnNames are all of the names of columns associated with the
+	// table.
 	catalogColumnNames []string
-	// pkColumn is the name of the primary key column. The value is empty if
-	// there is no user defined pk.
+	// pkColumn is the name of the primary key column in the catalog. The value
+	// is empty if no user defined pk.
 	pkColumn string
 	// colNames are the names of columns specified in the insert statement.
 	colNames []string

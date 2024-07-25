@@ -16,6 +16,10 @@ var (
 	errMissingColumnName = errors.New("missing column")
 )
 
+// pkConstraint is the error message displayed when a primary key constraint is
+// violated.
+const pkConstraint = "pk unique constraint violated"
+
 // insertCatalog defines the catalog methods needed by the insert planner
 type insertCatalog interface {
 	GetColumns(tableOrIndexName string) ([]string, error)
@@ -128,44 +132,23 @@ func (p *insertPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
 
 func (p *insertExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 	p.buildInit()
-	cursorId := 1
-	p.executionPlan.Append(&vm.OpenWriteCmd{P1: cursorId, P2: p.queryPlan.rootPage})
+	p.openWrite()
 	for valueIdx := range len(p.queryPlan.colValues) / len(p.queryPlan.colNames) {
-		keyRegister := 1
-		statementIDIdx := -1
-		if p.queryPlan.pkColumn != "" {
-			statementIDIdx = slices.IndexFunc(p.queryPlan.colNames, func(s string) bool {
-				return s == p.queryPlan.pkColumn
-			})
-		}
-		if statementIDIdx == -1 {
-			p.executionPlan.Append(&vm.NewRowIdCmd{P1: p.queryPlan.rootPage, P2: keyRegister})
-		} else {
-			rowId, err := strconv.Atoi(p.queryPlan.colValues[statementIDIdx+valueIdx*len(p.queryPlan.colNames)])
-			if err != nil {
-				return nil, err
-			}
-			integerCmdIdx := len(p.executionPlan.Commands) + 2
-			p.executionPlan.Append(&vm.NotExistsCmd{P1: p.queryPlan.rootPage, P2: integerCmdIdx, P3: rowId})
-			p.executionPlan.Append(&vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"})
-			p.executionPlan.Append(&vm.IntegerCmd{P1: rowId, P2: keyRegister})
+		// For simplicity, the primary key is in the first register.
+		const keyRegister = 1
+		if err := p.buildPrimaryKey(keyRegister, valueIdx); err != nil {
+			return nil, err
 		}
 		registerIdx := keyRegister
 		for _, catalogColumnName := range p.queryPlan.catalogColumnNames {
 			if catalogColumnName != "" && catalogColumnName == p.queryPlan.pkColumn {
+				// Skip the primary key column since it is handled before.
 				continue
 			}
 			registerIdx += 1
-			vIdx := -1
-			for i, statementColumnName := range p.queryPlan.colNames {
-				if statementColumnName == catalogColumnName {
-					vIdx = i + (valueIdx * len(p.queryPlan.colNames))
-				}
+			if err := p.buildNonPkValue(valueIdx, registerIdx, catalogColumnName); err != nil {
+				return nil, err
 			}
-			if vIdx == -1 {
-				return nil, fmt.Errorf("%w %s", errMissingColumnName, catalogColumnName)
-			}
-			p.executionPlan.Append(&vm.StringCmd{P1: registerIdx, P4: p.queryPlan.colValues[vIdx]})
 		}
 		p.executionPlan.Append(&vm.MakeRecordCmd{P1: 2, P2: registerIdx - 1, P3: registerIdx + 1})
 		p.executionPlan.Append(&vm.InsertCmd{P1: p.queryPlan.rootPage, P2: registerIdx + 1, P3: keyRegister})
@@ -177,6 +160,52 @@ func (p *insertExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 func (p *insertExecutionPlanner) buildInit() {
 	p.executionPlan.Append(&vm.InitCmd{P2: 1})
 	p.executionPlan.Append(&vm.TransactionCmd{P2: 1})
+}
+
+func (p *insertExecutionPlanner) openWrite() {
+	const cursorId = 1
+	p.executionPlan.Append(&vm.OpenWriteCmd{P1: cursorId, P2: p.queryPlan.rootPage})
+}
+
+func (p *insertExecutionPlanner) buildPrimaryKey(keyRegister int, valueIdx int) error {
+	// If the table has a user defined pk column it needs to be looked up in the
+	// user defined column list. If the user has defined the pk column the
+	// execution plan will involve checking the uniqueness of the pk during
+	// execution. Otherwise the system guarantees a unique key.
+	statementPkIdx := -1
+	if p.queryPlan.pkColumn != "" {
+		statementPkIdx = slices.IndexFunc(p.queryPlan.colNames, func(s string) bool {
+			return s == p.queryPlan.pkColumn
+		})
+	}
+	if statementPkIdx == -1 {
+		p.executionPlan.Append(&vm.NewRowIdCmd{P1: p.queryPlan.rootPage, P2: keyRegister})
+		return nil
+	}
+	rowId, err := strconv.Atoi(p.queryPlan.colValues[statementPkIdx+valueIdx*len(p.queryPlan.colNames)])
+	if err != nil {
+		return err
+	}
+	integerCmdIdx := len(p.executionPlan.Commands) + 2
+	p.executionPlan.Append(&vm.NotExistsCmd{P1: p.queryPlan.rootPage, P2: integerCmdIdx, P3: rowId})
+	p.executionPlan.Append(&vm.HaltCmd{P1: 1, P4: pkConstraint})
+	p.executionPlan.Append(&vm.IntegerCmd{P1: rowId, P2: keyRegister})
+	return nil
+}
+
+func (p *insertExecutionPlanner) buildNonPkValue(valueIdx, registerIdx int, catalogColumnName string) error {
+	// Get the statement index of the column name. Because the name positions
+	// can mismatch the table column positions.
+	stmtColIdx := slices.IndexFunc(p.queryPlan.colNames, func(stmtColName string) bool {
+		return stmtColName == catalogColumnName
+	})
+	// Requires the statement to define a value for each column in the table.
+	if stmtColIdx == -1 {
+		return fmt.Errorf("%w %s", errMissingColumnName, catalogColumnName)
+	}
+	valuesListIdx := stmtColIdx + (valueIdx * len(p.queryPlan.colNames))
+	p.executionPlan.Append(&vm.StringCmd{P1: registerIdx, P4: p.queryPlan.colValues[valuesListIdx]})
+	return nil
 }
 
 func checkValuesMatchColumns(s *compiler.InsertStmt) error {
