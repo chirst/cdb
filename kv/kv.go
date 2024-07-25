@@ -12,11 +12,14 @@ import (
 	"github.com/chirst/cdb/pager"
 )
 
+// KV is an abstraction on the pager module that provides efficient reads and
+// writes through b tree indexes.
 type KV struct {
 	pager   *pager.Pager
 	catalog *catalog
 }
 
+// New creates an instance of kv
 func New(useMemory bool, filename string) (*KV, error) {
 	pager, err := pager.New(useMemory, filename)
 	if err != nil {
@@ -45,24 +48,15 @@ func (kv *KV) Get(pageNumber int, key []byte) ([]byte, bool, error) {
 	if pageNumber == 0 {
 		panic("pageNumber cannot be 0")
 	}
-	// Step 1. Need a source page to start from. Will start from 1 if there is
-	// no source page specified. This source page has to do with a table. 1 has
-	// to be the system catalog.
 	for {
 		page := kv.pager.GetPage(pageNumber)
-		// Step 2. Decide whether the page is an internal node or a leaf node.
-		//This can be determined by asking what the page type is.
-		if page.IsLeaf() {
-			// 4. Find the value for the key and return.
-			b1, b2 := page.GetValue(key)
-			return b1, b2, nil
-		}
 		v, found := page.GetValue(key)
+		if page.IsLeaf() {
+			return v, found, nil
+		}
 		if !found {
 			return nil, false, nil
 		}
-		// Step 3. If the page is internal jump to the next page and go back to
-		// 2. This process guarantees that we are on a leaf page for step 4.
 		pageNumber = int(binary.LittleEndian.Uint16(v))
 	}
 }
@@ -104,8 +98,9 @@ func (kv *KV) Set(pageNumber int, key, value []byte) error {
 	return nil
 }
 
-// a helper function to insert into a left or right page given the left and
-// right pages have space and the right page is greater than the left.
+// insertIntoOne is a helper function to insert into a left or right page given
+// the left and right pages have space and the right page is greater than the
+// left.
 func insertIntoOne(key, value []byte, lp, rp *pager.Page) {
 	rpk := rp.GetEntries()[0].Key
 	comp := bytes.Compare(key, rpk)
@@ -217,22 +212,27 @@ func (kv *KV) NewBTree() int {
 	return np.GetNumber()
 }
 
+// BeginReadTransaction begins a read transaction.
 func (kv *KV) BeginReadTransaction() {
 	kv.pager.BeginRead()
 }
 
+// EndReadTransaction ends a read transaction.
 func (kv *KV) EndReadTransaction() {
 	kv.pager.EndRead()
 }
 
+// BeginWriteTransaction begins a write transaction.
 func (kv *KV) BeginWriteTransaction() {
 	kv.pager.BeginWrite()
 }
 
+// RollbackWrite rolls back and ends a write transaction.
 func (kv *KV) RollbackWrite() {
 	kv.pager.RollbackWrite()
 }
 
+// EndWriteTransaction ends a write transaction.
 func (kv *KV) EndWriteTransaction() error {
 	return kv.pager.EndWrite()
 }
@@ -263,13 +263,14 @@ func (kv *KV) NewRowID(rootPageNumber int) (int, error) {
 	return dki + 1, nil
 }
 
+// ParseSchema updates the system catalog by reading the schema table.
 func (kv *KV) ParseSchema() error {
 	c := kv.NewCursor(1)
 	exists := c.GotoFirstRecord()
 	if !exists {
 		return nil
 	}
-	var objs []object
+	var objects []object
 	for exists {
 		v := c.GetValue()
 		dv, err := Decode(v)
@@ -283,10 +284,10 @@ func (kv *KV) ParseSchema() error {
 			rootPageNumber: dv[3].(int),
 			jsonSchema:     dv[4].(string),
 		}
-		objs = append(objs, *o)
+		objects = append(objects, *o)
 		exists = c.GotoNext()
 	}
-	kv.catalog.setSchema(objs)
+	kv.catalog.setSchema(objects)
 	return nil
 }
 
@@ -302,19 +303,12 @@ type Cursor struct {
 	pager                   *pager.Pager
 }
 
+// NewCursor creates a cursor the given object's rootPageNumber.
 func (kv *KV) NewCursor(rootPageNumber int) *Cursor {
 	return &Cursor{
 		rootPageNumber: rootPageNumber,
 		pager:          kv.pager,
 	}
-}
-
-func (c *Cursor) moveToPage(p *pager.Page) {
-	c.currentPageEntries = p.GetEntries()
-	c.currentTupleIndex = 0
-	_, c.currentLeftPage = p.GetLeftPageNumber()
-	_, c.currentRightPage = p.GetRightPageNumber()
-	c.currentPageEntriesCount = p.GetRecordCount()
 }
 
 // GotoFirstRecord moves the cursor to the first tuple in ascending order. It
@@ -390,6 +384,14 @@ func (c *Cursor) GotoNextPage() bool {
 	np := c.pager.GetPage(c.currentRightPage)
 	c.moveToPage(np)
 	return true
+}
+
+func (c *Cursor) moveToPage(p *pager.Page) {
+	c.currentPageEntries = p.GetEntries()
+	c.currentTupleIndex = 0
+	_, c.currentLeftPage = p.GetLeftPageNumber()
+	_, c.currentRightPage = p.GetRightPageNumber()
+	c.currentPageEntriesCount = p.GetRecordCount()
 }
 
 // Count returns the count of the current b trees leaf node entries.
