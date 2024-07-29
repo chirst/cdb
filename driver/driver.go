@@ -1,11 +1,7 @@
 // Package driver enables cdb to be used with the go database/sql package.
 package driver
 
-// TODO
-// - Question what the prepare step should do.
-// - Think about making database return typed response instead of all strings.
-// - Implement and test half finished methods.
-// - Consider context methods.
+// TODO there are several context methods that are not implemented.
 
 import (
 	"database/sql"
@@ -57,6 +53,9 @@ func (c *cdbConn) Close() error {
 
 // Prepare implements driver.Conn.
 func (c *cdbConn) Prepare(query string) (driver.Stmt, error) {
+	// TODO Prepare is supposed to compile the query and allow different
+	// parameterized queries to be executed with the same compiled query. This
+	// isn't supported by cdb at the moment so it is a pass through.
 	st := &cdbStmt{
 		cdb:   c.cdb,
 		query: query,
@@ -136,6 +135,8 @@ func (c *cdbRows) Next(dest []driver.Value) error {
 		return io.EOF
 	}
 	for i, v := range c.rows[c.rowIdx] {
+		// TODO the value is a string pointer, but might be better as a typed
+		// value. It is a string pointer so it can be null.
 		dest[i] = *v
 	}
 	c.rowIdx += 1
