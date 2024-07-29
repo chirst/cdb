@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/chirst/cdb/kv"
 )
@@ -63,6 +64,8 @@ type ExecuteResult struct {
 	// string since columns can be a null result. TODO this may be wise to make
 	// an any type.
 	ResultRows [][]*string
+	// Duration is the overall execution time
+	Duration time.Duration
 }
 
 type ExecutionPlan struct {

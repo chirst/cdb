@@ -5,6 +5,7 @@ package db
 
 import (
 	"errors"
+	"time"
 
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/kv"
@@ -48,6 +49,7 @@ func New(useMemory bool, filename string) (*DB, error) {
 }
 
 func (db *DB) Execute(sql string) vm.ExecuteResult {
+	start := time.Now()
 	tokens := compiler.NewLexer(sql).Lex()
 	statement, err := compiler.NewParser(tokens).Parse()
 	if err != nil {
@@ -76,6 +78,7 @@ func (db *DB) Execute(sql string) vm.ExecuteResult {
 			break
 		}
 	}
+	executeResult.Duration = time.Since(start)
 	return executeResult
 }
 

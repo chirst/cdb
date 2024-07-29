@@ -58,11 +58,12 @@ func (r *repl) Run() {
 		if len(result.ResultRows) != 0 {
 			fmt.Println(r.printRows(result.ResultHeader, result.ResultRows))
 		}
+		fmt.Printf("Time: %s\n", result.Duration)
 	}
 }
 
 func (*repl) getInput(reader *bufio.Scanner) bool {
-	fmt.Printf("cdb > ")
+	fmt.Printf("cdb> ")
 	return reader.Scan()
 }
 
