@@ -98,13 +98,13 @@ func TestPageSet(t *testing.T) {
 		p.SetValue([]byte{1}, []byte{'c', 'a', 'r', 'l'})
 		p.SetValue([]byte{3}, []byte{'j', 'i', 'l', 'l', 'i', 'a', 'n'})
 
-		ExpectUint16(t, p.content, 14, 3)
-		ExpectUint16(t, p.content, 16, 4091)
-		ExpectUint16(t, p.content, 18, 4092)
-		ExpectUint16(t, p.content, 20, 4086)
-		ExpectUint16(t, p.content, 22, 4087)
-		ExpectUint16(t, p.content, 24, 4078)
-		ExpectUint16(t, p.content, 26, 4079)
+		ExpectUint16(t, p.content, 13, 3)
+		ExpectUint16(t, p.content, 15, 4091)
+		ExpectUint16(t, p.content, 17, 4092)
+		ExpectUint16(t, p.content, 19, 4086)
+		ExpectUint16(t, p.content, 21, 4087)
+		ExpectUint16(t, p.content, 23, 4078)
+		ExpectUint16(t, p.content, 25, 4079)
 
 		ExpectByteArray(t, p.content, 4078, []byte{3})
 		ExpectByteArray(t, p.content, 4079, []byte{'j', 'i', 'l', 'l', 'i', 'a', 'n'})
@@ -124,9 +124,9 @@ func TestPageSet(t *testing.T) {
 		p.SetValue([]byte{1}, []byte{'c', 'a', 'r', 'l'})
 		p.SetValue([]byte{1}, []byte{'r', 'o', 'l', 'f'})
 
-		ExpectUint16(t, p.content, 14, 1)
-		ExpectUint16(t, p.content, 16, 4091)
-		ExpectUint16(t, p.content, 18, 4092)
+		ExpectUint16(t, p.content, 13, 1)
+		ExpectUint16(t, p.content, 15, 4091)
+		ExpectUint16(t, p.content, 17, 4092)
 
 		ExpectByteArray(t, p.content, 4091, []byte{1})
 		ExpectByteArray(t, p.content, 4092, []byte{'r', 'o', 'l', 'f'})
