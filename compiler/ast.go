@@ -42,7 +42,7 @@ type InsertStmt struct {
 	*StmtBase
 	TableName string
 	ColNames  []string
-	ColValues []string
+	ColValues [][]string
 }
 
 // type Expr interface {

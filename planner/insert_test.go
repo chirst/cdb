@@ -66,13 +66,19 @@ func TestInsertWithoutPrimaryKey(t *testing.T) {
 			"first",
 			"last",
 		},
-		ColValues: []string{
-			"gud",
-			"dude",
-			"joe",
-			"doe",
-			"jan",
-			"ice",
+		ColValues: [][]string{
+			{
+				"gud",
+				"dude",
+			},
+			{
+				"joe",
+				"doe",
+			},
+			{
+				"jan",
+				"ice",
+			},
 		},
 	}
 	mockCatalog := &mockInsertCatalog{}
@@ -108,9 +114,11 @@ func TestInsertWithPrimaryKey(t *testing.T) {
 			"id",
 			"first",
 		},
-		ColValues: []string{
-			"22",
-			"gud",
+		ColValues: [][]string{
+			{
+				"22",
+				"gud",
+			},
 		},
 	}
 	mockCatalog := &mockInsertCatalog{
@@ -148,9 +156,11 @@ func TestInsertWithPrimaryKeyMiddleOrder(t *testing.T) {
 			"first",
 			"id",
 		},
-		ColValues: []string{
-			"feller",
-			"12",
+		ColValues: [][]string{
+			{
+				"feller",
+				"12",
+			},
 		},
 	}
 	mockCatalog := &mockInsertCatalog{
@@ -173,7 +183,7 @@ func TestInsertIntoNonExistingTable(t *testing.T) {
 		StmtBase:  &compiler.StmtBase{},
 		TableName: "NotExistTable",
 		ColNames:  []string{},
-		ColValues: []string{},
+		ColValues: [][]string{},
 	}
 	mockCatalog := &mockInsertCatalog{}
 	_, err := NewInsert(mockCatalog, ast).ExecutionPlan()
@@ -182,7 +192,7 @@ func TestInsertIntoNonExistingTable(t *testing.T) {
 	}
 }
 
-func TestInsertValuesNotMatchingColumns(t *testing.T) {
+func TestInsertValuesNotMatchingColumnsLess(t *testing.T) {
 	ast := &compiler.InsertStmt{
 		StmtBase:  &compiler.StmtBase{},
 		TableName: "foo",
@@ -190,10 +200,41 @@ func TestInsertValuesNotMatchingColumns(t *testing.T) {
 			"id",
 			"first",
 		},
-		ColValues: []string{
-			"1",
-			"gud",
-			"3",
+		ColValues: [][]string{
+			{
+				"1",
+				"gud",
+			},
+			{
+				"3",
+			},
+		},
+	}
+	mockCatalog := &mockInsertCatalog{}
+	_, err := NewInsert(mockCatalog, ast).ExecutionPlan()
+	if !errors.Is(err, errValuesNotMatch) {
+		t.Fatalf("expected err %s got err %s", errValuesNotMatch, err)
+	}
+}
+
+func TestInsertValuesNotMatchingColumnsGreater(t *testing.T) {
+	ast := &compiler.InsertStmt{
+		StmtBase:  &compiler.StmtBase{},
+		TableName: "foo",
+		ColNames: []string{
+			"id",
+			"first",
+		},
+		ColValues: [][]string{
+			{
+				"1",
+				"gud",
+			},
+			{
+				"3",
+				"gud",
+				"gud",
+			},
 		},
 	}
 	mockCatalog := &mockInsertCatalog{}
@@ -210,8 +251,10 @@ func TestInsertIntoNonExistingColumn(t *testing.T) {
 		ColNames: []string{
 			"NonExistColumnName",
 		},
-		ColValues: []string{
-			"gud",
+		ColValues: [][]string{
+			{
+				"gud",
+			},
 		},
 	}
 	mockCatalog := &mockInsertCatalog{}

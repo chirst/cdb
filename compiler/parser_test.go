@@ -247,16 +247,22 @@ func TestParseInsert(t *testing.T) {
 					"first_name",
 					"last_name",
 				},
-				ColValues: []string{
-					"1",
-					"gud",
-					"dude",
-					"2",
-					"joe",
-					"doe",
-					"3",
-					"jan",
-					"ice",
+				ColValues: [][]string{
+					{
+						"1",
+						"gud",
+						"dude",
+					},
+					{
+						"2",
+						"joe",
+						"doe",
+					},
+					{
+						"3",
+						"jan",
+						"ice",
+					},
 				},
 			},
 		},

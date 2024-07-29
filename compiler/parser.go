@@ -189,29 +189,30 @@ func (p *parser) parseInsert(sb *StmtBase) (*InsertStmt, error) {
 	if p.nextNonSpace().value != kwValues {
 		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
-	return p.parseValue(stmt)
+	return p.parseValue(stmt, 0)
 }
 
-func (p *parser) parseValue(stmt *InsertStmt) (*InsertStmt, error) {
+func (p *parser) parseValue(stmt *InsertStmt, valueIdx int) (*InsertStmt, error) {
 	if p.nextNonSpace().value != "(" {
 		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
+	stmt.ColValues = append(stmt.ColValues, []string{})
 	for {
 		v := p.nextNonSpace()
 		if v.tokenType != tkNumeric && v.tokenType != tkLiteral {
 			return nil, fmt.Errorf(literalErr, v.value)
 		}
 		if v.tokenType == tkLiteral && v.value[0] == '\'' && v.value[len(v.value)-1] == '\'' {
-			stmt.ColValues = append(stmt.ColValues, v.value[1:len(v.value)-1])
+			stmt.ColValues[valueIdx] = append(stmt.ColValues[valueIdx], v.value[1:len(v.value)-1])
 		} else {
-			stmt.ColValues = append(stmt.ColValues, v.value)
+			stmt.ColValues[valueIdx] = append(stmt.ColValues[valueIdx], v.value)
 		}
 		sep := p.nextNonSpace()
 		if sep.value != "," {
 			if sep.value == ")" {
 				sep2 := p.nextNonSpace()
 				if sep2.value == "," {
-					p.parseValue(stmt)
+					p.parseValue(stmt, valueIdx+1)
 				}
 				break
 			}

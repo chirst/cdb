@@ -133,7 +133,7 @@ func (p *insertPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
 func (p *insertExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 	p.buildInit()
 	cursorId := p.openWrite()
-	for valueIdx := range len(p.queryPlan.colValues) / len(p.queryPlan.colNames) {
+	for valueIdx := range len(p.queryPlan.colValues) {
 		// For simplicity, the primary key is in the first register.
 		const keyRegister = 1
 		if err := p.buildPrimaryKey(cursorId, keyRegister, valueIdx); err != nil {
@@ -183,7 +183,7 @@ func (p *insertExecutionPlanner) buildPrimaryKey(writeCursorId, keyRegister, val
 		p.executionPlan.Append(&vm.NewRowIdCmd{P1: writeCursorId, P2: keyRegister})
 		return nil
 	}
-	rowId, err := strconv.Atoi(p.queryPlan.colValues[statementPkIdx+valueIdx*len(p.queryPlan.colNames)])
+	rowId, err := strconv.Atoi(p.queryPlan.colValues[valueIdx][statementPkIdx])
 	if err != nil {
 		return err
 	}
@@ -204,17 +204,16 @@ func (p *insertExecutionPlanner) buildNonPkValue(valueIdx, registerIdx int, cata
 	if stmtColIdx == -1 {
 		return fmt.Errorf("%w %s", errMissingColumnName, catalogColumnName)
 	}
-	valuesListIdx := stmtColIdx + (valueIdx * len(p.queryPlan.colNames))
-	p.executionPlan.Append(&vm.StringCmd{P1: registerIdx, P4: p.queryPlan.colValues[valuesListIdx]})
+	p.executionPlan.Append(&vm.StringCmd{P1: registerIdx, P4: p.queryPlan.colValues[valueIdx][stmtColIdx]})
 	return nil
 }
 
 func checkValuesMatchColumns(s *compiler.InsertStmt) error {
-	// TODO need to enhance for INSERT INTO foo (name) VALUES ('n1', 'n2')
-	vl := len(s.ColValues)
 	cl := len(s.ColNames)
-	if vl%cl != 0 {
-		return errValuesNotMatch
+	for _, cv := range s.ColValues {
+		if cl != len(cv) {
+			return errValuesNotMatch
+		}
 	}
 	return nil
 }
