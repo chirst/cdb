@@ -2,7 +2,6 @@
 package driver
 
 // TODO
-// - Specify whether or not to use memory and what database file name to use.
 // - Question what the prepare step should do.
 // - Think about making database return typed response instead of all strings.
 // - Implement and test half finished methods.
@@ -27,9 +26,12 @@ func new() *cdbDriver {
 
 type cdbDriver struct{}
 
-// Open implements driver.Driver.
+// Open implements driver.Driver. Name is the name of the database file. If the
+// name is :memory: the database will not use a file and will not persist
+// changes.
 func (c *cdbDriver) Open(name string) (driver.Conn, error) {
-	d, err := db.New(true, "cdb")
+	isMemory := name == ":memory:"
+	d, err := db.New(isMemory, name)
 	if err != nil {
 		return nil, err
 	}
