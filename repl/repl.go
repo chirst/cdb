@@ -46,6 +46,8 @@ func (r *repl) Run() {
 			if input == ".exit" {
 				os.Exit(0)
 			}
+			fmt.Println("Command not supported")
+			continue
 		}
 		result := r.db.Execute(input)
 		if result.Err != nil {
