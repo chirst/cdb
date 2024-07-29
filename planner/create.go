@@ -189,18 +189,19 @@ func (p *createPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
 }
 
 func (p *createExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
+	const cursorId = 1
 	p.executionPlan.Append(&vm.InitCmd{P2: 1})
 	p.executionPlan.Append(&vm.TransactionCmd{P2: 1})
 	p.executionPlan.Append(&vm.CreateBTreeCmd{P2: 1})
-	p.executionPlan.Append(&vm.OpenWriteCmd{P1: 1, P2: 1})
-	p.executionPlan.Append(&vm.NewRowIdCmd{P1: 1, P2: 2})
+	p.executionPlan.Append(&vm.OpenWriteCmd{P1: cursorId, P2: 1})
+	p.executionPlan.Append(&vm.NewRowIdCmd{P1: cursorId, P2: 2})
 	p.executionPlan.Append(&vm.StringCmd{P1: 3, P4: p.queryPlan.objectType})
 	p.executionPlan.Append(&vm.StringCmd{P1: 4, P4: p.queryPlan.objectName})
 	p.executionPlan.Append(&vm.StringCmd{P1: 5, P4: p.queryPlan.tableName})
 	p.executionPlan.Append(&vm.CopyCmd{P1: 1, P2: 6})
 	p.executionPlan.Append(&vm.StringCmd{P1: 7, P4: string(p.queryPlan.schema)})
 	p.executionPlan.Append(&vm.MakeRecordCmd{P1: 3, P2: 5, P3: 8})
-	p.executionPlan.Append(&vm.InsertCmd{P1: 1, P2: 8, P3: 2})
+	p.executionPlan.Append(&vm.InsertCmd{P1: cursorId, P2: 8, P3: 2})
 	p.executionPlan.Append(&vm.ParseSchemaCmd{})
 	p.executionPlan.Append(&vm.HaltCmd{})
 	return p.executionPlan, nil

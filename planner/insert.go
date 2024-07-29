@@ -151,7 +151,7 @@ func (p *insertExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 			}
 		}
 		p.executionPlan.Append(&vm.MakeRecordCmd{P1: 2, P2: registerIdx - 1, P3: registerIdx + 1})
-		p.executionPlan.Append(&vm.InsertCmd{P1: p.queryPlan.rootPage, P2: registerIdx + 1, P3: keyRegister})
+		p.executionPlan.Append(&vm.InsertCmd{P1: cursorId, P2: registerIdx + 1, P3: keyRegister})
 	}
 	p.executionPlan.Append(&vm.HaltCmd{})
 	return p.executionPlan, nil

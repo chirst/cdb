@@ -45,17 +45,17 @@ func TestInsertWithoutPrimaryKey(t *testing.T) {
 		&vm.StringCmd{P1: 2, P4: "gud"},
 		&vm.StringCmd{P1: 3, P4: "dude"},
 		&vm.MakeRecordCmd{P1: 2, P2: 2, P3: 4},
-		&vm.InsertCmd{P1: 2, P2: 4, P3: 1},
+		&vm.InsertCmd{P1: 1, P2: 4, P3: 1},
 		&vm.NewRowIdCmd{P1: 1, P2: 1},
 		&vm.StringCmd{P1: 2, P4: "joe"},
 		&vm.StringCmd{P1: 3, P4: "doe"},
 		&vm.MakeRecordCmd{P1: 2, P2: 2, P3: 4},
-		&vm.InsertCmd{P1: 2, P2: 4, P3: 1},
+		&vm.InsertCmd{P1: 1, P2: 4, P3: 1},
 		&vm.NewRowIdCmd{P1: 1, P2: 1},
 		&vm.StringCmd{P1: 2, P4: "jan"},
 		&vm.StringCmd{P1: 3, P4: "ice"},
 		&vm.MakeRecordCmd{P1: 2, P2: 2, P3: 4},
-		&vm.InsertCmd{P1: 2, P2: 4, P3: 1},
+		&vm.InsertCmd{P1: 1, P2: 4, P3: 1},
 		&vm.HaltCmd{},
 	}
 
@@ -98,7 +98,7 @@ func TestInsertWithPrimaryKey(t *testing.T) {
 		&vm.IntegerCmd{P1: 22, P2: 1},
 		&vm.StringCmd{P1: 2, P4: "gud"},
 		&vm.MakeRecordCmd{P1: 2, P2: 1, P3: 3},
-		&vm.InsertCmd{P1: 2, P2: 3, P3: 1},
+		&vm.InsertCmd{P1: 1, P2: 3, P3: 1},
 		&vm.HaltCmd{},
 	}
 	ast := &compiler.InsertStmt{
@@ -138,7 +138,7 @@ func TestInsertWithPrimaryKeyMiddleOrder(t *testing.T) {
 		&vm.IntegerCmd{P1: 12, P2: 1},
 		&vm.StringCmd{P1: 2, P4: "feller"},
 		&vm.MakeRecordCmd{P1: 2, P2: 1, P3: 3},
-		&vm.InsertCmd{P1: 2, P2: 3, P3: 1},
+		&vm.InsertCmd{P1: 1, P2: 3, P3: 1},
 		&vm.HaltCmd{},
 	}
 	ast := &compiler.InsertStmt{
