@@ -7,7 +7,7 @@ package kv
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
+	"log"
 
 	"github.com/chirst/cdb/pager"
 )
@@ -44,7 +44,7 @@ func (kv *KV) GetCatalog() *catalog {
 // Get returns a byte array corresponding to the key and a bool indicating if
 // the key was found. The pageNumber has to do with the root page of the
 // corresponding table. The system catalog uses the page number 1.
-func (kv *KV) Get(pageNumber int, key []byte) ([]byte, bool, error) {
+func (kv *KV) Get(pageNumber int, key []byte) ([]byte, bool) {
 	if pageNumber == 0 {
 		panic("pageNumber cannot be 0")
 	}
@@ -52,10 +52,10 @@ func (kv *KV) Get(pageNumber int, key []byte) ([]byte, bool, error) {
 		page := kv.pager.GetPage(pageNumber)
 		v, found := page.GetValue(key)
 		if page.IsLeaf() {
-			return v, found, nil
+			return v, found
 		}
 		if !found {
-			return nil, false, nil
+			return nil, false
 		}
 		pageNumber = int(binary.LittleEndian.Uint16(v))
 	}
@@ -64,7 +64,7 @@ func (kv *KV) Get(pageNumber int, key []byte) ([]byte, bool, error) {
 // Set inserts or updates the value for the given key. The pageNumber has to do
 // with the root page of the corresponding table. The system catalog uses the
 // page number 1.
-func (kv *KV) Set(pageNumber int, key, value []byte) error {
+func (kv *KV) Set(pageNumber int, key, value []byte) {
 	// TODO set doesn't differentiate between insert and update
 	if pageNumber == 0 {
 		panic("pageNumber cannot be 0")
@@ -72,7 +72,7 @@ func (kv *KV) Set(pageNumber int, key, value []byte) error {
 	leafPage := kv.getLeafPage(pageNumber, key)
 	if leafPage.CanInsertTuple(key, value) {
 		leafPage.SetValue(key, value)
-		return nil
+		return
 	}
 	leftPage, rightPage := kv.splitPage(leafPage)
 	insertIntoOne(key, value, leftPage, rightPage)
@@ -80,7 +80,7 @@ func (kv *KV) Set(pageNumber int, key, value []byte) error {
 	if hasParent {
 		parentPage := kv.pager.GetPage(parentPageNumber)
 		kv.parentInsert(parentPage, leftPage, rightPage)
-		return nil
+		return
 	}
 	leafPage.SetTypeInternal()
 	leafPage.SetEntries([]pager.PageTuple{
@@ -95,7 +95,6 @@ func (kv *KV) Set(pageNumber int, key, value []byte) error {
 	})
 	leftPage.SetParentPageNumber(leafPage.GetNumber())
 	rightPage.SetParentPageNumber(leafPage.GetNumber())
-	return nil
 }
 
 // insertIntoOne is a helper function to insert into a left or right page given
@@ -235,32 +234,6 @@ func (kv *KV) RollbackWrite() {
 // EndWriteTransaction ends a write transaction.
 func (kv *KV) EndWriteTransaction() error {
 	return kv.pager.EndWrite()
-}
-
-// NewRowID returns the highest unused key in a table for the rootPageNumber.
-// For a integer key it is the largest integer key plus one.
-func (kv *KV) NewRowID(rootPageNumber int) (int, error) {
-	// TODO could possibly cache this in the catalog or something
-	candidate := kv.pager.GetPage(rootPageNumber)
-	if len(candidate.GetEntries()) == 0 {
-		return 1, nil
-	}
-	for !candidate.IsLeaf() {
-		pagePointers := candidate.GetEntries()
-		descendingPageNum := pagePointers[len(pagePointers)-1].Value
-		descendingPageNum16 := binary.LittleEndian.Uint16(descendingPageNum)
-		candidate = kv.pager.GetPage(int(descendingPageNum16))
-	}
-	k := candidate.GetEntries()[len(candidate.GetEntries())-1].Key
-	dk, err := DecodeKey(k)
-	if err != nil {
-		return 0, err
-	}
-	dki, ok := dk.(int)
-	if !ok {
-		return 0, errors.New("non integer key increment not supported")
-	}
-	return dki + 1, nil
 }
 
 // ParseSchema updates the system catalog by reading the schema table.
@@ -409,4 +382,47 @@ func (c *Cursor) Count() int {
 		sum += c.currentPageEntriesCount
 	}
 	return sum
+}
+
+// Exists will probe the specified key and return true or false if the key
+// exists or not.
+func (c *Cursor) Exists(key []byte) bool {
+	pageNumber := c.rootPageNumber
+	for {
+		page := c.pager.GetPage(pageNumber)
+		v, found := page.GetValue(key)
+		if page.IsLeaf() {
+			return found
+		}
+		if !found {
+			return false
+		}
+		pageNumber = int(binary.LittleEndian.Uint16(v))
+	}
+}
+
+// NewRowID returns the highest unused key in a table for the rootPageNumber.
+// For a integer key it is the largest integer key plus one.
+func (c *Cursor) NewRowID() int {
+	// TODO could possibly cache this in the catalog or on the cursor
+	candidate := c.pager.GetPage(c.rootPageNumber)
+	if len(candidate.GetEntries()) == 0 {
+		return 1
+	}
+	for !candidate.IsLeaf() {
+		pagePointers := candidate.GetEntries()
+		descendingPageNum := pagePointers[len(pagePointers)-1].Value
+		descendingPageNum16 := binary.LittleEndian.Uint16(descendingPageNum)
+		candidate = c.pager.GetPage(int(descendingPageNum16))
+	}
+	k := candidate.GetEntries()[len(candidate.GetEntries())-1].Key
+	dk, err := DecodeKey(k)
+	if err != nil {
+		log.Fatal(err)
+	}
+	dki, ok := dk.(int)
+	if !ok {
+		log.Fatal("non integer key increment not supported")
+	}
+	return dki + 1
 }

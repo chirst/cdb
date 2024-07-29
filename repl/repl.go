@@ -49,7 +49,7 @@ func (r *repl) Run() {
 		}
 		result := r.db.Execute(input)
 		if result.Err != nil {
-			fmt.Printf("Err: %s\n", result.Err.Error())
+			fmt.Printf("Err: %s\n", result.Err)
 			continue
 		}
 		if result.Text != "" {

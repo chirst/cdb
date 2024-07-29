@@ -425,6 +425,7 @@ func (c *CreateBTreeCmd) explain(addr int) []*string {
 type OpenWriteCmd cmd
 
 func (c *OpenWriteCmd) execute(vm *vm, routine *routine) cmdRes {
+	routine.cursors[c.P1] = vm.kv.NewCursor(c.P2)
 	return cmdRes{}
 }
 
@@ -433,21 +434,18 @@ func (c *OpenWriteCmd) explain(addr int) []*string {
 	return formatExplain(addr, "OpenWrite", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
 
-// NewRowIdCmd generates a new row id for table root page P1 and writes the new
-// id to register P2
+// NewRowIdCmd generates a new row id for cursor P1 and writes the new id to
+// register P2
 type NewRowIdCmd cmd
 
 func (c *NewRowIdCmd) execute(vm *vm, routine *routine) cmdRes {
-	rid, err := vm.kv.NewRowID(c.P1)
-	if err != nil {
-		return cmdRes{err: err}
-	}
+	rid := routine.cursors[c.P1].NewRowID()
 	routine.registers[c.P2] = rid
 	return cmdRes{}
 }
 
 func (c *NewRowIdCmd) explain(addr int) []*string {
-	comment := fmt.Sprintf("Generate row id for table %d and store in register[%d]", c.P1, c.P2)
+	comment := fmt.Sprintf("Generate row id for cursor %d and store in register[%d]", c.P1, c.P2)
 	return formatExplain(addr, "NewRowID", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
 
@@ -552,9 +550,8 @@ func (c *CountCmd) explain(addr int) []*string {
 	return formatExplain(addr, "Count", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
 
-// TODO P1 should be a cursor
-// NotExistsCmd P1 is a root page number P3 is an integer if P1 does not contain
-// key P3 jump to P2 otherwise fall through.
+// NotExistsCmd if the cursor P1 does not contain key P3 jump to P2 otherwise
+// fall through.
 type NotExistsCmd cmd
 
 func (c *NotExistsCmd) execute(vm *vm, routine *routine) cmdRes {
@@ -562,10 +559,7 @@ func (c *NotExistsCmd) execute(vm *vm, routine *routine) cmdRes {
 	if err != nil {
 		return cmdRes{err: err}
 	}
-	_, exists, err := vm.kv.Get(c.P1, bp3)
-	if err != nil {
-		return cmdRes{err: err}
-	}
+	exists := routine.cursors[c.P1].Exists(bp3)
 	if !exists {
 		return cmdRes{nextAddress: c.P2}
 	}
@@ -573,6 +567,6 @@ func (c *NotExistsCmd) execute(vm *vm, routine *routine) cmdRes {
 }
 
 func (c *NotExistsCmd) explain(addr int) []*string {
-	comment := fmt.Sprintf("Jump to register[%d] if object %d does not contain key %d", c.P2, c.P1, c.P3)
+	comment := fmt.Sprintf("Jump to register[%d] if cursor %d does not contain key %d", c.P2, c.P1, c.P3)
 	return formatExplain(addr, "NotExists", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }

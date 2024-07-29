@@ -132,11 +132,11 @@ func (p *insertPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
 
 func (p *insertExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 	p.buildInit()
-	p.openWrite()
+	cursorId := p.openWrite()
 	for valueIdx := range len(p.queryPlan.colValues) / len(p.queryPlan.colNames) {
 		// For simplicity, the primary key is in the first register.
 		const keyRegister = 1
-		if err := p.buildPrimaryKey(keyRegister, valueIdx); err != nil {
+		if err := p.buildPrimaryKey(cursorId, keyRegister, valueIdx); err != nil {
 			return nil, err
 		}
 		registerIdx := keyRegister
@@ -162,12 +162,13 @@ func (p *insertExecutionPlanner) buildInit() {
 	p.executionPlan.Append(&vm.TransactionCmd{P2: 1})
 }
 
-func (p *insertExecutionPlanner) openWrite() {
+func (p *insertExecutionPlanner) openWrite() int {
 	const cursorId = 1
 	p.executionPlan.Append(&vm.OpenWriteCmd{P1: cursorId, P2: p.queryPlan.rootPage})
+	return cursorId
 }
 
-func (p *insertExecutionPlanner) buildPrimaryKey(keyRegister int, valueIdx int) error {
+func (p *insertExecutionPlanner) buildPrimaryKey(writeCursorId, keyRegister, valueIdx int) error {
 	// If the table has a user defined pk column it needs to be looked up in the
 	// user defined column list. If the user has defined the pk column the
 	// execution plan will involve checking the uniqueness of the pk during
@@ -179,7 +180,7 @@ func (p *insertExecutionPlanner) buildPrimaryKey(keyRegister int, valueIdx int) 
 		})
 	}
 	if statementPkIdx == -1 {
-		p.executionPlan.Append(&vm.NewRowIdCmd{P1: p.queryPlan.rootPage, P2: keyRegister})
+		p.executionPlan.Append(&vm.NewRowIdCmd{P1: writeCursorId, P2: keyRegister})
 		return nil
 	}
 	rowId, err := strconv.Atoi(p.queryPlan.colValues[statementPkIdx+valueIdx*len(p.queryPlan.colNames)])
@@ -187,7 +188,7 @@ func (p *insertExecutionPlanner) buildPrimaryKey(keyRegister int, valueIdx int) 
 		return err
 	}
 	integerCmdIdx := len(p.executionPlan.Commands) + 2
-	p.executionPlan.Append(&vm.NotExistsCmd{P1: p.queryPlan.rootPage, P2: integerCmdIdx, P3: rowId})
+	p.executionPlan.Append(&vm.NotExistsCmd{P1: writeCursorId, P2: integerCmdIdx, P3: rowId})
 	p.executionPlan.Append(&vm.HaltCmd{P1: 1, P4: pkConstraint})
 	p.executionPlan.Append(&vm.IntegerCmd{P1: rowId, P2: keyRegister})
 	return nil
