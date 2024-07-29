@@ -100,7 +100,7 @@ func TestParseSelect(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			ret, err := NewParser(c.tokens).Parse()
 			if err != nil {
-				t.Errorf("want no err got err %s", err.Error())
+				t.Errorf("want no err got err %s", err)
 			}
 			if !reflect.DeepEqual(ret, c.expect) {
 				t.Errorf("got %#v want %#v", ret, c.expect)
@@ -170,7 +170,7 @@ func TestParseCreate(t *testing.T) {
 	for _, c := range cases {
 		ret, err := NewParser(c.tokens).Parse()
 		if err != nil {
-			t.Errorf("expected no err got err %s", err.Error())
+			t.Errorf("expected no err got err %s", err)
 		}
 		if !reflect.DeepEqual(ret, c.expected) {
 			t.Errorf("expected %#v got %#v", c.expected, ret)
@@ -247,16 +247,22 @@ func TestParseInsert(t *testing.T) {
 					"first_name",
 					"last_name",
 				},
-				ColValues: []string{
-					"1",
-					"gud",
-					"dude",
-					"2",
-					"joe",
-					"doe",
-					"3",
-					"jan",
-					"ice",
+				ColValues: [][]string{
+					{
+						"1",
+						"gud",
+						"dude",
+					},
+					{
+						"2",
+						"joe",
+						"doe",
+					},
+					{
+						"3",
+						"jan",
+						"ice",
+					},
 				},
 			},
 		},
@@ -264,7 +270,7 @@ func TestParseInsert(t *testing.T) {
 	for _, c := range cases {
 		ret, err := NewParser(c.tokens).Parse()
 		if err != nil {
-			t.Errorf("expected no err got err %s", err.Error())
+			t.Errorf("expected no err got err %s", err)
 		}
 		if !reflect.DeepEqual(ret, c.expected) {
 			t.Errorf("expected %#v got %#v", c.expected, ret)

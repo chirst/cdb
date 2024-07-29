@@ -2,18 +2,24 @@ package kv
 
 import (
 	"bytes"
+	"log"
 	"testing"
 )
 
+func mustNewCursor(root int) (*KV, *Cursor) {
+	kv, err := New(true, "")
+	if err != nil {
+		log.Fatal(err)
+	}
+	return kv, kv.NewCursor(root)
+}
+
 func TestGet(t *testing.T) {
-	kv, _ := New(true, "")
 	k := []byte{1}
 	v := []byte{'n', 'e', 'd'}
-	kv.Set(1, k, v)
-	res, found, err := kv.Get(1, k)
-	if err != nil {
-		t.Fatal(err)
-	}
+	_, cursor := mustNewCursor(1)
+	cursor.Set(k, v)
+	res, found := cursor.Get(k)
 	if !found {
 		t.Errorf("expected value for %v to be found", k)
 	}
@@ -23,7 +29,7 @@ func TestGet(t *testing.T) {
 }
 
 func TestSetPageSplit(t *testing.T) {
-	kv, _ := New(true, "")
+	kv, cursor := mustNewCursor(1)
 	var rk []byte
 	var rv []byte
 	ri := 178
@@ -34,20 +40,17 @@ func TestSetPageSplit(t *testing.T) {
 		kv.BeginWriteTransaction()
 		k, err := EncodeKey(i)
 		if err != nil {
-			t.Fatal(err.Error())
+			t.Fatal(err)
 		}
 		v := []byte{1, 0, 0, 0}
-		kv.Set(1, k, v)
+		cursor.Set(k, v)
 		if ri == i {
 			rk = k
 			rv = v
 		}
 		kv.EndWriteTransaction()
 	}
-	res, found, err := kv.Get(1, rk)
-	if err != nil {
-		t.Fatal(err)
-	}
+	res, found := cursor.Get(rk)
 	if !found {
 		t.Fatalf("expected value for %v to be found", rk)
 	}
@@ -57,7 +60,7 @@ func TestSetPageSplit(t *testing.T) {
 }
 
 func TestBulkInsertAndGet(t *testing.T) {
-	kv, _ := New(true, "")
+	kv, cursor := mustNewCursor(1)
 
 	// bulk insert
 	amount := 500_000
@@ -65,16 +68,13 @@ func TestBulkInsertAndGet(t *testing.T) {
 	for i := 1; i <= amount; i += 1 {
 		k, err := EncodeKey(i)
 		if err != nil {
-			t.Fatal(err.Error())
+			t.Fatal(err)
 		}
 		v, err := Encode([]any{i})
 		if err != nil {
-			t.Fatal(err.Error())
+			t.Fatal(err)
 		}
-		err = kv.Set(1, k, v)
-		if err != nil {
-			t.Fatal(err.Error())
-		}
+		cursor.Set(k, v)
 	}
 	kv.EndWriteTransaction()
 
@@ -82,15 +82,12 @@ func TestBulkInsertAndGet(t *testing.T) {
 	midProbe := amount / 2
 	mpk, err := EncodeKey(midProbe)
 	if err != nil {
-		t.Fatal(err.Error())
+		t.Fatal(err)
 	}
-	mr, _, err := kv.Get(1, mpk)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
+	mr, _ := cursor.Get(mpk)
 	mrv, err := Decode(mr)
 	if err != nil {
-		t.Fatal(err.Error())
+		t.Fatal(err)
 	}
 	mrvi := mrv[0].(int)
 	if mrvi != midProbe {
@@ -101,15 +98,12 @@ func TestBulkInsertAndGet(t *testing.T) {
 	leftProbe := 1
 	lpk, err := EncodeKey(leftProbe)
 	if err != nil {
-		t.Fatal(err.Error())
+		t.Fatal(err)
 	}
-	lr, _, err := kv.Get(1, lpk)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
+	lr, _ := cursor.Get(lpk)
 	lrv, err := Decode(lr)
 	if err != nil {
-		t.Fatal(err.Error())
+		t.Fatal(err)
 	}
 	lrvi := lrv[0].(int)
 	if lrvi != leftProbe {
@@ -120,15 +114,12 @@ func TestBulkInsertAndGet(t *testing.T) {
 	rightProbe := amount
 	rpk, err := EncodeKey(rightProbe)
 	if err != nil {
-		t.Fatal(err.Error())
+		t.Fatal(err)
 	}
-	rr, _, err := kv.Get(1, rpk)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
+	rr, _ := cursor.Get(rpk)
 	rrv, err := Decode(rr)
 	if err != nil {
-		t.Fatal(err.Error())
+		t.Fatal(err)
 	}
 	rrvi := rrv[0].(int)
 	if rrvi != rightProbe {

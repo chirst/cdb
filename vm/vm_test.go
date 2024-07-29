@@ -11,7 +11,7 @@ import (
 func TestExec(t *testing.T) {
 	kv, err := kv.New(true, "")
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Fatal(err)
 	}
 	vm := New(kv)
 	ep := NewExecutionPlan(kv.GetCatalog().GetVersion(), false)
@@ -28,14 +28,14 @@ func TestExec(t *testing.T) {
 	}
 	res := vm.Execute(ep)
 	if res.Err != nil {
-		t.Errorf("expected no err got %s", res.Err.Error())
+		t.Errorf("expected no err got %s", res.Err)
 	}
 }
 
 func TestExecReturnsVersionErr(t *testing.T) {
 	kv, err := kv.New(true, "")
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Fatal(err)
 	}
 	vm := New(kv)
 

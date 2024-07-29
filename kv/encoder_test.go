@@ -12,11 +12,11 @@ func TestEncoding(t *testing.T) {
 		v := []any{"table", "foo", "foo", 1, "{columns:[{name:\"first_name\",type:\"TEXT\"}]}"}
 		vb, err := Encode(v)
 		if err != nil {
-			t.Fatalf("expected no err got err: %s", err.Error())
+			t.Fatalf("expected no err got err: %s", err)
 		}
 		dv, err := Decode(vb)
 		if err != nil {
-			t.Fatalf("expected no err got err: %s", err.Error())
+			t.Fatalf("expected no err got err: %s", err)
 		}
 		if !reflect.DeepEqual(v, dv) {
 			t.Fatalf("expected %v to be %v", v, dv)
@@ -27,11 +27,11 @@ func TestEncoding(t *testing.T) {
 		v := 1
 		vb, err := EncodeKey(v)
 		if err != nil {
-			t.Fatal(err.Error())
+			t.Fatal(err)
 		}
 		dv, err := DecodeKey(vb)
 		if err != nil {
-			t.Fatal(err.Error())
+			t.Fatal(err)
 		}
 		if dv != v {
 			t.Fatalf("expected %d got %d", v, dv)
@@ -42,11 +42,11 @@ func TestEncoding(t *testing.T) {
 		for i := 0; i < math.MaxInt16; i += 1 {
 			k1, err := EncodeKey(i)
 			if err != nil {
-				t.Fatal(err.Error())
+				t.Fatal(err)
 			}
 			k2, err := EncodeKey(i + 1)
 			if err != nil {
-				t.Fatal(err.Error())
+				t.Fatal(err)
 			}
 			c := bytes.Compare(k1, k2)
 			if c != -1 {

@@ -132,11 +132,11 @@ func (p *insertPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
 
 func (p *insertExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 	p.buildInit()
-	p.openWrite()
-	for valueIdx := range len(p.queryPlan.colValues) / len(p.queryPlan.colNames) {
+	cursorId := p.openWrite()
+	for valueIdx := range len(p.queryPlan.colValues) {
 		// For simplicity, the primary key is in the first register.
 		const keyRegister = 1
-		if err := p.buildPrimaryKey(keyRegister, valueIdx); err != nil {
+		if err := p.buildPrimaryKey(cursorId, keyRegister, valueIdx); err != nil {
 			return nil, err
 		}
 		registerIdx := keyRegister
@@ -151,7 +151,7 @@ func (p *insertExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 			}
 		}
 		p.executionPlan.Append(&vm.MakeRecordCmd{P1: 2, P2: registerIdx - 1, P3: registerIdx + 1})
-		p.executionPlan.Append(&vm.InsertCmd{P1: p.queryPlan.rootPage, P2: registerIdx + 1, P3: keyRegister})
+		p.executionPlan.Append(&vm.InsertCmd{P1: cursorId, P2: registerIdx + 1, P3: keyRegister})
 	}
 	p.executionPlan.Append(&vm.HaltCmd{})
 	return p.executionPlan, nil
@@ -162,12 +162,13 @@ func (p *insertExecutionPlanner) buildInit() {
 	p.executionPlan.Append(&vm.TransactionCmd{P2: 1})
 }
 
-func (p *insertExecutionPlanner) openWrite() {
+func (p *insertExecutionPlanner) openWrite() int {
 	const cursorId = 1
 	p.executionPlan.Append(&vm.OpenWriteCmd{P1: cursorId, P2: p.queryPlan.rootPage})
+	return cursorId
 }
 
-func (p *insertExecutionPlanner) buildPrimaryKey(keyRegister int, valueIdx int) error {
+func (p *insertExecutionPlanner) buildPrimaryKey(writeCursorId, keyRegister, valueIdx int) error {
 	// If the table has a user defined pk column it needs to be looked up in the
 	// user defined column list. If the user has defined the pk column the
 	// execution plan will involve checking the uniqueness of the pk during
@@ -179,15 +180,15 @@ func (p *insertExecutionPlanner) buildPrimaryKey(keyRegister int, valueIdx int) 
 		})
 	}
 	if statementPkIdx == -1 {
-		p.executionPlan.Append(&vm.NewRowIdCmd{P1: p.queryPlan.rootPage, P2: keyRegister})
+		p.executionPlan.Append(&vm.NewRowIdCmd{P1: writeCursorId, P2: keyRegister})
 		return nil
 	}
-	rowId, err := strconv.Atoi(p.queryPlan.colValues[statementPkIdx+valueIdx*len(p.queryPlan.colNames)])
+	rowId, err := strconv.Atoi(p.queryPlan.colValues[valueIdx][statementPkIdx])
 	if err != nil {
 		return err
 	}
 	integerCmdIdx := len(p.executionPlan.Commands) + 2
-	p.executionPlan.Append(&vm.NotExistsCmd{P1: p.queryPlan.rootPage, P2: integerCmdIdx, P3: rowId})
+	p.executionPlan.Append(&vm.NotExistsCmd{P1: writeCursorId, P2: integerCmdIdx, P3: rowId})
 	p.executionPlan.Append(&vm.HaltCmd{P1: 1, P4: pkConstraint})
 	p.executionPlan.Append(&vm.IntegerCmd{P1: rowId, P2: keyRegister})
 	return nil
@@ -203,17 +204,16 @@ func (p *insertExecutionPlanner) buildNonPkValue(valueIdx, registerIdx int, cata
 	if stmtColIdx == -1 {
 		return fmt.Errorf("%w %s", errMissingColumnName, catalogColumnName)
 	}
-	valuesListIdx := stmtColIdx + (valueIdx * len(p.queryPlan.colNames))
-	p.executionPlan.Append(&vm.StringCmd{P1: registerIdx, P4: p.queryPlan.colValues[valuesListIdx]})
+	p.executionPlan.Append(&vm.StringCmd{P1: registerIdx, P4: p.queryPlan.colValues[valueIdx][stmtColIdx]})
 	return nil
 }
 
 func checkValuesMatchColumns(s *compiler.InsertStmt) error {
-	// TODO need to enhance for INSERT INTO foo (name) VALUES ('n1', 'n2')
-	vl := len(s.ColValues)
 	cl := len(s.ColNames)
-	if vl%cl != 0 {
-		return errValuesNotMatch
+	for _, cv := range s.ColValues {
+		if cl != len(cv) {
+			return errValuesNotMatch
+		}
 	}
 	return nil
 }

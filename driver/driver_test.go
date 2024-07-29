@@ -8,19 +8,19 @@ import (
 func TestDriver(t *testing.T) {
 	db, err := sql.Open("cdb", ":memory:")
 	if err != nil {
-		t.Fatalf("open err %s", err.Error())
+		t.Fatalf("open err %s", err)
 	}
 	_, err = db.Exec("CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)")
 	if err != nil {
-		t.Fatalf("exec err %s", err.Error())
+		t.Fatalf("exec err %s", err)
 	}
 	_, err = db.Exec("INSERT INTO foo (name) VALUES ('one')")
 	if err != nil {
-		t.Fatalf("exec err %s", err.Error())
+		t.Fatalf("exec err %s", err)
 	}
 	rows, err := db.Query("SELECT * FROM foo")
 	if err != nil {
-		t.Fatalf("query err %s", err.Error())
+		t.Fatalf("query err %s", err)
 	}
 	type foo struct {
 		id   int

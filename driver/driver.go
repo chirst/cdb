@@ -1,12 +1,7 @@
 // Package driver enables cdb to be used with the go database/sql package.
 package driver
 
-// TODO
-// - Specify whether or not to use memory and what database file name to use.
-// - Question what the prepare step should do.
-// - Think about making database return typed response instead of all strings.
-// - Implement and test half finished methods.
-// - Consider context methods.
+// TODO there are several context methods that are not implemented.
 
 import (
 	"database/sql"
@@ -27,9 +22,12 @@ func new() *cdbDriver {
 
 type cdbDriver struct{}
 
-// Open implements driver.Driver.
+// Open implements driver.Driver. Name is the name of the database file. If the
+// name is :memory: the database will not use a file and will not persist
+// changes.
 func (c *cdbDriver) Open(name string) (driver.Conn, error) {
-	d, err := db.New(true, "cdb")
+	isMemory := name == ":memory:"
+	d, err := db.New(isMemory, name)
 	if err != nil {
 		return nil, err
 	}
@@ -55,6 +53,9 @@ func (c *cdbConn) Close() error {
 
 // Prepare implements driver.Conn.
 func (c *cdbConn) Prepare(query string) (driver.Stmt, error) {
+	// TODO Prepare is supposed to compile the query and allow different
+	// parameterized queries to be executed with the same compiled query. This
+	// isn't supported by cdb at the moment so it is a pass through.
 	st := &cdbStmt{
 		cdb:   c.cdb,
 		query: query,
@@ -134,6 +135,8 @@ func (c *cdbRows) Next(dest []driver.Value) error {
 		return io.EOF
 	}
 	for i, v := range c.rows[c.rowIdx] {
+		// TODO the value is a string pointer, but might be better as a typed
+		// value. It is a string pointer so it can be null.
 		dest[i] = *v
 	}
 	c.rowIdx += 1

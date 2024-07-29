@@ -41,21 +41,21 @@ func TestInsertWithoutPrimaryKey(t *testing.T) {
 		&vm.InitCmd{P2: 1},
 		&vm.TransactionCmd{P2: 1},
 		&vm.OpenWriteCmd{P1: 1, P2: 2},
-		&vm.NewRowIdCmd{P1: 2, P2: 1},
+		&vm.NewRowIdCmd{P1: 1, P2: 1},
 		&vm.StringCmd{P1: 2, P4: "gud"},
 		&vm.StringCmd{P1: 3, P4: "dude"},
 		&vm.MakeRecordCmd{P1: 2, P2: 2, P3: 4},
-		&vm.InsertCmd{P1: 2, P2: 4, P3: 1},
-		&vm.NewRowIdCmd{P1: 2, P2: 1},
+		&vm.InsertCmd{P1: 1, P2: 4, P3: 1},
+		&vm.NewRowIdCmd{P1: 1, P2: 1},
 		&vm.StringCmd{P1: 2, P4: "joe"},
 		&vm.StringCmd{P1: 3, P4: "doe"},
 		&vm.MakeRecordCmd{P1: 2, P2: 2, P3: 4},
-		&vm.InsertCmd{P1: 2, P2: 4, P3: 1},
-		&vm.NewRowIdCmd{P1: 2, P2: 1},
+		&vm.InsertCmd{P1: 1, P2: 4, P3: 1},
+		&vm.NewRowIdCmd{P1: 1, P2: 1},
 		&vm.StringCmd{P1: 2, P4: "jan"},
 		&vm.StringCmd{P1: 3, P4: "ice"},
 		&vm.MakeRecordCmd{P1: 2, P2: 2, P3: 4},
-		&vm.InsertCmd{P1: 2, P2: 4, P3: 1},
+		&vm.InsertCmd{P1: 1, P2: 4, P3: 1},
 		&vm.HaltCmd{},
 	}
 
@@ -66,13 +66,19 @@ func TestInsertWithoutPrimaryKey(t *testing.T) {
 			"first",
 			"last",
 		},
-		ColValues: []string{
-			"gud",
-			"dude",
-			"joe",
-			"doe",
-			"jan",
-			"ice",
+		ColValues: [][]string{
+			{
+				"gud",
+				"dude",
+			},
+			{
+				"joe",
+				"doe",
+			},
+			{
+				"jan",
+				"ice",
+			},
 		},
 	}
 	mockCatalog := &mockInsertCatalog{}
@@ -93,12 +99,12 @@ func TestInsertWithPrimaryKey(t *testing.T) {
 		&vm.InitCmd{P2: 1},
 		&vm.TransactionCmd{P2: 1},
 		&vm.OpenWriteCmd{P1: 1, P2: 2},
-		&vm.NotExistsCmd{P1: 2, P2: 5, P3: 22},
+		&vm.NotExistsCmd{P1: 1, P2: 5, P3: 22},
 		&vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"},
 		&vm.IntegerCmd{P1: 22, P2: 1},
 		&vm.StringCmd{P1: 2, P4: "gud"},
 		&vm.MakeRecordCmd{P1: 2, P2: 1, P3: 3},
-		&vm.InsertCmd{P1: 2, P2: 3, P3: 1},
+		&vm.InsertCmd{P1: 1, P2: 3, P3: 1},
 		&vm.HaltCmd{},
 	}
 	ast := &compiler.InsertStmt{
@@ -108,9 +114,11 @@ func TestInsertWithPrimaryKey(t *testing.T) {
 			"id",
 			"first",
 		},
-		ColValues: []string{
-			"22",
-			"gud",
+		ColValues: [][]string{
+			{
+				"22",
+				"gud",
+			},
 		},
 	}
 	mockCatalog := &mockInsertCatalog{
@@ -133,12 +141,12 @@ func TestInsertWithPrimaryKeyMiddleOrder(t *testing.T) {
 		&vm.InitCmd{P2: 1},
 		&vm.TransactionCmd{P2: 1},
 		&vm.OpenWriteCmd{P1: 1, P2: 2},
-		&vm.NotExistsCmd{P1: 2, P2: 5, P3: 12},
+		&vm.NotExistsCmd{P1: 1, P2: 5, P3: 12},
 		&vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"},
 		&vm.IntegerCmd{P1: 12, P2: 1},
 		&vm.StringCmd{P1: 2, P4: "feller"},
 		&vm.MakeRecordCmd{P1: 2, P2: 1, P3: 3},
-		&vm.InsertCmd{P1: 2, P2: 3, P3: 1},
+		&vm.InsertCmd{P1: 1, P2: 3, P3: 1},
 		&vm.HaltCmd{},
 	}
 	ast := &compiler.InsertStmt{
@@ -148,9 +156,11 @@ func TestInsertWithPrimaryKeyMiddleOrder(t *testing.T) {
 			"first",
 			"id",
 		},
-		ColValues: []string{
-			"feller",
-			"12",
+		ColValues: [][]string{
+			{
+				"feller",
+				"12",
+			},
 		},
 	}
 	mockCatalog := &mockInsertCatalog{
@@ -173,7 +183,7 @@ func TestInsertIntoNonExistingTable(t *testing.T) {
 		StmtBase:  &compiler.StmtBase{},
 		TableName: "NotExistTable",
 		ColNames:  []string{},
-		ColValues: []string{},
+		ColValues: [][]string{},
 	}
 	mockCatalog := &mockInsertCatalog{}
 	_, err := NewInsert(mockCatalog, ast).ExecutionPlan()
@@ -182,7 +192,7 @@ func TestInsertIntoNonExistingTable(t *testing.T) {
 	}
 }
 
-func TestInsertValuesNotMatchingColumns(t *testing.T) {
+func TestInsertValuesNotMatchingColumnsLess(t *testing.T) {
 	ast := &compiler.InsertStmt{
 		StmtBase:  &compiler.StmtBase{},
 		TableName: "foo",
@@ -190,10 +200,41 @@ func TestInsertValuesNotMatchingColumns(t *testing.T) {
 			"id",
 			"first",
 		},
-		ColValues: []string{
-			"1",
-			"gud",
-			"3",
+		ColValues: [][]string{
+			{
+				"1",
+				"gud",
+			},
+			{
+				"3",
+			},
+		},
+	}
+	mockCatalog := &mockInsertCatalog{}
+	_, err := NewInsert(mockCatalog, ast).ExecutionPlan()
+	if !errors.Is(err, errValuesNotMatch) {
+		t.Fatalf("expected err %s got err %s", errValuesNotMatch, err)
+	}
+}
+
+func TestInsertValuesNotMatchingColumnsGreater(t *testing.T) {
+	ast := &compiler.InsertStmt{
+		StmtBase:  &compiler.StmtBase{},
+		TableName: "foo",
+		ColNames: []string{
+			"id",
+			"first",
+		},
+		ColValues: [][]string{
+			{
+				"1",
+				"gud",
+			},
+			{
+				"3",
+				"gud",
+				"gud",
+			},
 		},
 	}
 	mockCatalog := &mockInsertCatalog{}
@@ -210,8 +251,10 @@ func TestInsertIntoNonExistingColumn(t *testing.T) {
 		ColNames: []string{
 			"NonExistColumnName",
 		},
-		ColValues: []string{
-			"gud",
+		ColValues: [][]string{
+			{
+				"gud",
+			},
 		},
 	}
 	mockCatalog := &mockInsertCatalog{}

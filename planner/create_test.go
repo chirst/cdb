@@ -52,7 +52,7 @@ func TestCreateWithNoIDColumn(t *testing.T) {
 	}
 	expectedJSONSchema, err := expectedSchema.ToJSON()
 	if err != nil {
-		t.Fatalf("failed to convert expected schema to json %s", err.Error())
+		t.Fatalf("failed to convert expected schema to json %s", err)
 	}
 	expectedCommands := []vm.Command{
 		&vm.InitCmd{P2: 1},
@@ -72,7 +72,7 @@ func TestCreateWithNoIDColumn(t *testing.T) {
 	}
 	plan, err := NewCreate(mc, stmt).ExecutionPlan()
 	if err != nil {
-		t.Fatal(err.Error())
+		t.Fatal(err)
 	}
 	for i, c := range expectedCommands {
 		if !reflect.DeepEqual(c, plan.Commands[i]) {
@@ -111,7 +111,7 @@ func TestCreateWithAlternateNamedIDColumn(t *testing.T) {
 	}
 	expectedJSONSchema, err := expectedSchema.ToJSON()
 	if err != nil {
-		t.Fatalf("failed to convert expected schema to json %s", err.Error())
+		t.Fatalf("failed to convert expected schema to json %s", err)
 	}
 	expectedCommands := []vm.Command{
 		&vm.InitCmd{P2: 1},
@@ -131,7 +131,7 @@ func TestCreateWithAlternateNamedIDColumn(t *testing.T) {
 	}
 	plan, err := NewCreate(mc, stmt).ExecutionPlan()
 	if err != nil {
-		t.Fatal(err.Error())
+		t.Fatal(err)
 	}
 	for i, c := range expectedCommands {
 		if !reflect.DeepEqual(c, plan.Commands[i]) {

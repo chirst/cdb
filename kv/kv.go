@@ -7,7 +7,7 @@ package kv
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
+	"log"
 
 	"github.com/chirst/cdb/pager"
 )
@@ -37,173 +37,9 @@ func New(useMemory bool, filename string) (*KV, error) {
 	return ret, nil
 }
 
+// GetCatalog returns and instance of the system catalog.
 func (kv *KV) GetCatalog() *catalog {
 	return kv.catalog
-}
-
-// Get returns a byte array corresponding to the key and a bool indicating if
-// the key was found. The pageNumber has to do with the root page of the
-// corresponding table. The system catalog uses the page number 1.
-func (kv *KV) Get(pageNumber int, key []byte) ([]byte, bool, error) {
-	if pageNumber == 0 {
-		panic("pageNumber cannot be 0")
-	}
-	for {
-		page := kv.pager.GetPage(pageNumber)
-		v, found := page.GetValue(key)
-		if page.IsLeaf() {
-			return v, found, nil
-		}
-		if !found {
-			return nil, false, nil
-		}
-		pageNumber = int(binary.LittleEndian.Uint16(v))
-	}
-}
-
-// Set inserts or updates the value for the given key. The pageNumber has to do
-// with the root page of the corresponding table. The system catalog uses the
-// page number 1.
-func (kv *KV) Set(pageNumber int, key, value []byte) error {
-	// TODO set doesn't differentiate between insert and update
-	if pageNumber == 0 {
-		panic("pageNumber cannot be 0")
-	}
-	leafPage := kv.getLeafPage(pageNumber, key)
-	if leafPage.CanInsertTuple(key, value) {
-		leafPage.SetValue(key, value)
-		return nil
-	}
-	leftPage, rightPage := kv.splitPage(leafPage)
-	insertIntoOne(key, value, leftPage, rightPage)
-	hasParent, parentPageNumber := leafPage.GetParentPageNumber()
-	if hasParent {
-		parentPage := kv.pager.GetPage(parentPageNumber)
-		kv.parentInsert(parentPage, leftPage, rightPage)
-		return nil
-	}
-	leafPage.SetTypeInternal()
-	leafPage.SetEntries([]pager.PageTuple{
-		{
-			Key:   leftPage.GetEntries()[0].Key,
-			Value: leftPage.GetNumberAsBytes(),
-		},
-		{
-			Key:   rightPage.GetEntries()[0].Key,
-			Value: rightPage.GetNumberAsBytes(),
-		},
-	})
-	leftPage.SetParentPageNumber(leafPage.GetNumber())
-	rightPage.SetParentPageNumber(leafPage.GetNumber())
-	return nil
-}
-
-// insertIntoOne is a helper function to insert into a left or right page given
-// the left and right pages have space and the right page is greater than the
-// left.
-func insertIntoOne(key, value []byte, lp, rp *pager.Page) {
-	rpk := rp.GetEntries()[0].Key
-	comp := bytes.Compare(key, rpk)
-	if comp == 0 { // key == rpk
-		rp.SetEntries(append(rp.GetEntries(), pager.PageTuple{Key: key, Value: value}))
-		return
-	}
-	if comp == -1 { // key < rpk
-		lp.SetEntries(append(lp.GetEntries(), pager.PageTuple{Key: key, Value: value}))
-		return
-	}
-	// key > rpk
-	rp.SetEntries(append(rp.GetEntries(), pager.PageTuple{Key: key, Value: value}))
-}
-
-func (kv *KV) getLeafPage(nextPageNumber int, key []byte) *pager.Page {
-	p := kv.pager.GetPage(nextPageNumber)
-	for !p.IsLeaf() {
-		nextPage, found := p.GetValue(key)
-		if !found {
-			return nil
-		}
-		nextPageNumber16 := binary.LittleEndian.Uint16(nextPage)
-		p = kv.pager.GetPage(int(nextPageNumber16))
-	}
-	return p
-}
-
-func (kv *KV) splitPage(page *pager.Page) (left, right *pager.Page) {
-	hasParent, _ := page.GetParentPageNumber()
-	_, parentLeftPageNumber := page.GetLeftPageNumber()
-	_, parentRightPageNumber := page.GetRightPageNumber()
-	parentType := page.GetType()
-	entries := page.GetEntries()
-	// If it is splitting the root page should make two new nodes so the
-	// root can keep the same page number. Otherwise will only need to split
-	// into one new node and also use the existing node.
-	leftPage := page
-	if !hasParent {
-		leftPage = kv.pager.NewPage()
-	}
-	leftEntries := entries[:len(entries)/2]
-	leftPage.SetEntries(leftEntries)
-	leftPage.SetType(parentType)
-	rightPage := kv.pager.NewPage()
-	rightEntries := entries[len(entries)/2:]
-	rightPage.SetEntries(rightEntries)
-	rightPage.SetType(parentType)
-	// Set relative left page's right page
-	if parentLeftPageNumber != 0 {
-		kv.pager.GetPage(parentLeftPageNumber).SetRightPageNumber(leftPage.GetNumber())
-	}
-	// Set split left's left and right
-	leftPage.SetLeftPageNumber(parentLeftPageNumber)
-	leftPage.SetRightPageNumber(rightPage.GetNumber())
-	// Set split right's left and right
-	rightPage.SetLeftPageNumber(leftPage.GetNumber())
-	rightPage.SetRightPageNumber(parentRightPageNumber)
-	// Set relative right page's left page
-	if parentRightPageNumber != 0 {
-		kv.pager.GetPage(parentRightPageNumber).SetLeftPageNumber(rightPage.GetNumber())
-	}
-	return leftPage, rightPage
-}
-
-func (kv *KV) parentInsert(p, l, r *pager.Page) {
-	k1 := l.GetEntries()[0].Key
-	v1 := l.GetNumberAsBytes()
-	k2 := r.GetEntries()[0].Key
-	v2 := r.GetNumberAsBytes()
-	tuples := []pager.PageTuple{{Key: k1, Value: v1}, {Key: k2, Value: v2}}
-	if p.CanInsertTuples(tuples) {
-		p.SetValue(k1, v1)
-		p.SetValue(k2, v2)
-		l.SetParentPageNumber(p.GetNumber())
-		r.SetParentPageNumber(p.GetNumber())
-		return
-	}
-	leftPage, rightPage := kv.splitPage(p)
-	hasParent, parentPageNumber := p.GetParentPageNumber()
-	if hasParent {
-		l.SetParentPageNumber(parentPageNumber)
-		r.SetParentPageNumber(parentPageNumber)
-		parentParent := kv.pager.GetPage(parentPageNumber)
-		kv.parentInsert(parentParent, leftPage, rightPage)
-		return
-	}
-	// The root node needs to be split. It is wise to keep the root node the
-	// same page number so the table catalog doesn't need to be updated every
-	// time a root node splits.
-	p.SetTypeInternal()
-	p.SetEntries([]pager.PageTuple{
-		{
-			Key:   leftPage.GetEntries()[0].Key,
-			Value: leftPage.GetNumberAsBytes(),
-		},
-		{
-			Key:   rightPage.GetEntries()[0].Key,
-			Value: rightPage.GetNumberAsBytes(),
-		},
-	})
-	leftPage.SetParentPageNumber(p.GetNumber())
-	rightPage.SetParentPageNumber(p.GetNumber())
 }
 
 // NewBTree creates an empty BTree and returns the new tree's root page number.
@@ -237,32 +73,6 @@ func (kv *KV) EndWriteTransaction() error {
 	return kv.pager.EndWrite()
 }
 
-// NewRowID returns the highest unused key in a table for the rootPageNumber.
-// For a integer key it is the largest integer key plus one.
-func (kv *KV) NewRowID(rootPageNumber int) (int, error) {
-	// TODO could possibly cache this in the catalog or something
-	candidate := kv.pager.GetPage(rootPageNumber)
-	if len(candidate.GetEntries()) == 0 {
-		return 1, nil
-	}
-	for !candidate.IsLeaf() {
-		pagePointers := candidate.GetEntries()
-		descendingPageNum := pagePointers[len(pagePointers)-1].Value
-		descendingPageNum16 := binary.LittleEndian.Uint16(descendingPageNum)
-		candidate = kv.pager.GetPage(int(descendingPageNum16))
-	}
-	k := candidate.GetEntries()[len(candidate.GetEntries())-1].Key
-	dk, err := DecodeKey(k)
-	if err != nil {
-		return 0, err
-	}
-	dki, ok := dk.(int)
-	if !ok {
-		return 0, errors.New("non integer key increment not supported")
-	}
-	return dki + 1, nil
-}
-
 // ParseSchema updates the system catalog by reading the schema table.
 func (kv *KV) ParseSchema() error {
 	c := kv.NewCursor(1)
@@ -291,20 +101,33 @@ func (kv *KV) ParseSchema() error {
 	return nil
 }
 
+// TODO possibly split the cursor into read and write cursors
 // Cursor is an abstraction that can seek and scan ranges of a btree.
 type Cursor struct {
-	// rootPageNumber is the table this cursor operates on
-	rootPageNumber          int
-	currentPageEntries      []pager.PageTuple
-	currentTupleIndex       int
-	currentLeftPage         int
-	currentRightPage        int
+	// rootPageNumber is the object this cursor operates on
+	rootPageNumber int
+	// currentPageEntries is the cached entries for this cursor
+	currentPageEntries []pager.PageTuple
+	// currentTupleIndex is the current tuple being pointed to
+	currentTupleIndex int
+	// currentLeftPage is the smaller page next to the cursor's current page.
+	currentLeftPage int
+	// currentRightPage is the page greater than the cursor's current page.
+	currentRightPage int
+	// currentPageEntriesCount is the cached count of entries on the current
+	// page.
 	currentPageEntriesCount int
-	pager                   *pager.Pager
+	// pager is the cursors pager. This may be the core database pager or an
+	// ephemeral pager.
+	// TODO ephemeral pager
+	pager *pager.Pager
 }
 
 // NewCursor creates a cursor the given object's rootPageNumber.
 func (kv *KV) NewCursor(rootPageNumber int) *Cursor {
+	if rootPageNumber == 0 {
+		panic("root page cannot be 0")
+	}
 	return &Cursor{
 		rootPageNumber: rootPageNumber,
 		pager:          kv.pager,
@@ -409,4 +232,208 @@ func (c *Cursor) Count() int {
 		sum += c.currentPageEntriesCount
 	}
 	return sum
+}
+
+// Exists will probe the specified key and return true or false if the key
+// exists or not.
+func (c *Cursor) Exists(key []byte) bool {
+	pageNumber := c.rootPageNumber
+	for {
+		page := c.pager.GetPage(pageNumber)
+		v, found := page.GetValue(key)
+		if page.IsLeaf() {
+			return found
+		}
+		if !found {
+			return false
+		}
+		pageNumber = int(binary.LittleEndian.Uint16(v))
+	}
+}
+
+// NewRowID returns the highest unused key in a table for the rootPageNumber.
+// For a integer key it is the largest integer key plus one.
+func (c *Cursor) NewRowID() int {
+	// TODO could possibly cache this in the catalog or on the cursor
+	candidate := c.pager.GetPage(c.rootPageNumber)
+	if len(candidate.GetEntries()) == 0 {
+		return 1
+	}
+	for !candidate.IsLeaf() {
+		pagePointers := candidate.GetEntries()
+		descendingPageNum := pagePointers[len(pagePointers)-1].Value
+		descendingPageNum16 := binary.LittleEndian.Uint16(descendingPageNum)
+		candidate = c.pager.GetPage(int(descendingPageNum16))
+	}
+	k := candidate.GetEntries()[len(candidate.GetEntries())-1].Key
+	dk, err := DecodeKey(k)
+	if err != nil {
+		log.Fatal(err)
+	}
+	dki, ok := dk.(int)
+	if !ok {
+		log.Fatal("non integer key increment not supported")
+	}
+	return dki + 1
+}
+
+// Get returns a byte array corresponding to the key and a bool indicating if
+// the key was found. The pageNumber has to do with the root page of the
+// corresponding table. The system catalog uses the page number 1.
+func (c *Cursor) Get(key []byte) ([]byte, bool) {
+	// TODO improve interface to move the cursor instead of a one time point
+	pageNumber := c.rootPageNumber
+	for {
+		page := c.pager.GetPage(pageNumber)
+		v, found := page.GetValue(key)
+		if page.IsLeaf() {
+			return v, found
+		}
+		if !found {
+			return nil, false
+		}
+		pageNumber = int(binary.LittleEndian.Uint16(v))
+	}
+}
+
+// Set inserts or updates the value for the given key. The pageNumber has to do
+// with the root page of the corresponding table. The system catalog uses the
+// page number 1.
+func (c *Cursor) Set(key, value []byte) {
+	// TODO set doesn't differentiate between insert and update
+	// TODO improve to move the cursor
+	leafPage := c.getLeafPage(c.rootPageNumber, key)
+	if leafPage.CanInsertTuple(key, value) {
+		leafPage.SetValue(key, value)
+		return
+	}
+	leftPage, rightPage := c.splitPage(leafPage)
+	c.insertIntoOne(key, value, leftPage, rightPage)
+	hasParent, parentPageNumber := leafPage.GetParentPageNumber()
+	if hasParent {
+		parentPage := c.pager.GetPage(parentPageNumber)
+		c.parentInsert(parentPage, leftPage, rightPage)
+		return
+	}
+	leafPage.SetTypeInternal()
+	leafPage.SetEntries([]pager.PageTuple{
+		{
+			Key:   leftPage.GetEntries()[0].Key,
+			Value: leftPage.GetNumberAsBytes(),
+		},
+		{
+			Key:   rightPage.GetEntries()[0].Key,
+			Value: rightPage.GetNumberAsBytes(),
+		},
+	})
+	leftPage.SetParentPageNumber(leafPage.GetNumber())
+	rightPage.SetParentPageNumber(leafPage.GetNumber())
+}
+
+// insertIntoOne is a helper function to insert into a left or right page given
+// the left and right pages have space and the right page is greater than the
+// left.
+func (c *Cursor) insertIntoOne(key, value []byte, lp, rp *pager.Page) {
+	rpk := rp.GetEntries()[0].Key
+	comp := bytes.Compare(key, rpk)
+	if comp == 0 { // key == rpk
+		rp.SetEntries(append(rp.GetEntries(), pager.PageTuple{Key: key, Value: value}))
+		return
+	}
+	if comp == -1 { // key < rpk
+		lp.SetEntries(append(lp.GetEntries(), pager.PageTuple{Key: key, Value: value}))
+		return
+	}
+	// key > rpk
+	rp.SetEntries(append(rp.GetEntries(), pager.PageTuple{Key: key, Value: value}))
+}
+
+func (c *Cursor) getLeafPage(nextPageNumber int, key []byte) *pager.Page {
+	p := c.pager.GetPage(nextPageNumber)
+	for !p.IsLeaf() {
+		nextPage, found := p.GetValue(key)
+		if !found {
+			return nil
+		}
+		nextPageNumber16 := binary.LittleEndian.Uint16(nextPage)
+		p = c.pager.GetPage(int(nextPageNumber16))
+	}
+	return p
+}
+
+func (c *Cursor) splitPage(page *pager.Page) (left, right *pager.Page) {
+	hasParent, _ := page.GetParentPageNumber()
+	_, parentLeftPageNumber := page.GetLeftPageNumber()
+	_, parentRightPageNumber := page.GetRightPageNumber()
+	parentType := page.GetType()
+	entries := page.GetEntries()
+	// If it is splitting the root page should make two new nodes so the
+	// root can keep the same page number. Otherwise will only need to split
+	// into one new node and also use the existing node.
+	leftPage := page
+	if !hasParent {
+		leftPage = c.pager.NewPage()
+	}
+	leftEntries := entries[:len(entries)/2]
+	leftPage.SetEntries(leftEntries)
+	leftPage.SetType(parentType)
+	rightPage := c.pager.NewPage()
+	rightEntries := entries[len(entries)/2:]
+	rightPage.SetEntries(rightEntries)
+	rightPage.SetType(parentType)
+	// Set relative left page's right page
+	if parentLeftPageNumber != 0 {
+		c.pager.GetPage(parentLeftPageNumber).SetRightPageNumber(leftPage.GetNumber())
+	}
+	// Set split left's left and right
+	leftPage.SetLeftPageNumber(parentLeftPageNumber)
+	leftPage.SetRightPageNumber(rightPage.GetNumber())
+	// Set split right's left and right
+	rightPage.SetLeftPageNumber(leftPage.GetNumber())
+	rightPage.SetRightPageNumber(parentRightPageNumber)
+	// Set relative right page's left page
+	if parentRightPageNumber != 0 {
+		c.pager.GetPage(parentRightPageNumber).SetLeftPageNumber(rightPage.GetNumber())
+	}
+	return leftPage, rightPage
+}
+
+func (c *Cursor) parentInsert(p, l, r *pager.Page) {
+	k1 := l.GetEntries()[0].Key
+	v1 := l.GetNumberAsBytes()
+	k2 := r.GetEntries()[0].Key
+	v2 := r.GetNumberAsBytes()
+	tuples := []pager.PageTuple{{Key: k1, Value: v1}, {Key: k2, Value: v2}}
+	if p.CanInsertTuples(tuples) {
+		p.SetValue(k1, v1)
+		p.SetValue(k2, v2)
+		l.SetParentPageNumber(p.GetNumber())
+		r.SetParentPageNumber(p.GetNumber())
+		return
+	}
+	leftPage, rightPage := c.splitPage(p)
+	hasParent, parentPageNumber := p.GetParentPageNumber()
+	if hasParent {
+		l.SetParentPageNumber(parentPageNumber)
+		r.SetParentPageNumber(parentPageNumber)
+		parentParent := c.pager.GetPage(parentPageNumber)
+		c.parentInsert(parentParent, leftPage, rightPage)
+		return
+	}
+	// The root node needs to be split. It is wise to keep the root node the
+	// same page number so the table catalog doesn't need to be updated every
+	// time a root node splits.
+	p.SetTypeInternal()
+	p.SetEntries([]pager.PageTuple{
+		{
+			Key:   leftPage.GetEntries()[0].Key,
+			Value: leftPage.GetNumberAsBytes(),
+		},
+		{
+			Key:   rightPage.GetEntries()[0].Key,
+			Value: rightPage.GetNumberAsBytes(),
+		},
+	})
+	leftPage.SetParentPageNumber(p.GetNumber())
+	rightPage.SetParentPageNumber(p.GetNumber())
 }

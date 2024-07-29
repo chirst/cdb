@@ -46,10 +46,12 @@ func (r *repl) Run() {
 			if input == ".exit" {
 				os.Exit(0)
 			}
+			fmt.Println("Command not supported")
+			continue
 		}
 		result := r.db.Execute(input)
 		if result.Err != nil {
-			fmt.Printf("Err: %s\n", result.Err.Error())
+			fmt.Printf("Err: %s\n", result.Err)
 			continue
 		}
 		if result.Text != "" {
@@ -58,11 +60,12 @@ func (r *repl) Run() {
 		if len(result.ResultRows) != 0 {
 			fmt.Println(r.printRows(result.ResultHeader, result.ResultRows))
 		}
+		fmt.Printf("Time: %s\n", result.Duration)
 	}
 }
 
 func (*repl) getInput(reader *bufio.Scanner) bool {
-	fmt.Printf("cdb > ")
+	fmt.Printf("cdb> ")
 	return reader.Scan()
 }
 

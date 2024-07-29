@@ -69,8 +69,8 @@ const (
 	// pageTypeLeaf is a page representing a B tree leaf.
 	pageTypeLeaf   = 2
 	pageTypeOffset = 0
-	// pageTypeSize is a uint16
-	pageTypeSize = 2 // TODO could be uint8
+	// pageTypeSize is a uint8
+	pageTypeSize = 1
 	// pagePointerSize is a uint32 and must be consistent with the free page
 	// counter.
 	pagePointerSize       = 4
@@ -391,7 +391,7 @@ func (p *Page) GetNumberAsBytes() []byte {
 }
 
 func (p *Page) GetType() int {
-	return int(binary.LittleEndian.Uint16(p.content[pageTypeOffset:pageTypeSize]))
+	return int(p.content[pageTypeOffset])
 }
 
 func (p *Page) IsLeaf() bool {
@@ -400,7 +400,7 @@ func (p *Page) IsLeaf() bool {
 
 func (p *Page) SetType(t int) {
 	bytePageType := make([]byte, pageTypeSize)
-	binary.LittleEndian.PutUint16(bytePageType, uint16(t))
+	bytePageType[0] = uint8(t)
 	copy(p.content[pageTypeOffset:pageTypeOffset+pageTypeSize], bytePageType)
 }
 
