@@ -37,6 +37,7 @@ func New(useMemory bool, filename string) (*KV, error) {
 	return ret, nil
 }
 
+// GetCatalog returns and instance of the system catalog.
 func (kv *KV) GetCatalog() *catalog {
 	return kv.catalog
 }
@@ -100,16 +101,26 @@ func (kv *KV) ParseSchema() error {
 	return nil
 }
 
+// TODO possibly split the cursor into read and write cursors
 // Cursor is an abstraction that can seek and scan ranges of a btree.
 type Cursor struct {
-	// rootPageNumber is the table this cursor operates on
-	rootPageNumber          int
-	currentPageEntries      []pager.PageTuple
-	currentTupleIndex       int
-	currentLeftPage         int
-	currentRightPage        int
+	// rootPageNumber is the object this cursor operates on
+	rootPageNumber int
+	// currentPageEntries is the cached entries for this cursor
+	currentPageEntries []pager.PageTuple
+	// currentTupleIndex is the current tuple being pointed to
+	currentTupleIndex int
+	// currentLeftPage is the smaller page next to the cursor's current page.
+	currentLeftPage int
+	// currentRightPage is the page greater than the cursor's current page.
+	currentRightPage int
+	// currentPageEntriesCount is the cached count of entries on the current
+	// page.
 	currentPageEntriesCount int
-	pager                   *pager.Pager
+	// pager is the cursors pager. This may be the core database pager or an
+	// ephemeral pager.
+	// TODO ephemeral pager
+	pager *pager.Pager
 }
 
 // NewCursor creates a cursor the given object's rootPageNumber.
@@ -270,6 +281,7 @@ func (c *Cursor) NewRowID() int {
 // the key was found. The pageNumber has to do with the root page of the
 // corresponding table. The system catalog uses the page number 1.
 func (c *Cursor) Get(key []byte) ([]byte, bool) {
+	// TODO improve interface to move the cursor instead of a one time point
 	pageNumber := c.rootPageNumber
 	for {
 		page := c.pager.GetPage(pageNumber)
@@ -289,6 +301,7 @@ func (c *Cursor) Get(key []byte) ([]byte, bool) {
 // page number 1.
 func (c *Cursor) Set(key, value []byte) {
 	// TODO set doesn't differentiate between insert and update
+	// TODO improve to move the cursor
 	leafPage := c.getLeafPage(c.rootPageNumber, key)
 	if leafPage.CanInsertTuple(key, value) {
 		leafPage.SetValue(key, value)
