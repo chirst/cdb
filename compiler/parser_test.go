@@ -95,6 +95,83 @@ func TestParseSelect(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "select table column",
+			tokens: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+				{tkSeparator, "."},
+				{tkIdentifier, "id"},
+				{tkWhitespace, " "},
+				{tkKeyword, "FROM"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+			},
+			expect: &SelectStmt{
+				StmtBase: &StmtBase{},
+				From: &From{
+					TableName: "foo",
+				},
+				ResultColumn: ResultColumn{
+					Expression: &ColumnRef{
+						Table:  "foo",
+						Column: "id",
+					},
+				},
+			},
+		},
+		{
+			name: "select table all",
+			tokens: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+				{tkSeparator, "."},
+				{tkPunctuator, "*"},
+				{tkWhitespace, " "},
+				{tkKeyword, "FROM"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+			},
+			expect: &SelectStmt{
+				StmtBase: &StmtBase{},
+				From: &From{
+					TableName: "foo",
+				},
+				ResultColumn: ResultColumn{
+					AllTable: "foo",
+				},
+			},
+		},
+		{
+			name: "select literal expression with alias",
+			tokens: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkNumeric, "1"},
+				{tkWhitespace, " "},
+				{tkKeyword, "AS"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "bar"},
+				{tkWhitespace, " "},
+				{tkKeyword, "FROM"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+			},
+			expect: &SelectStmt{
+				StmtBase: &StmtBase{},
+				From: &From{
+					TableName: "foo",
+				},
+				ResultColumn: ResultColumn{
+					Expression: &IntLit{
+						Value: 1,
+					},
+					Alias: "bar",
+				},
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

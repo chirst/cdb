@@ -55,6 +55,7 @@ const (
 	kwText    = "TEXT"
 	kwPrimary = "PRIMARY"
 	kwKey     = "KEY"
+	kwAs      = "AS"
 )
 
 var keywords = []string{
@@ -73,6 +74,7 @@ var keywords = []string{
 	kwText,
 	kwPrimary,
 	kwKey,
+	kwAs,
 }
 
 func (*lexer) isKeyword(w string) bool {
@@ -204,7 +206,7 @@ func (*lexer) isDigit(r rune) bool {
 }
 
 func (*lexer) isSeparator(r rune) bool {
-	return r == ',' || r == '(' || r == ')' || r == ';'
+	return r == ',' || r == '(' || r == ')' || r == ';' || r == '.'
 }
 
 func (*lexer) isSingleQuote(r rune) bool {
