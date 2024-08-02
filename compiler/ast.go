@@ -13,8 +13,8 @@ type StmtBase struct {
 
 type SelectStmt struct {
 	*StmtBase
-	From         *From
-	ResultColumn ResultColumn
+	From          *From
+	ResultColumns []ResultColumn
 }
 
 // ResultColumn is the column definitions in a select statement.

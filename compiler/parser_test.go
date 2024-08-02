@@ -33,8 +33,10 @@ func TestParseSelect(t *testing.T) {
 				From: &From{
 					TableName: "foo",
 				},
-				ResultColumn: ResultColumn{
-					All: true,
+				ResultColumns: []ResultColumn{
+					{
+						All: true,
+					},
 				},
 			},
 		},
@@ -63,8 +65,10 @@ func TestParseSelect(t *testing.T) {
 				From: &From{
 					TableName: "foo",
 				},
-				ResultColumn: ResultColumn{
-					All: true,
+				ResultColumns: []ResultColumn{
+					{
+						All: true,
+					},
 				},
 			},
 		},
@@ -89,9 +93,11 @@ func TestParseSelect(t *testing.T) {
 				From: &From{
 					TableName: "foo",
 				},
-				ResultColumn: ResultColumn{
-					Count: true,
-					All:   false,
+				ResultColumns: []ResultColumn{
+					{
+						Count: true,
+						All:   false,
+					},
 				},
 			},
 		},
@@ -113,10 +119,12 @@ func TestParseSelect(t *testing.T) {
 				From: &From{
 					TableName: "foo",
 				},
-				ResultColumn: ResultColumn{
-					Expression: &ColumnRef{
-						Table:  "foo",
-						Column: "id",
+				ResultColumns: []ResultColumn{
+					{
+						Expression: &ColumnRef{
+							Table:  "foo",
+							Column: "id",
+						},
 					},
 				},
 			},
@@ -139,8 +147,10 @@ func TestParseSelect(t *testing.T) {
 				From: &From{
 					TableName: "foo",
 				},
-				ResultColumn: ResultColumn{
-					AllTable: "foo",
+				ResultColumns: []ResultColumn{
+					{
+						AllTable: "foo",
+					},
 				},
 			},
 		},
@@ -164,11 +174,13 @@ func TestParseSelect(t *testing.T) {
 				From: &From{
 					TableName: "foo",
 				},
-				ResultColumn: ResultColumn{
-					Expression: &IntLit{
-						Value: 1,
+				ResultColumns: []ResultColumn{
+					{
+						Expression: &IntLit{
+							Value: 1,
+						},
+						Alias: "bar",
 					},
-					Alias: "bar",
 				},
 			},
 		},
