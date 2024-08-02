@@ -83,7 +83,8 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 		return nil, err
 	}
 	var child logicalNode
-	if p.stmt.ResultColumn.All {
+	resultColumn := p.stmt.ResultColumns[0]
+	if resultColumn.All {
 		scanColumns, err := p.getScanColumns()
 		if err != nil {
 			return nil, err
@@ -137,7 +138,8 @@ func (p *selectQueryPlanner) getScanColumns() ([]scanColumn, error) {
 }
 
 func (p *selectQueryPlanner) getProjections() ([]projection, error) {
-	if p.stmt.ResultColumn.All {
+	resultColumn := p.stmt.ResultColumns[0]
+	if resultColumn.All {
 		cols, err := p.catalog.GetColumns(p.stmt.From.TableName)
 		if err != nil {
 			return nil, err
@@ -150,7 +152,7 @@ func (p *selectQueryPlanner) getProjections() ([]projection, error) {
 		}
 		return projections, nil
 	}
-	if p.stmt.ResultColumn.Count {
+	if resultColumn.Count {
 		return []projection{
 			{
 				isCount: true,

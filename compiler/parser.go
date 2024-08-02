@@ -6,6 +6,7 @@ package compiler
 
 import (
 	"fmt"
+	"strconv"
 )
 
 const (
@@ -33,9 +34,8 @@ func (p *parser) parseStmt() (Stmt, error) {
 	t := p.tokens[p.start]
 	sb := &StmtBase{}
 	if t.value == kwExplain {
-		t = p.nextNonSpace()
-		nv := p.peekNextNonSpace().value
-		if nv == kwQuery {
+		nv := p.nextNonSpace()
+		if nv.value == kwQuery {
 			tp := p.nextNonSpace()
 			if tp.value == kwPlan {
 				sb.ExplainQueryPlan = true
@@ -45,6 +45,7 @@ func (p *parser) parseStmt() (Stmt, error) {
 			}
 		} else {
 			sb.Explain = true
+			t = nv
 		}
 	}
 	switch t.value {
@@ -63,28 +64,11 @@ func (p *parser) parseSelect(sb *StmtBase) (*SelectStmt, error) {
 	if p.tokens[p.end].value != kwSelect {
 		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
-	r := p.nextNonSpace()
-	if r.value == "*" {
-		stmt.ResultColumn = ResultColumn{
-			All: true,
-		}
-	} else if r.value == kwCount {
-		if v := p.nextNonSpace().value; v != "(" {
-			return nil, fmt.Errorf(tokenErr, v)
-		}
-		if v := p.nextNonSpace().value; v != "*" {
-			return nil, fmt.Errorf(tokenErr, v)
-		}
-		if v := p.nextNonSpace().value; v != ")" {
-			return nil, fmt.Errorf(tokenErr, v)
-		}
-		stmt.ResultColumn = ResultColumn{
-			Count: true,
-		}
-	} else {
-		return nil, fmt.Errorf(tokenErr, r.value)
+	resultColumn, err := p.parseResultColumn()
+	if err != nil {
+		return nil, err
 	}
-
+	stmt.ResultColumns = append(stmt.ResultColumns, *resultColumn)
 	f := p.nextNonSpace()
 	if f.tokenType == tkEOF || f.value == ";" {
 		return stmt, nil
@@ -101,6 +85,89 @@ func (p *parser) parseSelect(sb *StmtBase) (*SelectStmt, error) {
 		TableName: t.value,
 	}
 	return stmt, nil
+}
+
+// parseResultColumn parses a single result column
+func (p *parser) parseResultColumn() (*ResultColumn, error) {
+	resultColumn := &ResultColumn{}
+	r := p.nextNonSpace()
+	// Handle a result column for all or *.
+	if r.value == "*" {
+		resultColumn.All = true
+		return resultColumn, nil
+	} else if r.value == kwCount {
+		// Handle the result column for the COUNT(*) aggregate. TODO this will
+		// probably be refactored to an expression.
+		if v := p.nextNonSpace().value; v != "(" {
+			return nil, fmt.Errorf(tokenErr, v)
+		}
+		if v := p.nextNonSpace().value; v != "*" {
+			return nil, fmt.Errorf(tokenErr, v)
+		}
+		if v := p.nextNonSpace().value; v != ")" {
+			return nil, fmt.Errorf(tokenErr, v)
+		}
+		resultColumn.Count = true
+		err := p.parseAlias(resultColumn)
+		return resultColumn, err
+	} else if r.tokenType == tkIdentifier {
+		// Handle an identifier such as a table or column name
+		if p.peekNextNonSpace().value == "." {
+			// The identifier may be followed by "." meaning the identifier is a
+			// table and after the dot is the column.
+			p.nextNonSpace()
+			v := p.nextNonSpace().value
+			// A star after the dot is to select all the cols in a table.
+			if v == "*" {
+				resultColumn.AllTable = r.value
+			} else {
+				// Otherwise after the dot has to be a specific column name.
+				resultColumn.Expression = &ColumnRef{
+					Table:  r.value,
+					Column: v,
+				}
+				err := p.parseAlias(resultColumn)
+				return resultColumn, err
+			}
+			return resultColumn, nil
+		} else if p.peekNextNonSpace().tokenType == tkWhitespace {
+			// If the identifier is followed by whitespace the identifier is a
+			// column name. There is no table name meaning the table will have
+			// to be resolved in the planner.
+			resultColumn.Expression = &ColumnRef{
+				Column: r.value,
+			}
+			err := p.parseAlias(resultColumn)
+			return resultColumn, err
+		} else {
+			return nil, fmt.Errorf(tokenErr, r.value)
+		}
+	} else if r.tokenType == tkNumeric {
+		// A numeric value may begin a complex expression.
+		vi, err := strconv.Atoi(r.value)
+		if err != nil {
+			return nil, err
+		}
+		resultColumn.Expression = &IntLit{
+			Value: vi,
+		}
+		err = p.parseAlias(resultColumn)
+		return resultColumn, err
+	}
+	return nil, fmt.Errorf(tokenErr, r.value)
+}
+
+func (p *parser) parseAlias(resultColumn *ResultColumn) error {
+	a := p.peekNextNonSpace().value
+	if a == kwAs {
+		p.nextNonSpace()
+		alias := p.nextNonSpace()
+		if alias.tokenType != tkIdentifier {
+			return fmt.Errorf(identErr, alias.value)
+		}
+		resultColumn.Alias = alias.value
+	}
+	return nil
 }
 
 func (p *parser) parseCreate(sb *StmtBase) (*CreateStmt, error) {
@@ -237,7 +304,7 @@ func (p *parser) nextNonSpace() token {
 }
 
 func (p *parser) peekNextNonSpace() token {
-	tmpEnd := p.end
+	tmpEnd := p.end + 1
 	if tmpEnd > len(p.tokens)-1 {
 		return token{tkEOF, ""}
 	}

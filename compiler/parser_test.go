@@ -33,8 +33,10 @@ func TestParseSelect(t *testing.T) {
 				From: &From{
 					TableName: "foo",
 				},
-				ResultColumn: ResultColumn{
-					All: true,
+				ResultColumns: []ResultColumn{
+					{
+						All: true,
+					},
 				},
 			},
 		},
@@ -63,8 +65,10 @@ func TestParseSelect(t *testing.T) {
 				From: &From{
 					TableName: "foo",
 				},
-				ResultColumn: ResultColumn{
-					All: true,
+				ResultColumns: []ResultColumn{
+					{
+						All: true,
+					},
 				},
 			},
 		},
@@ -89,9 +93,94 @@ func TestParseSelect(t *testing.T) {
 				From: &From{
 					TableName: "foo",
 				},
-				ResultColumn: ResultColumn{
-					Count: true,
-					All:   false,
+				ResultColumns: []ResultColumn{
+					{
+						Count: true,
+						All:   false,
+					},
+				},
+			},
+		},
+		{
+			name: "select table column",
+			tokens: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+				{tkSeparator, "."},
+				{tkIdentifier, "id"},
+				{tkWhitespace, " "},
+				{tkKeyword, "FROM"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+			},
+			expect: &SelectStmt{
+				StmtBase: &StmtBase{},
+				From: &From{
+					TableName: "foo",
+				},
+				ResultColumns: []ResultColumn{
+					{
+						Expression: &ColumnRef{
+							Table:  "foo",
+							Column: "id",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "select table all",
+			tokens: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+				{tkSeparator, "."},
+				{tkPunctuator, "*"},
+				{tkWhitespace, " "},
+				{tkKeyword, "FROM"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+			},
+			expect: &SelectStmt{
+				StmtBase: &StmtBase{},
+				From: &From{
+					TableName: "foo",
+				},
+				ResultColumns: []ResultColumn{
+					{
+						AllTable: "foo",
+					},
+				},
+			},
+		},
+		{
+			name: "select literal expression with alias",
+			tokens: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkNumeric, "1"},
+				{tkWhitespace, " "},
+				{tkKeyword, "AS"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "bar"},
+				{tkWhitespace, " "},
+				{tkKeyword, "FROM"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+			},
+			expect: &SelectStmt{
+				StmtBase: &StmtBase{},
+				From: &From{
+					TableName: "foo",
+				},
+				ResultColumns: []ResultColumn{
+					{
+						Expression: &IntLit{
+							Value: 1,
+						},
+						Alias: "bar",
+					},
 				},
 			},
 		},

@@ -107,6 +107,50 @@ func TestLexSelect(t *testing.T) {
 				{tkSeparator, ";"},
 			},
 		},
+		{
+			sql: "SELECT foo.id FROM foo",
+			expected: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+				{tkSeparator, "."},
+				{tkIdentifier, "id"},
+				{tkWhitespace, " "},
+				{tkKeyword, "FROM"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+			},
+		},
+		{
+			sql: "SELECT foo.* FROM foo",
+			expected: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+				{tkSeparator, "."},
+				{tkPunctuator, "*"},
+				{tkWhitespace, " "},
+				{tkKeyword, "FROM"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+			},
+		},
+		{
+			sql: "SELECT 1 AS bar FROM foo",
+			expected: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkNumeric, "1"},
+				{tkWhitespace, " "},
+				{tkKeyword, "AS"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "bar"},
+				{tkWhitespace, " "},
+				{tkKeyword, "FROM"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.sql, func(t *testing.T) {
