@@ -30,12 +30,12 @@ const (
 	tkSeparator
 	// tkOperator is a symbol that operates on arguments.
 	tkOperator
-	// tkPunctuator is punctuation that is neither a separator or operator.
-	tkPunctuator
 	// tkLiteral is a quoted text value like 'foo'.
 	tkLiteral
 	// tkNumeric is a numeric value like 1, 1.2, or -3.
 	tkNumeric
+	// tkPunctuator is punctuation that is neither a separator or operator.
+	// tkPunctuator
 )
 
 // Keywords where kw is keyword
@@ -58,6 +58,7 @@ const (
 	kwAs      = "AS"
 )
 
+// keywords is a list of all keywords.
 var keywords = []string{
 	kwExplain,
 	kwQuery,
@@ -77,9 +78,32 @@ var keywords = []string{
 	kwAs,
 }
 
-func (*lexer) isKeyword(w string) bool {
-	uw := strings.ToUpper(w)
-	return slices.Contains(keywords, uw)
+// Operators where op is operator.
+const (
+	opAdd = "+"
+	opSub = "-"
+	opMul = "*"
+	opDiv = "/"
+	opExp = "^"
+)
+
+// operators is a list of all operators.
+var operators = []string{
+	opAdd,
+	opSub,
+	opMul,
+	opDiv,
+	opExp,
+}
+
+// opPrecedence defines operator precedence. The higher the number the higher
+// the precedence.
+var opPrecedence = map[string]int{
+	opAdd: 1,
+	opSub: 1,
+	opMul: 2,
+	opDiv: 2,
+	opExp: 3,
 }
 
 type lexer struct {
@@ -114,12 +138,12 @@ func (l *lexer) getToken() token {
 		return l.scanWord()
 	case l.isDigit(r):
 		return l.scanDigit()
-	case l.isAsterisk(r):
-		return l.scanAsterisk()
 	case l.isSeparator(r):
 		return l.scanSeparator()
 	case l.isSingleQuote(r):
 		return l.scanLiteral()
+	case l.isOperator(r):
+		return l.scanOperator()
 	}
 	return token{tkEOF, ""}
 }
@@ -166,11 +190,6 @@ func (l *lexer) scanDigit() token {
 	return token{tokenType: tkNumeric, value: l.src[l.start:l.end]}
 }
 
-func (l *lexer) scanAsterisk() token {
-	l.next()
-	return token{tokenType: tkPunctuator, value: l.src[l.start:l.end]}
-}
-
 func (l *lexer) scanSeparator() token {
 	l.next()
 	return token{tokenType: tkSeparator, value: l.src[l.start:l.end]}
@@ -183,6 +202,11 @@ func (l *lexer) scanLiteral() token {
 	}
 	l.next()
 	return token{tokenType: tkLiteral, value: l.src[l.start:l.end]}
+}
+
+func (l *lexer) scanOperator() token {
+	l.next()
+	return token{tokenType: tkOperator, value: l.src[l.start:l.end]}
 }
 
 func (*lexer) isWhiteSpace(r rune) bool {
@@ -211,4 +235,17 @@ func (*lexer) isSeparator(r rune) bool {
 
 func (*lexer) isSingleQuote(r rune) bool {
 	return r == '\''
+}
+
+func (*lexer) isKeyword(w string) bool {
+	uw := strings.ToUpper(w)
+	return slices.Contains(keywords, uw)
+}
+
+func (*lexer) isOperator(o rune) bool {
+	ros := []rune{}
+	for _, op := range operators {
+		ros = append(ros, rune(op[0]))
+	}
+	return slices.Contains(ros, o)
 }

@@ -96,7 +96,8 @@ func (p *parser) parseResultColumn() (*ResultColumn, error) {
 	// 2. tableName.*
 	// 3. expression AS alias
 	// We simply try and identify the first two then fall into expression
-	// parsing if the first two cases are not present.
+	// parsing if the first two cases are not present. This is a smart way to do
+	// things since expressions are not limited to result columns.
 	if r.value == "*" {
 		resultColumn.All = true
 		return resultColumn, nil
@@ -139,7 +140,7 @@ func (p *parser) parseExpression(resultColumn *ResultColumn) error {
 	r := p.tokens[p.end]
 	switch r.tokenType {
 	case tkIdentifier:
-		r2 := p.nextNonSpace()
+		// r2 := p.nextNonSpace()
 		// tODO
 	case tkLiteral:
 		panic("literal in expression not handled")
