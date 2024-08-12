@@ -91,70 +91,69 @@ func (p *parser) parseSelect(sb *StmtBase) (*SelectStmt, error) {
 func (p *parser) parseResultColumn() (*ResultColumn, error) {
 	resultColumn := &ResultColumn{}
 	r := p.nextNonSpace()
-	// Handle a result column for all or *.
+	// There are three cases to handle here.
+	// 1. *
+	// 2. tableName.*
+	// 3. expression AS alias
+	// We simply try and identify the first two then fall into expression
+	// parsing if the first two cases are not present.
 	if r.value == "*" {
 		resultColumn.All = true
 		return resultColumn, nil
 	} else if r.value == kwCount {
-		// Handle the result column for the COUNT(*) aggregate. TODO this will
-		// probably be refactored to an expression.
-		if v := p.nextNonSpace().value; v != "(" {
-			return nil, fmt.Errorf(tokenErr, v)
-		}
-		if v := p.nextNonSpace().value; v != "*" {
-			return nil, fmt.Errorf(tokenErr, v)
-		}
-		if v := p.nextNonSpace().value; v != ")" {
-			return nil, fmt.Errorf(tokenErr, v)
-		}
-		resultColumn.Count = true
-		err := p.parseAlias(resultColumn)
+		// TODO count is not typical here. It should be refactored to be handled
+		// by the expression logic.
+		err := p.parseCountFunction(resultColumn)
 		return resultColumn, err
 	} else if r.tokenType == tkIdentifier {
-		// Handle an identifier such as a table or column name
 		if p.peekNextNonSpace().value == "." {
-			// The identifier may be followed by "." meaning the identifier is a
-			// table and after the dot is the column.
-			p.nextNonSpace()
-			v := p.nextNonSpace().value
-			// A star after the dot is to select all the cols in a table.
-			if v == "*" {
+			if p.peekNonSpaceBy(2).value == "*" {
+				p.nextNonSpace() // move to .
+				p.nextNonSpace() // move to *
 				resultColumn.AllTable = r.value
-			} else {
-				// Otherwise after the dot has to be a specific column name.
-				resultColumn.Expression = &ColumnRef{
-					Table:  r.value,
-					Column: v,
-				}
-				err := p.parseAlias(resultColumn)
-				return resultColumn, err
+				return resultColumn, nil
 			}
-			return resultColumn, nil
-		} else if p.peekNextNonSpace().tokenType == tkWhitespace {
-			// If the identifier is followed by whitespace the identifier is a
-			// column name. There is no table name meaning the table will have
-			// to be resolved in the planner.
-			resultColumn.Expression = &ColumnRef{
-				Column: r.value,
-			}
-			err := p.parseAlias(resultColumn)
-			return resultColumn, err
-		} else {
-			return nil, fmt.Errorf(tokenErr, r.value)
 		}
-	} else if r.tokenType == tkNumeric {
-		// A numeric value may begin a complex expression.
+	}
+	err := p.parseExpression(resultColumn)
+	return resultColumn, err
+}
+
+func (p *parser) parseCountFunction(resultColumn *ResultColumn) error {
+	// Handle the result column for the COUNT(*) aggregate. TODO this will
+	// probably be refactored to an expression.
+	if v := p.nextNonSpace().value; v != "(" {
+		return fmt.Errorf(tokenErr, v)
+	}
+	if v := p.nextNonSpace().value; v != "*" {
+		return fmt.Errorf(tokenErr, v)
+	}
+	if v := p.nextNonSpace().value; v != ")" {
+		return fmt.Errorf(tokenErr, v)
+	}
+	resultColumn.Count = true
+	return p.parseAlias(resultColumn)
+}
+
+func (p *parser) parseExpression(resultColumn *ResultColumn) error {
+	r := p.tokens[p.end]
+	switch r.tokenType {
+	case tkIdentifier:
+		r2 := p.nextNonSpace()
+		// tODO
+	case tkLiteral:
+		panic("literal in expression not handled")
+	case tkNumeric:
 		vi, err := strconv.Atoi(r.value)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		resultColumn.Expression = &IntLit{
 			Value: vi,
 		}
-		err = p.parseAlias(resultColumn)
-		return resultColumn, err
+		return p.parseAlias(resultColumn)
 	}
-	return nil, fmt.Errorf(tokenErr, r.value)
+	panic("unhandled expression token")
 }
 
 func (p *parser) parseAlias(resultColumn *ResultColumn) error {
@@ -304,7 +303,12 @@ func (p *parser) nextNonSpace() token {
 }
 
 func (p *parser) peekNextNonSpace() token {
-	tmpEnd := p.end + 1
+	return p.peekNonSpaceBy(1)
+}
+
+// peekNonSpaceBy will peek more than one space ahead.
+func (p *parser) peekNonSpaceBy(next int) token {
+	tmpEnd := p.end + next
 	if tmpEnd > len(p.tokens)-1 {
 		return token{tkEOF, ""}
 	}
