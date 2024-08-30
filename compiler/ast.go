@@ -93,6 +93,13 @@ type IntLit struct {
 
 func (*IntLit) Type() string { return "IntLit" }
 
+// StringLit is an expression that is a literal string such as "'asdf'".
+type StringLit struct {
+	Value string
+}
+
+func (*StringLit) Type() string { return "StringLit" }
+
 // FunctionExpr is an expression that represents a function.
 type FunctionExpr struct {
 	Name string

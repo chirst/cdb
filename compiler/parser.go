@@ -116,7 +116,14 @@ func (p *parser) parseResultColumn() (*ResultColumn, error) {
 			}
 		}
 	}
-	err := p.parseExpression(resultColumn)
+	p.rewind()
+	expr := p.parseExpression(0)
+	// handle err
+	// if err != nil {
+	// 	return nil, err
+	// }
+	resultColumn.Expression = expr
+	err := p.parseAlias(resultColumn)
 	return resultColumn, err
 }
 
@@ -136,25 +143,59 @@ func (p *parser) parseCountFunction(resultColumn *ResultColumn) error {
 	return p.parseAlias(resultColumn)
 }
 
-func (p *parser) parseExpression(resultColumn *ResultColumn) error {
-	r := p.tokens[p.end]
-	switch r.tokenType {
-	case tkIdentifier:
-		// r2 := p.nextNonSpace()
-		// tODO
-	case tkLiteral:
-		panic("literal in expression not handled")
-	case tkNumeric:
-		vi, err := strconv.Atoi(r.value)
+// Vaughan Pratt's top down operator precedence parsing algorithm.
+// Definitions:
+//   - Left binding power (LBP) an integer representing operator precedence level.
+//   - Null denotation (NUD) nothing to it's left (prefix).
+//   - Left denotation (LED) something to it's left (infix).
+//   - Right binding power (RBP) parse prefix operator then iteratively parse
+//     infix expressions.
+//
+// Begin with rbp 0
+func (p *parser) parseExpression(rbp int) Expr {
+	// parse prefix into leftToken i.e. if the first token is a prefix operator
+	// take that operator and create a unary expression. If the first token is
+	// literal parse into the literal. If something else throw.
+	first := p.nextNonSpace()
+	var left Expr
+	if first.tokenType == tkLiteral {
+		left = &StringLit{Value: first.value}
+	} else if first.tokenType == tkNumeric {
+		intValue, err := strconv.Atoi(first.value)
 		if err != nil {
-			return err
+			panic("sad")
 		}
-		resultColumn.Expression = &IntLit{
-			Value: vi,
-		}
-		return p.parseAlias(resultColumn)
+		left = &IntLit{Value: intValue}
+	} else {
+		panic("failed to parse null denotation")
 	}
-	panic("unhandled expression token")
+	for {
+		nextToken := p.peekNextNonSpace()
+		if nextToken.tokenType == tkOperator {
+			nextPrecedence := opPrecedence[nextToken.value]
+			if nextPrecedence <= rbp {
+				break
+			} else {
+				p.nextNonSpace()
+				left = &BinaryExpr{
+					Left:     left,
+					Operator: nextToken.value,
+					Right:    p.parseExpression(nextPrecedence),
+				}
+				continue
+			}
+		} else {
+			break
+		}
+	}
+	return left
+	// parse the next expression and get the lbp. If it is the end of input
+	// return 0 to stop parsing. This next expression will be a infix parselet.
+	// while rbp < lbp
+	//   Get an infix parselet with the left being the left of the binary op.
+	//   Create the new expression and assign it to left. These parselets should
+	//   be recursively calling parse sometimes.
+	// return left as it is the entire parsed expression
 }
 
 func (p *parser) parseAlias(resultColumn *ResultColumn) error {
@@ -320,4 +361,9 @@ func (p *parser) peekNonSpaceBy(next int) token {
 		}
 	}
 	return p.tokens[tmpEnd]
+}
+
+func (p *parser) rewind() token {
+	p.end = p.end - 1
+	return p.tokens[p.end]
 }
