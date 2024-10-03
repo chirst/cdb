@@ -50,8 +50,10 @@ func TestGetPlan(t *testing.T) {
 		From: &compiler.From{
 			TableName: "foo",
 		},
-		ResultColumn: compiler.ResultColumn{
-			All: true,
+		ResultColumns: []compiler.ResultColumn{
+			{
+				All: true,
+			},
 		},
 	}
 	mockCatalog := &mockSelectCatalog{}
@@ -85,8 +87,10 @@ func TestGetPlanPKMiddleOrdinal(t *testing.T) {
 		From: &compiler.From{
 			TableName: "foo",
 		},
-		ResultColumn: compiler.ResultColumn{
-			All: true,
+		ResultColumns: []compiler.ResultColumn{
+			{
+				All: true,
+			},
 		},
 	}
 	mockCatalog := &mockSelectCatalog{}
@@ -116,8 +120,10 @@ func TestGetCountAggregate(t *testing.T) {
 		From: &compiler.From{
 			TableName: "foo",
 		},
-		ResultColumn: compiler.ResultColumn{
-			Count: true,
+		ResultColumns: []compiler.ResultColumn{
+			{
+				Count: true,
+			},
 		},
 	}
 	mockCatalog := &mockSelectCatalog{}
@@ -149,8 +155,10 @@ func TestGetPlanNoPrimaryKey(t *testing.T) {
 		From: &compiler.From{
 			TableName: "foo",
 		},
-		ResultColumn: compiler.ResultColumn{
-			All: true,
+		ResultColumns: []compiler.ResultColumn{
+			{
+				All: true,
+			},
 		},
 	}
 	mockCatalog := &mockSelectCatalog{}

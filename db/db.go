@@ -23,11 +23,11 @@ type statementPlanner interface {
 }
 
 type dbCatalog interface {
-	GetColumns(tableOrIndexName string) ([]string, error)
-	GetRootPageNumber(tableOrIndexName string) (int, error)
-	TableExists(tableName string) bool
+	GetColumns(string) ([]string, error)
+	GetRootPageNumber(string) (int, error)
+	TableExists(string) bool
 	GetVersion() string
-	GetPrimaryKeyColumn(tableName string) (string, error)
+	GetPrimaryKeyColumn(string) (string, error)
 }
 
 type DB struct {
