@@ -5,6 +5,7 @@ package compiler
 // Machine).
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 )
@@ -117,14 +118,12 @@ func (p *parser) parseResultColumn() (*ResultColumn, error) {
 		}
 	}
 	p.rewind()
-	expr := p.parseExpression(0)
-	// TODO bubble errors up from expression parsing instead of panicking
-	// handle err
-	// if err != nil {
-	// 	return nil, err
-	// }
+	expr, err := p.parseExpression(0)
+	if err != nil {
+		return nil, err
+	}
 	resultColumn.Expression = expr
-	err := p.parseAlias(resultColumn)
+	err = p.parseAlias(resultColumn)
 	return resultColumn, err
 }
 
@@ -153,7 +152,7 @@ func (p *parser) parseCountFunction(resultColumn *ResultColumn) error {
 //     infix expressions.
 //
 // Begin with rbp 0
-func (p *parser) parseExpression(rbp int) Expr {
+func (p *parser) parseExpression(rbp int) (Expr, error) {
 	// parse prefix into leftToken i.e. if the first token is a prefix operator
 	// take that operator and create a unary expression. If the first token is
 	// literal parse into the literal. If something else throw.
@@ -165,27 +164,31 @@ func (p *parser) parseExpression(rbp int) Expr {
 	} else if first.tokenType == tkNumeric {
 		intValue, err := strconv.Atoi(first.value)
 		if err != nil {
-			panic("sad")
+			return nil, errors.New("failed to parse numeric token")
 		}
 		left = &IntLit{Value: intValue}
 	} else {
 		// TODO support parens here
-		panic("failed to parse null denotation")
+		return nil, errors.New("failed to parse null denotation")
 	}
 	for {
 		nextToken := p.peekNextNonSpace()
 		if nextToken.tokenType != tkOperator {
-			return left
+			return left, nil
 		}
 		lbp := opPrecedence[nextToken.value]
 		if lbp <= rbp {
-			return left
+			return left, nil
 		}
 		p.nextNonSpace()
+		right, err := p.parseExpression(lbp)
+		if err != nil {
+			return nil, err
+		}
 		left = &BinaryExpr{
 			Left:     left,
 			Operator: nextToken.value,
-			Right:    p.parseExpression(lbp),
+			Right:    right,
 		}
 	}
 }
