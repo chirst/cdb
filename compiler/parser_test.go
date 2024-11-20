@@ -390,7 +390,7 @@ func TestParseResultColumn(t *testing.T) {
 			name: "foo.id AS bar",
 			tokens: []token{
 				{tkIdentifier, "foo"},
-				{tkOperator, "."},
+				{tkSeparator, "."},
 				{tkIdentifier, "id"},
 				{tkWhitespace, " "},
 				{tkKeyword, "AS"},

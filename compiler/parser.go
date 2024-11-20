@@ -153,23 +153,9 @@ func (p *parser) parseCountFunction(resultColumn *ResultColumn) error {
 //
 // Begin with rbp 0
 func (p *parser) parseExpression(rbp int) (Expr, error) {
-	// parse prefix into leftToken i.e. if the first token is a prefix operator
-	// take that operator and create a unary expression. If the first token is
-	// literal parse into the literal. If something else throw.
-	first := p.nextNonSpace()
-	// TODO extract left and return expression
-	var left Expr
-	if first.tokenType == tkLiteral {
-		left = &StringLit{Value: first.value}
-	} else if first.tokenType == tkNumeric {
-		intValue, err := strconv.Atoi(first.value)
-		if err != nil {
-			return nil, errors.New("failed to parse numeric token")
-		}
-		left = &IntLit{Value: intValue}
-	} else {
-		// TODO support parens here
-		return nil, errors.New("failed to parse null denotation")
+	left, err := p.getOperand()
+	if err != nil {
+		return nil, err
 	}
 	for {
 		nextToken := p.peekNextNonSpace()
@@ -191,6 +177,42 @@ func (p *parser) parseExpression(rbp int) (Expr, error) {
 			Right:    right,
 		}
 	}
+}
+
+// getOperand is a parseExpression helper who parses token groups into atomic
+// expressions serving as operands in the expression tree. A good example of
+// this would be in the statement `SELECT foo.bar + 1;`. `foo.bar` is processed
+// as three tokens, but needs to be "squashed" into the expression `ColumnRef`.
+func (p *parser) getOperand() (Expr, error) {
+	first := p.nextNonSpace()
+	if first.tokenType == tkLiteral {
+		return &StringLit{Value: first.value}, nil
+	}
+	if first.tokenType == tkNumeric {
+		intValue, err := strconv.Atoi(first.value)
+		if err != nil {
+			return nil, errors.New("failed to parse numeric token")
+		}
+		return &IntLit{Value: intValue}, nil
+	}
+	if first.tokenType == tkIdentifier {
+		dot := p.peekNextNonSpace()
+		if dot.tokenType == tkSeparator {
+			p.nextNonSpace()
+			prop := p.peekNextNonSpace()
+			if prop.tokenType == tkIdentifier {
+				p.nextNonSpace()
+				return &ColumnRef{
+					Table:  first.value,
+					Column: prop.value,
+				}, nil
+			}
+		}
+		return nil, errors.New("failed to parse identifier")
+	}
+	// TODO support unary prefix expression
+	// TODO support parens
+	return nil, errors.New("failed to parse null denotation")
 }
 
 func (p *parser) parseAlias(resultColumn *ResultColumn) error {
