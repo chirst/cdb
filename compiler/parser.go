@@ -118,6 +118,7 @@ func (p *parser) parseResultColumn() (*ResultColumn, error) {
 	}
 	p.rewind()
 	expr := p.parseExpression(0)
+	// TODO bubble errors up from expression parsing instead of panicking
 	// handle err
 	// if err != nil {
 	// 	return nil, err
@@ -157,6 +158,7 @@ func (p *parser) parseExpression(rbp int) Expr {
 	// take that operator and create a unary expression. If the first token is
 	// literal parse into the literal. If something else throw.
 	first := p.nextNonSpace()
+	// TODO extract left and return expression
 	var left Expr
 	if first.tokenType == tkLiteral {
 		left = &StringLit{Value: first.value}
@@ -167,35 +169,25 @@ func (p *parser) parseExpression(rbp int) Expr {
 		}
 		left = &IntLit{Value: intValue}
 	} else {
+		// TODO support parens here
 		panic("failed to parse null denotation")
 	}
 	for {
 		nextToken := p.peekNextNonSpace()
-		if nextToken.tokenType == tkOperator {
-			nextPrecedence := opPrecedence[nextToken.value]
-			if nextPrecedence <= rbp {
-				break
-			} else {
-				p.nextNonSpace()
-				left = &BinaryExpr{
-					Left:     left,
-					Operator: nextToken.value,
-					Right:    p.parseExpression(nextPrecedence),
-				}
-				continue
-			}
-		} else {
-			break
+		if nextToken.tokenType != tkOperator {
+			return left
+		}
+		lbp := opPrecedence[nextToken.value]
+		if lbp <= rbp {
+			return left
+		}
+		p.nextNonSpace()
+		left = &BinaryExpr{
+			Left:     left,
+			Operator: nextToken.value,
+			Right:    p.parseExpression(lbp),
 		}
 	}
-	return left
-	// parse the next expression and get the lbp. If it is the end of input
-	// return 0 to stop parsing. This next expression will be a infix parselet.
-	// while rbp < lbp
-	//   Get an infix parselet with the left being the left of the binary op.
-	//   Create the new expression and assign it to left. These parselets should
-	//   be recursively calling parse sometimes.
-	// return left as it is the entire parsed expression
 }
 
 func (p *parser) parseAlias(resultColumn *ResultColumn) error {

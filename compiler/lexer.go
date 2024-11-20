@@ -99,10 +99,10 @@ var operators = []string{
 // opPrecedence defines operator precedence. The higher the number the higher
 // the precedence.
 var opPrecedence = map[string]int{
-	opAdd: 1,
 	opSub: 1,
-	opMul: 2,
+	opAdd: 1,
 	opDiv: 2,
+	opMul: 2,
 	opExp: 3,
 }
 
