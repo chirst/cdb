@@ -57,7 +57,7 @@ type InsertStmt struct {
 
 // Expr defines the interface of an expression.
 type Expr interface {
-	Type() string
+	Type() string // TODO this pattern may not be the best
 }
 
 // BinaryExpr is for an expression with two operands.

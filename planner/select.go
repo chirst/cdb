@@ -1,6 +1,8 @@
 package planner
 
 import (
+	"slices"
+
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
 )
@@ -84,7 +86,12 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 	}
 	var child logicalNode
 	resultColumn := p.stmt.ResultColumns[0]
-	if resultColumn.All {
+	if resultColumn.Count {
+		child = &countNode{
+			tableName: tableName,
+			rootPage:  rootPageNumber,
+		}
+	} else if resultColumn.All {
 		scanColumns, err := p.getScanColumns()
 		if err != nil {
 			return nil, err
@@ -94,11 +101,37 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 			rootPage:    rootPageNumber,
 			scanColumns: scanColumns,
 		}
-	} else {
-		child = &countNode{
-			tableName: tableName,
-			rootPage:  rootPageNumber,
+	} else if resultColumn.Expression != nil {
+		switch e := resultColumn.Expression.(type) {
+		case *compiler.ColumnRef:
+			if e.Table == "" {
+				// TODO should do better at checking no table
+				e.Table = p.stmt.From.TableName
+			}
+			cols, err := p.catalog.GetColumns(e.Table)
+			if err != nil {
+				return nil, err
+			}
+			colIdx := slices.Index(cols, e.Column)
+			pkCol, err := p.catalog.GetPrimaryKeyColumn(e.Table)
+			if err != nil {
+				return nil, err
+			}
+			child = &scanNode{
+				tableName: e.Table,
+				rootPage:  rootPageNumber,
+				scanColumns: []scanColumn{
+					{
+						isPrimaryKey: pkCol == e.Column,
+						colIdx:       colIdx,
+					},
+				},
+			}
+		default:
+			panic("unhandled expression")
 		}
+	} else {
+		panic("unhandled result column")
 	}
 	projections, err := p.getProjections()
 	if err != nil {
@@ -139,6 +172,13 @@ func (p *selectQueryPlanner) getScanColumns() ([]scanColumn, error) {
 
 func (p *selectQueryPlanner) getProjections() ([]projection, error) {
 	resultColumn := p.stmt.ResultColumns[0]
+	if resultColumn.Count {
+		return []projection{
+			{
+				isCount: true,
+			},
+		}, nil
+	}
 	if resultColumn.All {
 		cols, err := p.catalog.GetColumns(p.stmt.From.TableName)
 		if err != nil {
@@ -152,12 +192,17 @@ func (p *selectQueryPlanner) getProjections() ([]projection, error) {
 		}
 		return projections, nil
 	}
-	if resultColumn.Count {
-		return []projection{
-			{
-				isCount: true,
-			},
-		}, nil
+	if resultColumn.Expression != nil {
+		switch e := resultColumn.Expression.(type) {
+		case *compiler.ColumnRef:
+			return []projection{
+				{
+					colName: e.Column,
+				},
+			}, nil
+		default:
+			panic("unhandled expression")
+		}
 	}
 	panic("unhandled projection")
 }

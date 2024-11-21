@@ -196,8 +196,8 @@ func (p *parser) getOperand() (Expr, error) {
 		return &IntLit{Value: intValue}, nil
 	}
 	if first.tokenType == tkIdentifier {
-		dot := p.peekNextNonSpace()
-		if dot.tokenType == tkSeparator {
+		next := p.peekNextNonSpace()
+		if next.tokenType == tkSeparator {
 			p.nextNonSpace()
 			prop := p.peekNextNonSpace()
 			if prop.tokenType == tkIdentifier {
@@ -208,7 +208,9 @@ func (p *parser) getOperand() (Expr, error) {
 				}, nil
 			}
 		}
-		return nil, errors.New("failed to parse identifier")
+		return &ColumnRef{
+			Column: first.value,
+		}, nil
 	}
 	// TODO support unary prefix expression
 	// TODO support parens

@@ -80,19 +80,19 @@ var keywords = []string{
 
 // Operators where op is operator.
 const (
-	opAdd = "+"
 	opSub = "-"
-	opMul = "*"
+	opAdd = "+"
 	opDiv = "/"
+	opMul = "*"
 	opExp = "^"
 )
 
 // operators is a list of all operators.
 var operators = []string{
-	opAdd,
 	opSub,
-	opMul,
+	opAdd,
 	opDiv,
+	opMul,
 	opExp,
 }
 
