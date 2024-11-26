@@ -306,8 +306,29 @@ func TestParseResultColumn(t *testing.T) {
 			},
 			expect: []ResultColumn{
 				{
-					Count: true,
-					All:   false,
+					Expression: &FunctionExpr{FnType: FnCount},
+				},
+			},
+		},
+		{
+			name: "COUNT(*) + 1",
+			tokens: []token{
+				{tkKeyword, "COUNT"},
+				{tkSeparator, "("},
+				{tkOperator, "*"},
+				{tkSeparator, ")"},
+				{tkWhitespace, " "},
+				{tkOperator, "+"},
+				{tkWhitespace, " "},
+				{tkNumeric, "1"},
+			},
+			expect: []ResultColumn{
+				{
+					Expression: &BinaryExpr{
+						Left:     &FunctionExpr{FnType: FnCount},
+						Operator: "+",
+						Right:    &IntLit{Value: 1},
+					},
 				},
 			},
 		},

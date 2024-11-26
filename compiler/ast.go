@@ -21,9 +21,6 @@ type SelectStmt struct {
 type ResultColumn struct {
 	// All is * in a select statement for example SELECT * FROM foo
 	All bool
-	// Count is the count() aggregate for example SELECT COUNT(*) FROM foo
-	// TODO Count should probably be an expr
-	Count bool
 	// AllTable is all for a table for example SELECT foo.* FROM foo
 	AllTable string
 	// Expression contains the more complicated result column rules
@@ -102,8 +99,14 @@ func (*StringLit) Type() string { return "StringLit" }
 
 // FunctionExpr is an expression that represents a function.
 type FunctionExpr struct {
-	Name string
-	Args []Expr
+	// FnType corresponds to the type of function. For example fnCount is for
+	// COUNT(*)
+	FnType string
+	Args   []Expr
 }
+
+const (
+	FnCount = "COUNT"
+)
 
 func (*FunctionExpr) Type() string { return "FunctionExpr" }

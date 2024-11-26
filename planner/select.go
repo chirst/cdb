@@ -88,19 +88,7 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 	}
 	var child logicalNode
 	for _, resultColumn := range p.stmt.ResultColumns {
-		if resultColumn.Count {
-			switch child.(type) {
-			case nil:
-				child = &countNode{
-					tableName: tableName,
-					rootPage:  rootPageNumber,
-				}
-			default:
-				return nil, errors.New(
-					"count with other result columns not supported",
-				)
-			}
-		} else if resultColumn.All {
+		if resultColumn.All {
 			scanColumns, err := p.getScanColumns()
 			if err != nil {
 				return nil, err
@@ -121,7 +109,6 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 			switch e := resultColumn.Expression.(type) {
 			case *compiler.ColumnRef:
 				if e.Table == "" {
-					// TODO should do better at checking no table
 					e.Table = p.stmt.From.TableName
 				}
 				cols, err := p.catalog.GetColumns(e.Table)
@@ -156,6 +143,23 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 					}
 				default:
 					return nil, fmt.Errorf("expected scan node but got %#v", c)
+				}
+			case *compiler.FunctionExpr:
+				if e.FnType != compiler.FnCount {
+					return nil, fmt.Errorf(
+						"only %s function is supported", e.FnType,
+					)
+				}
+				switch child.(type) {
+				case nil:
+					child = &countNode{
+						tableName: tableName,
+						rootPage:  rootPageNumber,
+					}
+				default:
+					return nil, errors.New(
+						"count with other result columns not supported",
+					)
 				}
 			default:
 				return nil, fmt.Errorf(
@@ -206,12 +210,7 @@ func (p *selectQueryPlanner) getScanColumns() ([]scanColumn, error) {
 func (p *selectQueryPlanner) getProjections() ([]projection, error) {
 	var projections []projection
 	for _, resultColumn := range p.stmt.ResultColumns {
-		if resultColumn.Count {
-			projections = append(projections, projection{
-				isCount: true,
-				colName: resultColumn.Alias,
-			})
-		} else if resultColumn.All {
+		if resultColumn.All {
 			cols, err := p.catalog.GetColumns(p.stmt.From.TableName)
 			if err != nil {
 				return nil, err
@@ -230,6 +229,11 @@ func (p *selectQueryPlanner) getProjections() ([]projection, error) {
 				}
 				projections = append(projections, projection{
 					colName: colName,
+				})
+			case *compiler.FunctionExpr:
+				projections = append(projections, projection{
+					isCount: true,
+					colName: resultColumn.Alias,
 				})
 			default:
 				return nil, fmt.Errorf("unhandled result column expression %#v", e)

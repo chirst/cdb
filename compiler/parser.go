@@ -109,11 +109,6 @@ func (p *parser) parseResultColumn() (*ResultColumn, error) {
 	if r.value == "*" {
 		resultColumn.All = true
 		return resultColumn, nil
-	} else if r.value == kwCount {
-		// TODO count is not typical here. It should be refactored to be handled
-		// by the expression logic.
-		err := p.parseCountFunction(resultColumn)
-		return resultColumn, err
 	} else if r.tokenType == tkIdentifier {
 		if p.peekNextNonSpace().value == "." {
 			if p.peekNonSpaceBy(2).value == "*" {
@@ -132,22 +127,6 @@ func (p *parser) parseResultColumn() (*ResultColumn, error) {
 	resultColumn.Expression = expr
 	err = p.parseAlias(resultColumn)
 	return resultColumn, err
-}
-
-func (p *parser) parseCountFunction(resultColumn *ResultColumn) error {
-	// Handle the result column for the COUNT(*) aggregate. TODO this will
-	// probably be refactored to an expression.
-	if v := p.nextNonSpace().value; v != "(" {
-		return fmt.Errorf(tokenErr, v)
-	}
-	if v := p.nextNonSpace().value; v != "*" {
-		return fmt.Errorf(tokenErr, v)
-	}
-	if v := p.nextNonSpace().value; v != ")" {
-		return fmt.Errorf(tokenErr, v)
-	}
-	resultColumn.Count = true
-	return p.parseAlias(resultColumn)
 }
 
 // Vaughan Pratt's top down operator precedence parsing algorithm.
@@ -218,6 +197,18 @@ func (p *parser) getOperand() (Expr, error) {
 		return &ColumnRef{
 			Column: first.value,
 		}, nil
+	}
+	if first.tokenType == tkKeyword && first.value == kwCount {
+		if v := p.nextNonSpace().value; v != "(" {
+			return nil, fmt.Errorf(tokenErr, v)
+		}
+		if v := p.nextNonSpace().value; v != "*" {
+			return nil, fmt.Errorf(tokenErr, v)
+		}
+		if v := p.nextNonSpace().value; v != ")" {
+			return nil, fmt.Errorf(tokenErr, v)
+		}
+		return &FunctionExpr{FnType: FnCount}, nil
 	}
 	// TODO support unary prefix expression
 	// TODO support parens

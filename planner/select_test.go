@@ -204,7 +204,7 @@ func TestGetCountAggregate(t *testing.T) {
 		},
 		ResultColumns: []compiler.ResultColumn{
 			{
-				Count: true,
+				Expression: &compiler.FunctionExpr{FnType: compiler.FnCount},
 			},
 		},
 	}
