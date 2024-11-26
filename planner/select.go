@@ -1,6 +1,8 @@
 package planner
 
 import (
+	"errors"
+	"fmt"
 	"slices"
 
 	"github.com/chirst/cdb/compiler"
@@ -85,53 +87,84 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 		return nil, err
 	}
 	var child logicalNode
-	resultColumn := p.stmt.ResultColumns[0]
-	if resultColumn.Count {
-		child = &countNode{
-			tableName: tableName,
-			rootPage:  rootPageNumber,
-		}
-	} else if resultColumn.All {
-		scanColumns, err := p.getScanColumns()
-		if err != nil {
-			return nil, err
-		}
-		child = &scanNode{
-			tableName:   tableName,
-			rootPage:    rootPageNumber,
-			scanColumns: scanColumns,
-		}
-	} else if resultColumn.Expression != nil {
-		switch e := resultColumn.Expression.(type) {
-		case *compiler.ColumnRef:
-			if e.Table == "" {
-				// TODO should do better at checking no table
-				e.Table = p.stmt.From.TableName
+	for _, resultColumn := range p.stmt.ResultColumns {
+		if resultColumn.Count {
+			switch child.(type) {
+			case nil:
+				child = &countNode{
+					tableName: tableName,
+					rootPage:  rootPageNumber,
+				}
+			default:
+				return nil, errors.New(
+					"count with other result columns not supported",
+				)
 			}
-			cols, err := p.catalog.GetColumns(e.Table)
+		} else if resultColumn.All {
+			scanColumns, err := p.getScanColumns()
 			if err != nil {
 				return nil, err
 			}
-			colIdx := slices.Index(cols, e.Column)
-			pkCol, err := p.catalog.GetPrimaryKeyColumn(e.Table)
-			if err != nil {
-				return nil, err
+			switch c := child.(type) {
+			case *scanNode:
+				c.scanColumns = append(c.scanColumns, scanColumns...)
+			case nil:
+				child = &scanNode{
+					tableName:   tableName,
+					rootPage:    rootPageNumber,
+					scanColumns: scanColumns,
+				}
+			default:
+				return nil, errors.New("expected scanNode")
 			}
-			child = &scanNode{
-				tableName: e.Table,
-				rootPage:  rootPageNumber,
-				scanColumns: []scanColumn{
-					{
+		} else if resultColumn.Expression != nil {
+			switch e := resultColumn.Expression.(type) {
+			case *compiler.ColumnRef:
+				if e.Table == "" {
+					// TODO should do better at checking no table
+					e.Table = p.stmt.From.TableName
+				}
+				cols, err := p.catalog.GetColumns(e.Table)
+				if err != nil {
+					return nil, err
+				}
+				colIdx := slices.Index(cols, e.Column)
+				pkCol, err := p.catalog.GetPrimaryKeyColumn(e.Table)
+				if err != nil {
+					return nil, err
+				}
+				pkColIdx := slices.Index(cols, pkCol)
+				if pkColIdx < colIdx {
+					colIdx -= 1
+				}
+				switch c := child.(type) {
+				case *scanNode:
+					c.scanColumns = append(c.scanColumns, scanColumn{
 						isPrimaryKey: pkCol == e.Column,
 						colIdx:       colIdx,
-					},
-				},
+					})
+				case nil:
+					child = &scanNode{
+						tableName: e.Table,
+						rootPage:  rootPageNumber,
+						scanColumns: []scanColumn{
+							{
+								isPrimaryKey: pkCol == e.Column,
+								colIdx:       colIdx,
+							},
+						},
+					}
+				default:
+					return nil, fmt.Errorf("expected scan node but got %#v", c)
+				}
+			default:
+				return nil, fmt.Errorf(
+					"unhandled expression for result column %#v", resultColumn,
+				)
 			}
-		default:
-			panic("unhandled expression")
+		} else {
+			return nil, fmt.Errorf("unhandled result column %#v", resultColumn)
 		}
-	} else {
-		panic("unhandled result column")
 	}
 	projections, err := p.getProjections()
 	if err != nil {
@@ -171,40 +204,39 @@ func (p *selectQueryPlanner) getScanColumns() ([]scanColumn, error) {
 }
 
 func (p *selectQueryPlanner) getProjections() ([]projection, error) {
-	resultColumn := p.stmt.ResultColumns[0]
-	if resultColumn.Count {
-		return []projection{
-			{
-				isCount: true,
-			},
-		}, nil
-	}
-	if resultColumn.All {
-		cols, err := p.catalog.GetColumns(p.stmt.From.TableName)
-		if err != nil {
-			return nil, err
-		}
-		projections := []projection{}
-		for _, c := range cols {
+	var projections []projection
+	for _, resultColumn := range p.stmt.ResultColumns {
+		if resultColumn.Count {
 			projections = append(projections, projection{
-				colName: c,
+				isCount: true,
+				colName: resultColumn.Alias,
 			})
+		} else if resultColumn.All {
+			cols, err := p.catalog.GetColumns(p.stmt.From.TableName)
+			if err != nil {
+				return nil, err
+			}
+			for _, c := range cols {
+				projections = append(projections, projection{
+					colName: c,
+				})
+			}
+		} else if resultColumn.Expression != nil {
+			switch e := resultColumn.Expression.(type) {
+			case *compiler.ColumnRef:
+				colName := e.Column
+				if resultColumn.Alias != "" {
+					colName = resultColumn.Alias
+				}
+				projections = append(projections, projection{
+					colName: colName,
+				})
+			default:
+				return nil, fmt.Errorf("unhandled result column expression %#v", e)
+			}
 		}
-		return projections, nil
 	}
-	if resultColumn.Expression != nil {
-		switch e := resultColumn.Expression.(type) {
-		case *compiler.ColumnRef:
-			return []projection{
-				{
-					colName: e.Column,
-				},
-			}, nil
-		default:
-			panic("unhandled expression")
-		}
-	}
-	panic("unhandled projection")
+	return projections, nil
 }
 
 // ExecutionPlan returns the bytecode execution plan for the planner. Calling
@@ -231,7 +263,7 @@ func (p *selectExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 	case *countNode:
 		p.buildOptimizedCountScan(c)
 	default:
-		panic("unhandled node")
+		return nil, fmt.Errorf("unhandled node %#v", c)
 	}
 	p.executionPlan.Append(&vm.HaltCmd{})
 	return p.executionPlan, nil
