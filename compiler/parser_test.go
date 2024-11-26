@@ -407,6 +407,47 @@ func TestParseResultColumn(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "1 + 2 AS foo, id, id2 AS id1",
+			tokens: []token{
+				{tkNumeric, "1"},
+				{tkWhitespace, " "},
+				{tkOperator, "+"},
+				{tkWhitespace, " "},
+				{tkNumeric, "2"},
+				{tkWhitespace, " "},
+				{tkKeyword, "AS"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+				{tkSeparator, ","},
+				{tkWhitespace, " "},
+				{tkIdentifier, "id"},
+				{tkSeparator, ","},
+				{tkWhitespace, " "},
+				{tkIdentifier, "id2"},
+				{tkWhitespace, " "},
+				{tkKeyword, "AS"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "id1"},
+			},
+			expect: []ResultColumn{
+				{
+					Expression: &BinaryExpr{
+						Left:     &IntLit{Value: 1},
+						Operator: "+",
+						Right:    &IntLit{Value: 2},
+					},
+					Alias: "foo",
+				},
+				{
+					Expression: &ColumnRef{Column: "id"},
+				},
+				{
+					Expression: &ColumnRef{Column: "id2"},
+					Alias:      "id1",
+				},
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

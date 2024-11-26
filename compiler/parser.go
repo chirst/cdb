@@ -65,11 +65,18 @@ func (p *parser) parseSelect(sb *StmtBase) (*SelectStmt, error) {
 	if p.tokens[p.end].value != kwSelect {
 		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
-	resultColumn, err := p.parseResultColumn()
-	if err != nil {
-		return nil, err
+	for {
+		resultColumn, err := p.parseResultColumn()
+		if err != nil {
+			return nil, err
+		}
+		stmt.ResultColumns = append(stmt.ResultColumns, *resultColumn)
+		n := p.peekNextNonSpace()
+		if n.value != "," {
+			break
+		}
+		p.nextNonSpace()
 	}
-	stmt.ResultColumns = append(stmt.ResultColumns, *resultColumn)
 	f := p.nextNonSpace()
 	if f.tokenType == tkEOF || f.value == ";" {
 		return stmt, nil
@@ -197,7 +204,7 @@ func (p *parser) getOperand() (Expr, error) {
 	}
 	if first.tokenType == tkIdentifier {
 		next := p.peekNextNonSpace()
-		if next.tokenType == tkSeparator {
+		if next.value == "." {
 			p.nextNonSpace()
 			prop := p.peekNextNonSpace()
 			if prop.tokenType == tkIdentifier {
