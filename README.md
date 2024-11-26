@@ -17,7 +17,9 @@ begin(( ))
 explain([EXPLAIN])
 queryPlan([QUERY PLAN])
 select([SELECT])
-all[*]
+expression([expression])
+as([AS identifier])
+colSep[","]
 from([FROM])
 
 begin --> explain
@@ -25,8 +27,12 @@ explain --> queryPlan
 queryPlan --> select
 begin --> select
 explain --> select
-select --> all
-all --> from
+select --> expression
+expression --> as
+as --> colSep
+expression --> colSep
+colSep --> expression
+expression --> from
 from --> table
 ```
 
