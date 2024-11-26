@@ -5,7 +5,9 @@ package compiler
 // Machine).
 
 import (
+	"errors"
 	"fmt"
+	"strconv"
 )
 
 const (
@@ -33,9 +35,8 @@ func (p *parser) parseStmt() (Stmt, error) {
 	t := p.tokens[p.start]
 	sb := &StmtBase{}
 	if t.value == kwExplain {
-		t = p.nextNonSpace()
-		nv := p.peekNextNonSpace().value
-		if nv == kwQuery {
+		nv := p.nextNonSpace()
+		if nv.value == kwQuery {
 			tp := p.nextNonSpace()
 			if tp.value == kwPlan {
 				sb.ExplainQueryPlan = true
@@ -45,6 +46,7 @@ func (p *parser) parseStmt() (Stmt, error) {
 			}
 		} else {
 			sb.Explain = true
+			t = nv
 		}
 	}
 	switch t.value {
@@ -63,28 +65,18 @@ func (p *parser) parseSelect(sb *StmtBase) (*SelectStmt, error) {
 	if p.tokens[p.end].value != kwSelect {
 		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
-	r := p.nextNonSpace()
-	if r.value == "*" {
-		stmt.ResultColumn = ResultColumn{
-			All: true,
+	for {
+		resultColumn, err := p.parseResultColumn()
+		if err != nil {
+			return nil, err
 		}
-	} else if r.value == kwCount {
-		if v := p.nextNonSpace().value; v != "(" {
-			return nil, fmt.Errorf(tokenErr, v)
+		stmt.ResultColumns = append(stmt.ResultColumns, *resultColumn)
+		n := p.peekNextNonSpace()
+		if n.value != "," {
+			break
 		}
-		if v := p.nextNonSpace().value; v != "*" {
-			return nil, fmt.Errorf(tokenErr, v)
-		}
-		if v := p.nextNonSpace().value; v != ")" {
-			return nil, fmt.Errorf(tokenErr, v)
-		}
-		stmt.ResultColumn = ResultColumn{
-			Count: true,
-		}
-	} else {
-		return nil, fmt.Errorf(tokenErr, r.value)
+		p.nextNonSpace()
 	}
-
 	f := p.nextNonSpace()
 	if f.tokenType == tkEOF || f.value == ";" {
 		return stmt, nil
@@ -101,6 +93,139 @@ func (p *parser) parseSelect(sb *StmtBase) (*SelectStmt, error) {
 		TableName: t.value,
 	}
 	return stmt, nil
+}
+
+// parseResultColumn parses a single result column
+func (p *parser) parseResultColumn() (*ResultColumn, error) {
+	resultColumn := &ResultColumn{}
+	r := p.nextNonSpace()
+	// There are three cases to handle here.
+	// 1. *
+	// 2. tableName.*
+	// 3. expression AS alias
+	// We simply try and identify the first two then fall into expression
+	// parsing if the first two cases are not present. This is a smart way to do
+	// things since expressions are not limited to result columns.
+	if r.value == "*" {
+		resultColumn.All = true
+		return resultColumn, nil
+	} else if r.tokenType == tkIdentifier {
+		if p.peekNextNonSpace().value == "." {
+			if p.peekNonSpaceBy(2).value == "*" {
+				p.nextNonSpace() // move to .
+				p.nextNonSpace() // move to *
+				resultColumn.AllTable = r.value
+				return resultColumn, nil
+			}
+		}
+	}
+	p.rewind()
+	expr, err := p.parseExpression(0)
+	if err != nil {
+		return nil, err
+	}
+	resultColumn.Expression = expr
+	err = p.parseAlias(resultColumn)
+	return resultColumn, err
+}
+
+// Vaughan Pratt's top down operator precedence parsing algorithm.
+// Definitions:
+//   - Left binding power (LBP) an integer representing operator precedence level.
+//   - Null denotation (NUD) nothing to it's left (prefix).
+//   - Left denotation (LED) something to it's left (infix).
+//   - Right binding power (RBP) parse prefix operator then iteratively parse
+//     infix expressions.
+//
+// Begin with rbp 0
+func (p *parser) parseExpression(rbp int) (Expr, error) {
+	left, err := p.getOperand()
+	if err != nil {
+		return nil, err
+	}
+	for {
+		nextToken := p.peekNextNonSpace()
+		if nextToken.tokenType != tkOperator {
+			return left, nil
+		}
+		lbp := opPrecedence[nextToken.value]
+		if lbp <= rbp {
+			return left, nil
+		}
+		p.nextNonSpace()
+		right, err := p.parseExpression(lbp)
+		if err != nil {
+			return nil, err
+		}
+		left = &BinaryExpr{
+			Left:     left,
+			Operator: nextToken.value,
+			Right:    right,
+		}
+	}
+}
+
+// getOperand is a parseExpression helper who parses token groups into atomic
+// expressions serving as operands in the expression tree. A good example of
+// this would be in the statement `SELECT foo.bar + 1;`. `foo.bar` is processed
+// as three tokens, but needs to be "squashed" into the expression `ColumnRef`.
+func (p *parser) getOperand() (Expr, error) {
+	first := p.nextNonSpace()
+	if first.tokenType == tkLiteral {
+		return &StringLit{Value: first.value}, nil
+	}
+	if first.tokenType == tkNumeric {
+		intValue, err := strconv.Atoi(first.value)
+		if err != nil {
+			return nil, errors.New("failed to parse numeric token")
+		}
+		return &IntLit{Value: intValue}, nil
+	}
+	if first.tokenType == tkIdentifier {
+		next := p.peekNextNonSpace()
+		if next.value == "." {
+			p.nextNonSpace()
+			prop := p.peekNextNonSpace()
+			if prop.tokenType == tkIdentifier {
+				p.nextNonSpace()
+				return &ColumnRef{
+					Table:  first.value,
+					Column: prop.value,
+				}, nil
+			}
+		}
+		return &ColumnRef{
+			Column: first.value,
+		}, nil
+	}
+	if first.tokenType == tkKeyword && first.value == kwCount {
+		if v := p.nextNonSpace().value; v != "(" {
+			return nil, fmt.Errorf(tokenErr, v)
+		}
+		if v := p.nextNonSpace().value; v != "*" {
+			return nil, fmt.Errorf(tokenErr, v)
+		}
+		if v := p.nextNonSpace().value; v != ")" {
+			return nil, fmt.Errorf(tokenErr, v)
+		}
+		return &FunctionExpr{FnType: FnCount}, nil
+	}
+	// TODO support unary prefix expression
+	// TODO support parens
+	return nil, errors.New("failed to parse null denotation")
+}
+
+func (p *parser) parseAlias(resultColumn *ResultColumn) error {
+	a := p.peekNextNonSpace().value
+	if a == kwAs {
+		p.nextNonSpace()
+		alias := p.nextNonSpace()
+		if alias.tokenType != tkIdentifier {
+			return fmt.Errorf(identErr, alias.value)
+		}
+		resultColumn.Alias = alias.value
+	}
+	return nil
 }
 
 func (p *parser) parseCreate(sb *StmtBase) (*CreateStmt, error) {
@@ -237,7 +362,12 @@ func (p *parser) nextNonSpace() token {
 }
 
 func (p *parser) peekNextNonSpace() token {
-	tmpEnd := p.end
+	return p.peekNonSpaceBy(1)
+}
+
+// peekNonSpaceBy will peek more than one space ahead.
+func (p *parser) peekNonSpaceBy(next int) token {
+	tmpEnd := p.end + next
 	if tmpEnd > len(p.tokens)-1 {
 		return token{tkEOF, ""}
 	}
@@ -248,4 +378,9 @@ func (p *parser) peekNextNonSpace() token {
 		}
 	}
 	return p.tokens[tmpEnd]
+}
+
+func (p *parser) rewind() token {
+	p.end = p.end - 1
+	return p.tokens[p.end]
 }

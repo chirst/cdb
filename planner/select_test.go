@@ -50,8 +50,92 @@ func TestGetPlan(t *testing.T) {
 		From: &compiler.From{
 			TableName: "foo",
 		},
-		ResultColumn: compiler.ResultColumn{
-			All: true,
+		ResultColumns: []compiler.ResultColumn{
+			{
+				All: true,
+			},
+		},
+	}
+	mockCatalog := &mockSelectCatalog{}
+	mockCatalog.primaryKeyColumnName = "id"
+	mockCatalog.columns = []string{"name", "id", "age"}
+	plan, err := NewSelect(mockCatalog, ast).ExecutionPlan()
+	if err != nil {
+		t.Errorf("expected no err got err %s", err)
+	}
+	for i, c := range expectedCommands {
+		if !reflect.DeepEqual(c, plan.Commands[i]) {
+			t.Errorf("got %#v want %#v", plan.Commands[i], c)
+		}
+	}
+}
+
+func TestGetPlanSelectColumn(t *testing.T) {
+	expectedCommands := []vm.Command{
+		&vm.InitCmd{P2: 1},
+		&vm.TransactionCmd{P1: 0},
+		&vm.OpenReadCmd{P1: 1, P2: 2},
+		&vm.RewindCmd{P1: 1, P2: 7},
+		&vm.RowIdCmd{P1: 1, P2: 1},
+		&vm.ResultRowCmd{P1: 1, P2: 1},
+		&vm.NextCmd{P1: 1, P2: 4},
+		&vm.HaltCmd{},
+	}
+	ast := &compiler.SelectStmt{
+		StmtBase: &compiler.StmtBase{},
+		From: &compiler.From{
+			TableName: "foo",
+		},
+		ResultColumns: []compiler.ResultColumn{
+			{
+				Expression: &compiler.ColumnRef{
+					Column: "id",
+				},
+			},
+		},
+	}
+	mockCatalog := &mockSelectCatalog{}
+	mockCatalog.primaryKeyColumnName = "id"
+	mockCatalog.columns = []string{"name", "id", "age"}
+	plan, err := NewSelect(mockCatalog, ast).ExecutionPlan()
+	if err != nil {
+		t.Errorf("expected no err got err %s", err)
+	}
+	for i, c := range expectedCommands {
+		if !reflect.DeepEqual(c, plan.Commands[i]) {
+			t.Errorf("got %#v want %#v", plan.Commands[i], c)
+		}
+	}
+}
+
+func TestGetPlanSelectMultiColumn(t *testing.T) {
+	expectedCommands := []vm.Command{
+		&vm.InitCmd{P2: 1},
+		&vm.TransactionCmd{P1: 0},
+		&vm.OpenReadCmd{P1: 1, P2: 2},
+		&vm.RewindCmd{P1: 1, P2: 8},
+		&vm.RowIdCmd{P1: 1, P2: 1},
+		&vm.ColumnCmd{P1: 1, P2: 1, P3: 2},
+		&vm.ResultRowCmd{P1: 1, P2: 2},
+		&vm.NextCmd{P1: 1, P2: 4},
+		&vm.HaltCmd{},
+	}
+	ast := &compiler.SelectStmt{
+		StmtBase: &compiler.StmtBase{},
+		From: &compiler.From{
+			TableName: "foo",
+		},
+		ResultColumns: []compiler.ResultColumn{
+			{
+				Expression: &compiler.ColumnRef{
+					Column: "id",
+				},
+			},
+			{
+				Expression: &compiler.ColumnRef{
+					Column: "age",
+				},
+			},
 		},
 	}
 	mockCatalog := &mockSelectCatalog{}
@@ -85,8 +169,10 @@ func TestGetPlanPKMiddleOrdinal(t *testing.T) {
 		From: &compiler.From{
 			TableName: "foo",
 		},
-		ResultColumn: compiler.ResultColumn{
-			All: true,
+		ResultColumns: []compiler.ResultColumn{
+			{
+				All: true,
+			},
 		},
 	}
 	mockCatalog := &mockSelectCatalog{}
@@ -116,8 +202,10 @@ func TestGetCountAggregate(t *testing.T) {
 		From: &compiler.From{
 			TableName: "foo",
 		},
-		ResultColumn: compiler.ResultColumn{
-			Count: true,
+		ResultColumns: []compiler.ResultColumn{
+			{
+				Expression: &compiler.FunctionExpr{FnType: compiler.FnCount},
+			},
 		},
 	}
 	mockCatalog := &mockSelectCatalog{}
@@ -149,8 +237,10 @@ func TestGetPlanNoPrimaryKey(t *testing.T) {
 		From: &compiler.From{
 			TableName: "foo",
 		},
-		ResultColumn: compiler.ResultColumn{
-			All: true,
+		ResultColumns: []compiler.ResultColumn{
+			{
+				All: true,
+			},
 		},
 	}
 	mockCatalog := &mockSelectCatalog{}

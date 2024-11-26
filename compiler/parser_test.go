@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -20,7 +21,7 @@ func TestParseSelect(t *testing.T) {
 				{tkWhitespace, " "},
 				{tkKeyword, "SELECT"},
 				{tkWhitespace, " "},
-				{tkPunctuator, "*"},
+				{tkOperator, "*"},
 				{tkWhitespace, " "},
 				{tkKeyword, "FROM"},
 				{tkWhitespace, " "},
@@ -33,8 +34,10 @@ func TestParseSelect(t *testing.T) {
 				From: &From{
 					TableName: "foo",
 				},
-				ResultColumn: ResultColumn{
-					All: true,
+				ResultColumns: []ResultColumn{
+					{
+						All: true,
+					},
 				},
 			},
 		},
@@ -49,7 +52,7 @@ func TestParseSelect(t *testing.T) {
 				{tkWhitespace, " "},
 				{tkKeyword, "SELECT"},
 				{tkWhitespace, " "},
-				{tkPunctuator, "*"},
+				{tkOperator, "*"},
 				{tkWhitespace, " "},
 				{tkKeyword, "FROM"},
 				{tkWhitespace, " "},
@@ -63,35 +66,10 @@ func TestParseSelect(t *testing.T) {
 				From: &From{
 					TableName: "foo",
 				},
-				ResultColumn: ResultColumn{
-					All: true,
-				},
-			},
-		},
-		{
-			name: "with count",
-			tokens: []token{
-				{tkKeyword, "SELECT"},
-				{tkWhitespace, " "},
-				{tkKeyword, "COUNT"},
-				{tkSeparator, "("},
-				{tkPunctuator, "*"},
-				{tkSeparator, ")"},
-				{tkWhitespace, " "},
-				{tkKeyword, "FROM"},
-				{tkWhitespace, " "},
-				{tkIdentifier, "foo"},
-			},
-			expect: &SelectStmt{
-				StmtBase: &StmtBase{
-					Explain: false,
-				},
-				From: &From{
-					TableName: "foo",
-				},
-				ResultColumn: ResultColumn{
-					Count: true,
-					All:   false,
+				ResultColumns: []ResultColumn{
+					{
+						All: true,
+					},
 				},
 			},
 		},
@@ -275,5 +253,234 @@ func TestParseInsert(t *testing.T) {
 		if !reflect.DeepEqual(ret, c.expected) {
 			t.Errorf("expected %#v got %#v", c.expected, ret)
 		}
+	}
+}
+
+type resultColumnTestCase struct {
+	name   string
+	tokens []token
+	expect []ResultColumn
+}
+
+func TestParseResultColumn(t *testing.T) {
+	template := []token{
+		{tkKeyword, "SELECT"},
+		{tkWhitespace, " "},
+		{tkWhitespace, " "},
+		{tkKeyword, "FROM"},
+		{tkWhitespace, " "},
+		{tkIdentifier, "foo"},
+	}
+	cases := []resultColumnTestCase{
+		{
+			name: "*",
+			tokens: []token{
+				{tkOperator, "*"},
+			},
+			expect: []ResultColumn{
+				{
+					All: true,
+				},
+			},
+		},
+		{
+			name: "foo.*",
+			tokens: []token{
+				{tkIdentifier, "foo"},
+				{tkOperator, "."},
+				{tkOperator, "*"},
+			},
+			expect: []ResultColumn{
+				{
+					AllTable: "foo",
+				},
+			},
+		},
+		{
+			name: "COUNT(*)",
+			tokens: []token{
+				{tkKeyword, "COUNT"},
+				{tkSeparator, "("},
+				{tkOperator, "*"},
+				{tkSeparator, ")"},
+			},
+			expect: []ResultColumn{
+				{
+					Expression: &FunctionExpr{FnType: FnCount},
+				},
+			},
+		},
+		{
+			name: "COUNT(*) + 1",
+			tokens: []token{
+				{tkKeyword, "COUNT"},
+				{tkSeparator, "("},
+				{tkOperator, "*"},
+				{tkSeparator, ")"},
+				{tkWhitespace, " "},
+				{tkOperator, "+"},
+				{tkWhitespace, " "},
+				{tkNumeric, "1"},
+			},
+			expect: []ResultColumn{
+				{
+					Expression: &BinaryExpr{
+						Left:     &FunctionExpr{FnType: FnCount},
+						Operator: "+",
+						Right:    &IntLit{Value: 1},
+					},
+				},
+			},
+		},
+		{
+			name: "(1 + 2 - (3 * 4) + (5 / (6 ^ 7)) - (8 * 9))",
+			tokens: []token{
+				{tkNumeric, "1"},
+				{tkWhitespace, " "},
+				{tkOperator, "+"},
+				{tkWhitespace, " "},
+				{tkNumeric, "2"},
+				{tkWhitespace, " "},
+				{tkOperator, "-"},
+				{tkWhitespace, " "},
+				{tkNumeric, "3"},
+				{tkWhitespace, " "},
+				{tkOperator, "*"},
+				{tkWhitespace, " "},
+				{tkNumeric, "4"},
+				{tkWhitespace, " "},
+				{tkOperator, "+"},
+				{tkWhitespace, " "},
+				{tkNumeric, "5"},
+				{tkWhitespace, " "},
+				{tkOperator, "/"},
+				{tkWhitespace, " "},
+				{tkNumeric, "6"},
+				{tkWhitespace, " "},
+				{tkOperator, "^"},
+				{tkWhitespace, " "},
+				{tkNumeric, "7"},
+				{tkWhitespace, " "},
+				{tkOperator, "-"},
+				{tkWhitespace, " "},
+				{tkNumeric, "8"},
+				{tkWhitespace, " "},
+				{tkOperator, "*"},
+				{tkWhitespace, " "},
+				{tkNumeric, "9"},
+			},
+			expect: []ResultColumn{
+				{
+					Expression: &BinaryExpr{
+						Left: &BinaryExpr{
+							Left: &BinaryExpr{
+								Left: &BinaryExpr{
+									Left:     &IntLit{Value: 1},
+									Operator: opAdd,
+									Right:    &IntLit{Value: 2},
+								},
+								Operator: opSub,
+								Right: &BinaryExpr{
+									Left:     &IntLit{Value: 3},
+									Operator: opMul,
+									Right:    &IntLit{Value: 4},
+								},
+							},
+							Operator: opAdd,
+							Right: &BinaryExpr{
+								Left:     &IntLit{Value: 5},
+								Operator: opDiv,
+								Right: &BinaryExpr{
+									Left:     &IntLit{Value: 6},
+									Operator: opExp,
+									Right:    &IntLit{Value: 7},
+								},
+							},
+						},
+						Operator: opSub,
+						Right: &BinaryExpr{
+							Left:     &IntLit{Value: 8},
+							Operator: opMul,
+							Right:    &IntLit{Value: 9},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "foo.id AS bar",
+			tokens: []token{
+				{tkIdentifier, "foo"},
+				{tkSeparator, "."},
+				{tkIdentifier, "id"},
+				{tkWhitespace, " "},
+				{tkKeyword, "AS"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "bar"},
+			},
+			expect: []ResultColumn{
+				{
+					Expression: &ColumnRef{
+						Table:  "foo",
+						Column: "id",
+					},
+					Alias: "bar",
+				},
+			},
+		},
+		{
+			name: "1 + 2 AS foo, id, id2 AS id1",
+			tokens: []token{
+				{tkNumeric, "1"},
+				{tkWhitespace, " "},
+				{tkOperator, "+"},
+				{tkWhitespace, " "},
+				{tkNumeric, "2"},
+				{tkWhitespace, " "},
+				{tkKeyword, "AS"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+				{tkSeparator, ","},
+				{tkWhitespace, " "},
+				{tkIdentifier, "id"},
+				{tkSeparator, ","},
+				{tkWhitespace, " "},
+				{tkIdentifier, "id2"},
+				{tkWhitespace, " "},
+				{tkKeyword, "AS"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "id1"},
+			},
+			expect: []ResultColumn{
+				{
+					Expression: &BinaryExpr{
+						Left:     &IntLit{Value: 1},
+						Operator: "+",
+						Right:    &IntLit{Value: 2},
+					},
+					Alias: "foo",
+				},
+				{
+					Expression: &ColumnRef{Column: "id"},
+				},
+				{
+					Expression: &ColumnRef{Column: "id2"},
+					Alias:      "id1",
+				},
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tks := slices.Insert(template, 2, c.tokens...)
+			ret, err := NewParser(tks).Parse()
+			if err != nil {
+				t.Errorf("want no err got err %s", err)
+			}
+			retSelect, _ := ret.(*SelectStmt)
+			if !reflect.DeepEqual(retSelect.ResultColumns, c.expect) {
+				t.Errorf("got %#v want %#v", retSelect.ResultColumns, c.expect)
+			}
+		})
 	}
 }
