@@ -105,6 +105,26 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 			default:
 				return nil, errors.New("expected scanNode")
 			}
+		} else if resultColumn.AllTable != "" {
+			if tableName != resultColumn.AllTable {
+				return nil, fmt.Errorf("invalid expression %s.*", resultColumn.AllTable)
+			}
+			scanColumns, err := p.getScanColumns()
+			if err != nil {
+				return nil, err
+			}
+			switch c := child.(type) {
+			case *scanNode:
+				c.scanColumns = append(c.scanColumns, scanColumns...)
+			case nil:
+				child = &scanNode{
+					tableName:   tableName,
+					rootPage:    rootPageNumber,
+					scanColumns: scanColumns,
+				}
+			default:
+				return nil, errors.New("expected scanNode")
+			}
 		} else if resultColumn.Expression != nil {
 			switch e := resultColumn.Expression.(type) {
 			case *compiler.ColumnRef:
@@ -211,6 +231,16 @@ func (p *selectQueryPlanner) getProjections() ([]projection, error) {
 	var projections []projection
 	for _, resultColumn := range p.stmt.ResultColumns {
 		if resultColumn.All {
+			cols, err := p.catalog.GetColumns(p.stmt.From.TableName)
+			if err != nil {
+				return nil, err
+			}
+			for _, c := range cols {
+				projections = append(projections, projection{
+					colName: c,
+				})
+			}
+		} else if resultColumn.AllTable != "" {
 			cols, err := p.catalog.GetColumns(p.stmt.From.TableName)
 			if err != nil {
 				return nil, err
