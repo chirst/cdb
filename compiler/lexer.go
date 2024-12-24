@@ -81,7 +81,7 @@ var keywords = []string{
 // Operators where op is operator.
 const (
 	opSub = "-"
-	opAdd = "+"
+	OpAdd = "+"
 	opDiv = "/"
 	opMul = "*"
 	opExp = "^"
@@ -90,7 +90,7 @@ const (
 // operators is a list of all operators.
 var operators = []string{
 	opSub,
-	opAdd,
+	OpAdd,
 	opDiv,
 	opMul,
 	opExp,
@@ -100,7 +100,7 @@ var operators = []string{
 // the precedence.
 var opPrecedence = map[string]int{
 	opSub: 1,
-	opAdd: 1,
+	OpAdd: 1,
 	opDiv: 2,
 	opMul: 2,
 	opExp: 3,

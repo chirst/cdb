@@ -126,6 +126,44 @@ func TestSelectPlan(t *testing.T) {
 			},
 		},
 		{
+			description: "PrimaryKeyInExpression",
+			ast: &compiler.SelectStmt{
+				StmtBase: &compiler.StmtBase{},
+				From: &compiler.From{
+					TableName: "foo",
+				},
+				ResultColumns: []compiler.ResultColumn{
+					{
+						Expression: &compiler.BinaryExpr{
+							Left: &compiler.ColumnRef{
+								Table:  "foo",
+								Column: "id",
+							},
+							Operator: compiler.OpAdd,
+							Right:    &compiler.IntLit{Value: 1},
+						},
+					},
+				},
+			},
+			expectedCommands: []vm.Command{
+				&vm.InitCmd{P2: 1},
+				&vm.TransactionCmd{P1: 0},
+				&vm.OpenReadCmd{P1: 1, P2: 2},
+				&vm.IntegerCmd{P1: 1, P2: 1},
+				&vm.RewindCmd{P1: 1, P2: 10},
+				&vm.RowIdCmd{P1: 1, P2: 2},
+				&vm.AddCmd{P1: 1, P2: 2, P3: 3},
+				&vm.ResultRowCmd{P1: 3, P2: 3},
+				&vm.NextCmd{P1: 1, P2: 5},
+				&vm.HaltCmd{},
+			},
+			mockCatalogSetup: func(m *mockSelectCatalog) *mockSelectCatalog {
+				m.primaryKeyColumnName = "id"
+				m.columns = []string{"id"}
+				return m
+			},
+		},
+		{
 			description: "AllTable",
 			expectedCommands: []vm.Command{
 				&vm.InitCmd{P2: 1},

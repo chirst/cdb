@@ -376,7 +376,7 @@ func TestParseResultColumn(t *testing.T) {
 							Left: &BinaryExpr{
 								Left: &BinaryExpr{
 									Left:     &IntLit{Value: 1},
-									Operator: opAdd,
+									Operator: OpAdd,
 									Right:    &IntLit{Value: 2},
 								},
 								Operator: opSub,
@@ -386,7 +386,7 @@ func TestParseResultColumn(t *testing.T) {
 									Right:    &IntLit{Value: 4},
 								},
 							},
-							Operator: opAdd,
+							Operator: OpAdd,
 							Right: &BinaryExpr{
 								Left:     &IntLit{Value: 5},
 								Operator: opDiv,

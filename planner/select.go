@@ -89,102 +89,24 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 	var child logicalNode
 	for _, resultColumn := range p.stmt.ResultColumns {
 		if resultColumn.All {
-			scanColumns, err := p.getScanColumns()
+			err := p.addAllColumnsTo(&child, tableName, rootPageNumber)
 			if err != nil {
 				return nil, err
-			}
-			switch c := child.(type) {
-			case *scanNode:
-				c.scanColumns = append(c.scanColumns, scanColumns...)
-			case nil:
-				child = &scanNode{
-					tableName:   tableName,
-					rootPage:    rootPageNumber,
-					scanColumns: scanColumns,
-				}
-			default:
-				return nil, errors.New("expected scanNode")
 			}
 		} else if resultColumn.AllTable != "" {
 			if tableName != resultColumn.AllTable {
 				return nil, fmt.Errorf("invalid expression %s.*", resultColumn.AllTable)
 			}
-			scanColumns, err := p.getScanColumns()
+			err := p.addAllColumnsTo(&child, tableName, rootPageNumber)
 			if err != nil {
 				return nil, err
 			}
-			switch c := child.(type) {
-			case *scanNode:
-				c.scanColumns = append(c.scanColumns, scanColumns...)
-			case nil:
-				child = &scanNode{
-					tableName:   tableName,
-					rootPage:    rootPageNumber,
-					scanColumns: scanColumns,
-				}
-			default:
-				return nil, errors.New("expected scanNode")
-			}
 		} else if resultColumn.Expression != nil {
-			switch e := resultColumn.Expression.(type) {
-			case *compiler.ColumnRef:
-				if e.Table == "" {
-					e.Table = p.stmt.From.TableName
-				}
-				cols, err := p.catalog.GetColumns(e.Table)
-				if err != nil {
-					return nil, err
-				}
-				colIdx := slices.Index(cols, e.Column)
-				pkCol, err := p.catalog.GetPrimaryKeyColumn(e.Table)
-				if err != nil {
-					return nil, err
-				}
-				pkColIdx := slices.Index(cols, pkCol)
-				if pkColIdx < colIdx {
-					colIdx -= 1
-				}
-				switch c := child.(type) {
-				case *scanNode:
-					c.scanColumns = append(c.scanColumns, scanColumn{
-						isPrimaryKey: pkCol == e.Column,
-						colIdx:       colIdx,
-					})
-				case nil:
-					child = &scanNode{
-						tableName: e.Table,
-						rootPage:  rootPageNumber,
-						scanColumns: []scanColumn{
-							{
-								isPrimaryKey: pkCol == e.Column,
-								colIdx:       colIdx,
-							},
-						},
-					}
-				default:
-					return nil, fmt.Errorf("expected scan node but got %#v", c)
-				}
-			case *compiler.FunctionExpr:
-				if e.FnType != compiler.FnCount {
-					return nil, fmt.Errorf(
-						"only %s function is supported", e.FnType,
-					)
-				}
-				switch child.(type) {
-				case nil:
-					child = &countNode{
-						tableName: tableName,
-						rootPage:  rootPageNumber,
-					}
-				default:
-					return nil, errors.New(
-						"count with other result columns not supported",
-					)
-				}
-			default:
-				return nil, fmt.Errorf(
-					"unhandled expression for result column %#v", resultColumn,
-				)
+			err := p.addExpressionTo(
+				&child, resultColumn.Expression, tableName, rootPageNumber,
+			)
+			if err != nil {
+				return nil, err
 			}
 		} else {
 			return nil, fmt.Errorf("unhandled result column %#v", resultColumn)
@@ -199,6 +121,85 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 		child:       child,
 	}
 	return newQueryPlan(p.queryPlan, p.stmt.ExplainQueryPlan), nil
+}
+
+func (p *selectQueryPlanner) addAllColumnsTo(
+	child *logicalNode, tableName string, rootPageNumber int,
+) error {
+	scanColumns, err := p.getScanColumns()
+	if err != nil {
+		return err
+	}
+	switch c := (*child).(type) {
+	case *scanNode:
+		c.scanColumns = append(c.scanColumns, scanColumns...)
+	case nil:
+		*child = &scanNode{
+			tableName:   tableName,
+			rootPage:    rootPageNumber,
+			scanColumns: scanColumns,
+		}
+	}
+	return errors.New("expected scanNode")
+}
+
+func (p *selectQueryPlanner) addExpressionTo(
+	child *logicalNode,
+	expression compiler.Expr,
+	tableName string,
+	rootPageNumber int,
+) error {
+	switch e := expression.(type) {
+	case *compiler.ColumnRef:
+		if e.Table == "" {
+			e.Table = p.stmt.From.TableName
+		}
+		cols, err := p.catalog.GetColumns(e.Table)
+		if err != nil {
+			return err
+		}
+		colIdx := slices.Index(cols, e.Column)
+		pkCol, err := p.catalog.GetPrimaryKeyColumn(e.Table)
+		if err != nil {
+			return err
+		}
+		pkColIdx := slices.Index(cols, pkCol)
+		if pkColIdx < colIdx {
+			colIdx -= 1
+		}
+		switch c := (*child).(type) {
+		case *scanNode:
+			c.scanColumns = append(c.scanColumns, scanColumn{
+				isPrimaryKey: pkCol == e.Column,
+				colIdx:       colIdx,
+			})
+		case nil:
+			*child = &scanNode{
+				tableName: e.Table,
+				rootPage:  rootPageNumber,
+				scanColumns: []scanColumn{
+					{
+						isPrimaryKey: pkCol == e.Column,
+						colIdx:       colIdx,
+					},
+				},
+			}
+		default:
+			return fmt.Errorf("expected scan node but got %#v", c)
+		}
+	case *compiler.FunctionExpr:
+		if e.FnType != compiler.FnCount {
+			return fmt.Errorf("only %s function is supported", e.FnType)
+		}
+		if *child == nil {
+			*child = &countNode{
+				tableName: tableName,
+				rootPage:  rootPageNumber,
+			}
+		}
+		return errors.New("count with other result columns not supported")
+	}
+	return fmt.Errorf("unhandled result column with expression %#v", expression)
 }
 
 func (p *selectQueryPlanner) getScanColumns() ([]scanColumn, error) {

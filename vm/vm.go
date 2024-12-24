@@ -521,6 +521,19 @@ func (c *IntegerCmd) explain(addr int) []*string {
 	return formatExplain(addr, "Integer", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
 
+// AddCmd adds P1 to P2 and stores in register P3
+type AddCmd cmd
+
+func (c *AddCmd) execute(vm *vm, routine *routine) cmdRes {
+
+	return cmdRes{}
+}
+
+func (c *AddCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Add register[%d] with register[%d] and store in register[%d]", c.P1, c.P2, c.P3)
+	return formatExplain(addr, "Add", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
 // CopyCmd copies P1 into P2
 type CopyCmd cmd
 
