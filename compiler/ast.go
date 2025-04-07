@@ -79,6 +79,12 @@ func (*UnaryExpr) Type() string { return "UnaryExpr" }
 type ColumnRef struct {
 	Table  string
 	Column string
+	// isPrimaryKey is filled out by the query planner. The property means the
+	// column will be a key instead of a nth value.
+	IsPrimaryKey bool
+	// colIdx is filled out by the query planner. The property is the nth column
+	// for non primary key values.
+	ColIdx int
 }
 
 func (*ColumnRef) Type() string { return "ColumnRef" }

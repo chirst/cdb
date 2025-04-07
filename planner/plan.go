@@ -124,6 +124,10 @@ func (s *scanNode) print() string {
 	return fmt.Sprintf("scan table %s", s.tableName)
 }
 
+func (c *constantNode) print() string {
+	return "constant data source"
+}
+
 func (c *countNode) print() string {
 	return fmt.Sprintf("count table %s", c.tableName)
 }
@@ -145,6 +149,10 @@ func (p *projectNode) children() []logicalNode {
 }
 
 func (s *scanNode) children() []logicalNode {
+	return []logicalNode{}
+}
+
+func (c *constantNode) children() []logicalNode {
 	return []logicalNode{}
 }
 
