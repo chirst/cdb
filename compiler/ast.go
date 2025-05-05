@@ -52,9 +52,22 @@ type InsertStmt struct {
 	ColValues [][]string
 }
 
+type ExprVisitor interface {
+	VisitBinaryExpr(*BinaryExpr)
+	VisitUnaryExpr(*UnaryExpr)
+	VisitColumnRefExpr(*ColumnRef)
+	VisitIntLit(*IntLit)
+	VisitStringLit(*StringLit)
+	VisitFunctionExpr(*FunctionExpr)
+}
+
 // Expr defines the interface of an expression.
 type Expr interface {
+	// Type is a string of the underlying type.
 	Type() string // TODO this pattern may not be the best
+	// BreadthWalk implements the visitor pattern for a in-order breadth first
+	// walk.
+	BreadthWalk(v ExprVisitor)
 }
 
 // BinaryExpr is for an expression with two operands.
@@ -65,6 +78,11 @@ type BinaryExpr struct {
 }
 
 func (*BinaryExpr) Type() string { return "BinaryExpr" }
+func (be *BinaryExpr) BreadthWalk(v ExprVisitor) {
+	v.VisitBinaryExpr(be)
+	be.Left.BreadthWalk(v)
+	be.Right.BreadthWalk(v)
+}
 
 // UnaryExpr is an expression with one operand.
 type UnaryExpr struct {
@@ -73,6 +91,10 @@ type UnaryExpr struct {
 }
 
 func (*UnaryExpr) Type() string { return "UnaryExpr" }
+func (ue *UnaryExpr) Accept(v ExprVisitor) {
+	v.VisitUnaryExpr(ue)
+	ue.Operand.BreadthWalk(v)
+}
 
 // ColumnRef is an expression with no operands. It references a column on a
 // table.
@@ -88,6 +110,9 @@ type ColumnRef struct {
 }
 
 func (*ColumnRef) Type() string { return "ColumnRef" }
+func (cr *ColumnRef) BreadthWalk(v ExprVisitor) {
+	v.VisitColumnRefExpr(cr)
+}
 
 // IntLit is an expression that is a literal integer such as "1".
 type IntLit struct {
@@ -95,6 +120,9 @@ type IntLit struct {
 }
 
 func (*IntLit) Type() string { return "IntLit" }
+func (il *IntLit) BreadthWalk(v ExprVisitor) {
+	v.VisitIntLit(il)
+}
 
 // StringLit is an expression that is a literal string such as "'asdf'".
 type StringLit struct {
@@ -102,6 +130,9 @@ type StringLit struct {
 }
 
 func (*StringLit) Type() string { return "StringLit" }
+func (sl *StringLit) BreadthWalk(v ExprVisitor) {
+	v.VisitStringLit(sl)
+}
 
 // FunctionExpr is an expression that represents a function.
 type FunctionExpr struct {
@@ -116,3 +147,6 @@ const (
 )
 
 func (*FunctionExpr) Type() string { return "FunctionExpr" }
+func (f *FunctionExpr) BreadthWalk(v ExprVisitor) {
+	v.VisitFunctionExpr(f)
+}

@@ -525,7 +525,19 @@ func (c *IntegerCmd) explain(addr int) []*string {
 type AddCmd cmd
 
 func (c *AddCmd) execute(vm *vm, routine *routine) cmdRes {
-
+	l, ok := routine.registers[c.P1].(int)
+	if !ok {
+		return cmdRes{
+			err: fmt.Errorf("expected left operand to be int, but got %#v", l),
+		}
+	}
+	r, ok := routine.registers[c.P2].(int)
+	if !ok {
+		return cmdRes{
+			err: fmt.Errorf("expected right operand to be int, but got %#v", r),
+		}
+	}
+	routine.registers[c.P3] = l + r
 	return cmdRes{}
 }
 
