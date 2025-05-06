@@ -99,11 +99,21 @@ func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
 // numbers, column names with their indices within a tuple, and column names
 // with their constraints and available indexes.
 func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
-	tableName := p.stmt.From.TableName
-	if tableName == "" {
-		// TODO return a constant node and handle node in physical planner
-		return nil, errors.New("constant queries not implemented")
+	if p.stmt.From == nil || p.stmt.From.TableName == "" {
+		child := &constantNode{
+			resultColumns: p.stmt.ResultColumns,
+		}
+		projections, err := p.getProjections()
+		if err != nil {
+			return nil, err
+		}
+		p.queryPlan = &projectNode{
+			projections: projections,
+			child:       child,
+		}
+		return newQueryPlan(p.queryPlan, p.stmt.ExplainQueryPlan), nil
 	}
+	tableName := p.stmt.From.TableName
 	rootPageNumber, err := p.catalog.GetRootPageNumber(tableName)
 	if err != nil {
 		return nil, err
@@ -279,11 +289,15 @@ func (p *selectExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 	p.buildInit()
 	switch c := p.queryPlan.child.(type) {
 	case *scanNode:
+		p.executionPlan.Append(&vm.TransactionCmd{P2: 0})
 		if err := p.buildScan(c); err != nil {
 			return nil, err
 		}
 	case *countNode:
+		p.executionPlan.Append(&vm.TransactionCmd{P2: 0})
 		p.buildOptimizedCountScan(c)
+	case *constantNode:
+		p.buildConstantNode(c)
 	default:
 		return nil, fmt.Errorf("unhandled node %#v", c)
 	}
@@ -301,7 +315,6 @@ func (p *selectExecutionPlanner) setResultHeader() {
 
 func (p *selectExecutionPlanner) buildInit() {
 	p.executionPlan.Append(&vm.InitCmd{P2: 1})
-	p.executionPlan.Append(&vm.TransactionCmd{P2: 0})
 }
 
 type catalogExprVisitor struct {
@@ -464,7 +477,6 @@ func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
 		for _, tc := range exprBuilder.commands {
 			p.executionPlan.Append(tc)
 		}
-		// p.executionPlan.Append(&vm.CopyCmd{P1: outRegister, P2: startScanRegister + i})
 	}
 
 	// Result row gathers the aforementioned innards of the scan and makes them
@@ -488,4 +500,35 @@ func (p *selectExecutionPlanner) buildOptimizedCountScan(n *countNode) {
 	p.executionPlan.Append(&vm.OpenReadCmd{P1: cursorId, P2: n.rootPage})
 	p.executionPlan.Append(&vm.CountCmd{P1: cursorId, P2: 1})
 	p.executionPlan.Append(&vm.ResultRowCmd{P1: 1, P2: 1})
+}
+
+// buildConstantNode is a single row operation produced by a "select" without a
+// "from".
+func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) {
+	// Build registers with constants. These are likely extra instructions, but
+	// okay since it allows this to follow the same pattern a scan does.
+	const beginningRegister = 1
+	crv := &constantRegisterVisitor{}
+	crv.Init(beginningRegister)
+	for _, c := range n.resultColumns {
+		c.Expression.BreadthWalk(crv)
+	}
+	rcs := crv.GetRegisterCommands()
+	for _, rc := range rcs {
+		p.executionPlan.Append(rc)
+	}
+	constantRegisters := crv.GetRegisters()
+
+	// Like a scan, but for a single row.
+	reservedRegisterStart := crv.nextOpenRegister
+	reservedRegisterOffset := len(n.resultColumns)
+	for i, rc := range n.resultColumns {
+		exprBuilder := &exprCommandBuilder{}
+		exprBuilder.Init(1, reservedRegisterStart+reservedRegisterOffset, constantRegisters, reservedRegisterStart+i)
+		exprBuilder.BuildCommands(rc.Expression, 0)
+		for _, tc := range exprBuilder.commands {
+			p.executionPlan.Append(tc)
+		}
+	}
+	p.executionPlan.Append(&vm.ResultRowCmd{P1: reservedRegisterStart, P2: reservedRegisterOffset})
 }

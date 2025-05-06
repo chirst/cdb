@@ -38,8 +38,8 @@ type scanColumn = compiler.Expr
 
 // constantNode is used in select statements where there is no table.
 type constantNode struct {
-	// expressions are the result columns of the constant query
-	expressions []compiler.Expr
+	// resultColumns are the result columns containing expressions.
+	resultColumns []compiler.ResultColumn
 }
 
 // countNode represents a special optimization when a table needs a full count

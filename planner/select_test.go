@@ -283,6 +283,36 @@ func TestSelectPlan(t *testing.T) {
 				},
 			},
 		},
+		{
+			description: "Constant",
+			expectedCommands: []vm.Command{
+				&vm.InitCmd{P2: 1},
+				&vm.IntegerCmd{P1: 1, P2: 1},
+				&vm.IntegerCmd{P1: 5, P2: 2},
+				&vm.IntegerCmd{P1: 8, P2: 3},
+				&vm.CopyCmd{P1: 1, P2: 4},
+				&vm.AddCmd{P1: 2, P2: 3, P3: 5},
+				&vm.ResultRowCmd{P1: 4, P2: 2},
+				&vm.HaltCmd{},
+			},
+			ast: &compiler.SelectStmt{
+				StmtBase: &compiler.StmtBase{},
+				From:     nil,
+				ResultColumns: []compiler.ResultColumn{
+					{
+						Expression: &compiler.IntLit{Value: 1},
+					},
+					{
+						Expression: &compiler.BinaryExpr{
+							Left:     &compiler.IntLit{Value: 5},
+							Right:    &compiler.IntLit{Value: 8},
+							Operator: "+",
+						},
+						Alias: "bar",
+					},
+				},
+			},
+		},
 	}
 	for _, c := range cases {
 		if c.description == "" {
