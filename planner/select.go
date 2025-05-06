@@ -99,6 +99,8 @@ func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
 // numbers, column names with their indices within a tuple, and column names
 // with their constraints and available indexes.
 func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
+	// TODO revisit this functions comment and look into breaking this into
+	// smaller functions.
 	if p.stmt.From == nil || p.stmt.From.TableName == "" {
 		child := &constantNode{
 			resultColumns: p.stmt.ResultColumns,
@@ -317,6 +319,7 @@ func (p *selectExecutionPlanner) buildInit() {
 	p.executionPlan.Append(&vm.InitCmd{P2: 1})
 }
 
+// TODO look into refactoring/moving visitors throughout this file.
 type catalogExprVisitor struct {
 	catalog   selectCatalog
 	tableName string
