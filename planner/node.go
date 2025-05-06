@@ -1,5 +1,7 @@
 package planner
 
+import "github.com/chirst/cdb/compiler"
+
 // This file defines the relational nodes in a logical query plan.
 
 // logicalNode defines the interface for a node in the query plan tree.
@@ -32,11 +34,12 @@ type scanNode struct {
 	scanColumns []scanColumn
 }
 
-type scanColumn struct {
-	// isPrimaryKey means the column will be a key instead of a nth value.
-	isPrimaryKey bool
-	// colIdx is the nth column for non primary key values.
-	colIdx int
+type scanColumn = compiler.Expr
+
+// constantNode is used in select statements where there is no table.
+type constantNode struct {
+	// resultColumns are the result columns containing expressions.
+	resultColumns []compiler.ResultColumn
 }
 
 // countNode represents a special optimization when a table needs a full count

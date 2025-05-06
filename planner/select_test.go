@@ -126,6 +126,44 @@ func TestSelectPlan(t *testing.T) {
 			},
 		},
 		{
+			description: "PrimaryKeyInExpression",
+			ast: &compiler.SelectStmt{
+				StmtBase: &compiler.StmtBase{},
+				From: &compiler.From{
+					TableName: "foo",
+				},
+				ResultColumns: []compiler.ResultColumn{
+					{
+						Expression: &compiler.BinaryExpr{
+							Left: &compiler.ColumnRef{
+								Table:  "foo",
+								Column: "id",
+							},
+							Operator: compiler.OpAdd,
+							Right:    &compiler.IntLit{Value: 10},
+						},
+					},
+				},
+			},
+			expectedCommands: []vm.Command{
+				&vm.InitCmd{P2: 1},
+				&vm.TransactionCmd{P1: 0},
+				&vm.IntegerCmd{P1: 10, P2: 1},
+				&vm.OpenReadCmd{P1: 1, P2: 2},
+				&vm.RewindCmd{P1: 1, P2: 9},
+				&vm.RowIdCmd{P1: 1, P2: 3},
+				&vm.AddCmd{P1: 3, P2: 1, P3: 2},
+				&vm.ResultRowCmd{P1: 2, P2: 1},
+				&vm.NextCmd{P1: 1, P2: 5},
+				&vm.HaltCmd{},
+			},
+			mockCatalogSetup: func(m *mockSelectCatalog) *mockSelectCatalog {
+				m.primaryKeyColumnName = "id"
+				m.columns = []string{"id"}
+				return m
+			},
+		},
+		{
 			description: "AllTable",
 			expectedCommands: []vm.Command{
 				&vm.InitCmd{P2: 1},
@@ -241,6 +279,61 @@ func TestSelectPlan(t *testing.T) {
 				ResultColumns: []compiler.ResultColumn{
 					{
 						Expression: &compiler.FunctionExpr{FnType: compiler.FnCount},
+					},
+				},
+			},
+		},
+		{
+			description: "Operators",
+			expectedCommands: []vm.Command{
+				&vm.InitCmd{P2: 1},
+				&vm.IntegerCmd{P1: 9, P2: 1},
+				&vm.DivideCmd{P1: 1, P2: 1, P3: 2},
+				&vm.AddCmd{P1: 1, P2: 1, P3: 3},
+				&vm.ExponentCmd{P1: 1, P2: 1, P3: 4},
+				&vm.MultiplyCmd{P1: 1, P2: 1, P3: 5},
+				&vm.SubtractCmd{P1: 1, P2: 1, P3: 6},
+				&vm.ResultRowCmd{P1: 2, P2: 5},
+				&vm.HaltCmd{},
+			},
+			ast: &compiler.SelectStmt{
+				StmtBase: &compiler.StmtBase{},
+				From:     nil,
+				ResultColumns: []compiler.ResultColumn{
+					{
+						Expression: &compiler.BinaryExpr{
+							Left:     &compiler.IntLit{Value: 9},
+							Right:    &compiler.IntLit{Value: 9},
+							Operator: compiler.OpDiv,
+						},
+					},
+					{
+						Expression: &compiler.BinaryExpr{
+							Left:     &compiler.IntLit{Value: 9},
+							Right:    &compiler.IntLit{Value: 9},
+							Operator: compiler.OpAdd,
+						},
+					},
+					{
+						Expression: &compiler.BinaryExpr{
+							Left:     &compiler.IntLit{Value: 9},
+							Right:    &compiler.IntLit{Value: 9},
+							Operator: compiler.OpExp,
+						},
+					},
+					{
+						Expression: &compiler.BinaryExpr{
+							Left:     &compiler.IntLit{Value: 9},
+							Right:    &compiler.IntLit{Value: 9},
+							Operator: compiler.OpMul,
+						},
+					},
+					{
+						Expression: &compiler.BinaryExpr{
+							Left:     &compiler.IntLit{Value: 9},
+							Right:    &compiler.IntLit{Value: 9},
+							Operator: compiler.OpSub,
+						},
 					},
 				},
 			},
