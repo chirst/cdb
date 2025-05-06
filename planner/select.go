@@ -108,31 +108,36 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	// TODO check for counts and go down a count node path
-	for _, resultColumn := range p.stmt.ResultColumns {
-		switch resultColumn.Expression.(type) {
-		case *compiler.FunctionExpr:
-			return nil, errors.New("count not supported")
+	// For now, count function is handled specially.
+	for i, resultColumn := range p.stmt.ResultColumns {
+		if i != 0 {
+			return nil, errors.New("count with other result columns not supported")
 		}
-		// case *compiler.FunctionExpr:
-		// 	if e.FnType != compiler.FnCount {
-		// 		return nil, fmt.Errorf("only %s function is supported", e.FnType)
-		// 	}
-		// 	if *child == nil {
-		// 		*child = &countNode{
-		// 			tableName: tableName,
-		// 			rootPage:  rootPageNumber,
-		// 		}
-		// 	}
-		// 	return errors.New("count with other result columns not supported")
+		switch e := resultColumn.Expression.(type) {
+		case *compiler.FunctionExpr:
+			if e.FnType != compiler.FnCount {
+				return nil, fmt.Errorf("only %s function is supported", e.FnType)
+			}
+			child := &countNode{
+				tableName: tableName,
+				rootPage:  rootPageNumber,
+			}
+			projections, err := p.getProjections()
+			if err != nil {
+				return nil, err
+			}
+			p.queryPlan = &projectNode{
+				projections: projections,
+				child:       child,
+			}
+			return newQueryPlan(p.queryPlan, p.stmt.ExplainQueryPlan), nil
+		}
+		break
 	}
 
 	// At this point a constantNode and countNode should be ruled out. The
 	// planner isn't looking at using indexes yet so we are safe to focus on
 	// scanNodes.
-	//
-	// TODO extract to function. This block simplifies * and table * to just
-	// expressions
 	child := &scanNode{
 		tableName:   tableName,
 		rootPage:    rootPageNumber,
@@ -140,8 +145,6 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 	}
 	for _, resultColumn := range p.stmt.ResultColumns {
 		if resultColumn.All {
-			// TODO scan columns may be simplified by binding them one way
-			// expressions are going to.
 			cols, err := p.getScanColumns()
 			if err != nil {
 				return nil, err
@@ -314,7 +317,20 @@ func (c *catalogExprVisitor) VisitColumnRefExpr(e *compiler.ColumnRef) {
 	if err != nil {
 		panic("don't panic")
 	}
+	cols, err := c.catalog.GetColumns(c.tableName)
+	if err != nil {
+		panic("don't panic")
+	}
+	idx := 0
 	e.IsPrimaryKey = e.Column == pkCol
+	for _, col := range cols {
+		if col != pkCol {
+			if e.Column == col {
+				e.ColIdx = idx
+			}
+			idx += 1
+		}
+	}
 }
 func (c *catalogExprVisitor) VisitIntLit(e *compiler.IntLit)             {}
 func (c *catalogExprVisitor) VisitStringLit(e *compiler.StringLit)       {}
@@ -353,37 +369,50 @@ func (c *constantRegisterVisitor) VisitBinaryExpr(e *compiler.BinaryExpr)     {}
 func (c *constantRegisterVisitor) VisitUnaryExpr(e *compiler.UnaryExpr)       {}
 func (c *constantRegisterVisitor) VisitColumnRefExpr(e *compiler.ColumnRef)   {}
 func (c *constantRegisterVisitor) VisitIntLit(e *compiler.IntLit)             { c.fillRegisterIfNeeded(e.Value) }
-func (c *constantRegisterVisitor) VisitStringLit(e *compiler.StringLit)       { /* TODO support strings */ }
+func (c *constantRegisterVisitor) VisitStringLit(e *compiler.StringLit)       {}
 func (c *constantRegisterVisitor) VisitFunctionExpr(e *compiler.FunctionExpr) {}
 
 type exprCommandBuilder struct {
-	cursorId     int
-	openRegister int
-	commands     []vm.Command
-	litRegisters map[int]int
+	cursorId       int
+	openRegister   int
+	outputRegister int
+	commands       []vm.Command
+	litRegisters   map[int]int
 }
 
-func (e *exprCommandBuilder) Init(cursorId int, openRegister int, litRegisters map[int]int) {
+func (e *exprCommandBuilder) Init(cursorId int, openRegister int, litRegisters map[int]int, outputRegister int) {
 	e.cursorId = cursorId
 	e.openRegister = openRegister
 	e.litRegisters = litRegisters
+	e.outputRegister = outputRegister
 }
 
-func (e *exprCommandBuilder) BuildCommands(root compiler.Expr) (outRegister int) {
+func (e *exprCommandBuilder) BuildCommands(root compiler.Expr, level int) (outRegister int) {
 	switch n := root.(type) {
 	case *compiler.BinaryExpr:
-		ol := e.BuildCommands(n.Left)
-		or := e.BuildCommands(n.Right)
-		e.commands = append(e.commands, &vm.AddCmd{P1: ol, P2: or, P3: e.openRegister})
+		ol := e.BuildCommands(n.Left, level+1)
+		or := e.BuildCommands(n.Right, level+1)
+		r := e.openRegister
+		if level == 0 {
+			r = e.outputRegister
+		}
+		e.commands = append(e.commands, &vm.AddCmd{P1: ol, P2: or, P3: r})
 		return e.openRegister
 	case *compiler.ColumnRef:
+		r := e.openRegister
+		if level == 0 {
+			r = e.outputRegister
+		}
 		if n.IsPrimaryKey {
-			e.commands = append(e.commands, &vm.RowIdCmd{P1: e.cursorId, P2: e.openRegister})
+			e.commands = append(e.commands, &vm.RowIdCmd{P1: e.cursorId, P2: r})
 			return e.openRegister
 		}
-		e.commands = append(e.commands, &vm.ColumnCmd{P1: e.cursorId, P2: n.ColIdx, P3: e.openRegister})
+		e.commands = append(e.commands, &vm.ColumnCmd{P1: e.cursorId, P2: n.ColIdx, P3: r})
 		return e.openRegister
 	case *compiler.IntLit:
+		if level == 0 {
+			e.commands = append(e.commands, &vm.CopyCmd{P1: e.litRegisters[n.Value], P2: e.outputRegister})
+		}
 		return e.litRegisters[n.Value]
 	}
 	// TODO panic
@@ -425,12 +454,12 @@ func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
 	// per iteration of the scan (loop).
 	for i, c := range n.scanColumns {
 		exprBuilder := &exprCommandBuilder{}
-		exprBuilder.Init(1, startScanRegister+endScanRegisterOffset, constantRegisters)
-		outRegister := exprBuilder.BuildCommands(c)
+		exprBuilder.Init(1, startScanRegister+endScanRegisterOffset, constantRegisters, startScanRegister+i)
+		exprBuilder.BuildCommands(c, 0)
 		for _, tc := range exprBuilder.commands {
 			p.executionPlan.Append(tc)
 		}
-		p.executionPlan.Append(&vm.CopyCmd{P1: outRegister, P2: startScanRegister + i})
+		// p.executionPlan.Append(&vm.CopyCmd{P1: outRegister, P2: startScanRegister + i})
 	}
 
 	// Result row gathers the aforementioned innards of the scan and makes them
