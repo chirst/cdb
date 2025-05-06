@@ -161,6 +161,9 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 			child.scanColumns = append(child.scanColumns, cols...)
 		} else if resultColumn.Expression != nil {
 			cev := &catalogExprVisitor{}
+			if cev.err != nil {
+				return nil, err
+			}
 			cev.Init(p.catalog, child.tableName)
 			resultColumn.Expression.BreadthWalk(cev)
 			child.scanColumns = append(child.scanColumns, resultColumn.Expression)
@@ -304,6 +307,7 @@ func (p *selectExecutionPlanner) buildInit() {
 type catalogExprVisitor struct {
 	catalog   selectCatalog
 	tableName string
+	err       error
 }
 
 func (c *catalogExprVisitor) Init(catalog selectCatalog, tableName string) {
@@ -315,11 +319,13 @@ func (c *catalogExprVisitor) VisitUnaryExpr(e *compiler.UnaryExpr)   {}
 func (c *catalogExprVisitor) VisitColumnRefExpr(e *compiler.ColumnRef) {
 	pkCol, err := c.catalog.GetPrimaryKeyColumn(c.tableName)
 	if err != nil {
-		panic("don't panic")
+		c.err = err
+		return
 	}
 	cols, err := c.catalog.GetColumns(c.tableName)
 	if err != nil {
-		panic("don't panic")
+		c.err = err
+		return
 	}
 	idx := 0
 	e.IsPrimaryKey = e.Column == pkCol
@@ -415,8 +421,7 @@ func (e *exprCommandBuilder) BuildCommands(root compiler.Expr, level int) (outRe
 		}
 		return e.litRegisters[n.Value]
 	}
-	// TODO panic
-	panic("expression builder err")
+	panic("unhandled expression in expr command builder")
 }
 
 func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
