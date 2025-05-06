@@ -6,6 +6,7 @@ package vm
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 
@@ -544,6 +545,113 @@ func (c *AddCmd) execute(vm *vm, routine *routine) cmdRes {
 func (c *AddCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Add register[%d] with register[%d] and store in register[%d]", c.P1, c.P2, c.P3)
 	return formatExplain(addr, "Add", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
+// SubtractCmd subtracts P2 from P1 and stores in register P3
+type SubtractCmd cmd
+
+func (c *SubtractCmd) execute(vm *vm, routine *routine) cmdRes {
+	l, ok := routine.registers[c.P1].(int)
+	if !ok {
+		return cmdRes{
+			err: fmt.Errorf("expected left operand to be int, but got %#v", l),
+		}
+	}
+	r, ok := routine.registers[c.P2].(int)
+	if !ok {
+		return cmdRes{
+			err: fmt.Errorf("expected right operand to be int, but got %#v", r),
+		}
+	}
+	routine.registers[c.P3] = l - r
+	return cmdRes{}
+}
+
+func (c *SubtractCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Subtract register[%d] from register[%d] and store in register[%d]", c.P2, c.P1, c.P3)
+	return formatExplain(addr, "Subtract", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
+// MultiplyCmd multiplies P1 and P2 and stores in register P3
+type MultiplyCmd cmd
+
+func (c *MultiplyCmd) execute(vm *vm, routine *routine) cmdRes {
+	l, ok := routine.registers[c.P1].(int)
+	if !ok {
+		return cmdRes{
+			err: fmt.Errorf("expected left operand to be int, but got %#v", l),
+		}
+	}
+	r, ok := routine.registers[c.P2].(int)
+	if !ok {
+		return cmdRes{
+			err: fmt.Errorf("expected right operand to be int, but got %#v", r),
+		}
+	}
+	routine.registers[c.P3] = l * r
+	return cmdRes{}
+}
+
+func (c *MultiplyCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Multiply register[%d] and register[%d] and store in register[%d]", c.P1, c.P2, c.P3)
+	return formatExplain(addr, "Multiply", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
+// DivideCmd divides P1 by P2 and stores in register P3. If P2 is 0 DivideCmd
+// will return an exception.
+type DivideCmd cmd
+
+func (c *DivideCmd) execute(vm *vm, routine *routine) cmdRes {
+	l, ok := routine.registers[c.P1].(int)
+	if !ok {
+		return cmdRes{
+			err: fmt.Errorf("expected left operand to be int, but got %#v", l),
+		}
+	}
+	r, ok := routine.registers[c.P2].(int)
+	if !ok {
+		return cmdRes{
+			err: fmt.Errorf("expected right operand to be int, but got %#v", r),
+		}
+	}
+	if r == 0 {
+		return cmdRes{
+			err: errors.New("cannot divide by 0"),
+		}
+	}
+	routine.registers[c.P3] = l / r
+	return cmdRes{}
+}
+
+func (c *DivideCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Divide register[%d] by register[%d] and store in register[%d]", c.P1, c.P2, c.P3)
+	return formatExplain(addr, "Divide", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
+// ExponentCmd takes P1 to the P2 power and stores in register P3
+type ExponentCmd cmd
+
+func (c *ExponentCmd) execute(vm *vm, routine *routine) cmdRes {
+	l, ok := routine.registers[c.P1].(int)
+	if !ok {
+		return cmdRes{
+			err: fmt.Errorf("expected left operand to be int, but got %#v", l),
+		}
+	}
+	r, ok := routine.registers[c.P2].(int)
+	if !ok {
+		return cmdRes{
+			err: fmt.Errorf("expected right operand to be int, but got %#v", r),
+		}
+	}
+
+	routine.registers[c.P3] = int(math.Pow(float64(l), float64(r)))
+	return cmdRes{}
+}
+
+func (c *ExponentCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Register[%d] to the register[%d] power and store in register[%d]", c.P1, c.P2, c.P3)
+	return formatExplain(addr, "Exponent", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
 
 // CopyCmd copies P1 into P2

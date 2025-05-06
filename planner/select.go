@@ -367,7 +367,7 @@ func (c *constantRegisterVisitor) Init(openRegister int) {
 func (c *constantRegisterVisitor) fillRegisterIfNeeded(v int) {
 	found := false
 	for k := range c.constantRegisters {
-		if c.constantRegisters[k] == v {
+		if k == v {
 			found = true
 		}
 	}
@@ -415,7 +415,20 @@ func (e *exprCommandBuilder) BuildCommands(root compiler.Expr, level int) (outRe
 		if level == 0 {
 			r = e.outputRegister
 		}
-		e.commands = append(e.commands, &vm.AddCmd{P1: ol, P2: or, P3: r})
+		switch n.Operator {
+		case compiler.OpAdd:
+			e.commands = append(e.commands, &vm.AddCmd{P1: ol, P2: or, P3: r})
+		case compiler.OpDiv:
+			e.commands = append(e.commands, &vm.DivideCmd{P1: ol, P2: or, P3: r})
+		case compiler.OpMul:
+			e.commands = append(e.commands, &vm.MultiplyCmd{P1: ol, P2: or, P3: r})
+		case compiler.OpExp:
+			e.commands = append(e.commands, &vm.ExponentCmd{P1: ol, P2: or, P3: r})
+		case compiler.OpSub:
+			e.commands = append(e.commands, &vm.SubtractCmd{P1: ol, P2: or, P3: r})
+		default:
+			panic("no vm command for operator")
+		}
 		return e.openRegister
 	case *compiler.ColumnRef:
 		r := e.openRegister

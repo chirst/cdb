@@ -313,6 +313,61 @@ func TestSelectPlan(t *testing.T) {
 				},
 			},
 		},
+		{
+			description: "Operators",
+			expectedCommands: []vm.Command{
+				&vm.InitCmd{P2: 1},
+				&vm.IntegerCmd{P1: 9, P2: 1},
+				&vm.DivideCmd{P1: 1, P2: 1, P3: 2},
+				&vm.AddCmd{P1: 1, P2: 1, P3: 3},
+				&vm.ExponentCmd{P1: 1, P2: 1, P3: 4},
+				&vm.MultiplyCmd{P1: 1, P2: 1, P3: 5},
+				&vm.SubtractCmd{P1: 1, P2: 1, P3: 6},
+				&vm.ResultRowCmd{P1: 2, P2: 5},
+				&vm.HaltCmd{},
+			},
+			ast: &compiler.SelectStmt{
+				StmtBase: &compiler.StmtBase{},
+				From:     nil,
+				ResultColumns: []compiler.ResultColumn{
+					{
+						Expression: &compiler.BinaryExpr{
+							Left:     &compiler.IntLit{Value: 9},
+							Right:    &compiler.IntLit{Value: 9},
+							Operator: compiler.OpDiv,
+						},
+					},
+					{
+						Expression: &compiler.BinaryExpr{
+							Left:     &compiler.IntLit{Value: 9},
+							Right:    &compiler.IntLit{Value: 9},
+							Operator: compiler.OpAdd,
+						},
+					},
+					{
+						Expression: &compiler.BinaryExpr{
+							Left:     &compiler.IntLit{Value: 9},
+							Right:    &compiler.IntLit{Value: 9},
+							Operator: compiler.OpExp,
+						},
+					},
+					{
+						Expression: &compiler.BinaryExpr{
+							Left:     &compiler.IntLit{Value: 9},
+							Right:    &compiler.IntLit{Value: 9},
+							Operator: compiler.OpMul,
+						},
+					},
+					{
+						Expression: &compiler.BinaryExpr{
+							Left:     &compiler.IntLit{Value: 9},
+							Right:    &compiler.IntLit{Value: 9},
+							Operator: compiler.OpSub,
+						},
+					},
+				},
+			},
+		},
 	}
 	for _, c := range cases {
 		if c.description == "" {

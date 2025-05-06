@@ -80,30 +80,30 @@ var keywords = []string{
 
 // Operators where op is operator.
 const (
-	opSub = "-"
+	OpSub = "-"
 	OpAdd = "+"
-	opDiv = "/"
-	opMul = "*"
-	opExp = "^"
+	OpDiv = "/"
+	OpMul = "*"
+	OpExp = "^"
 )
 
 // operators is a list of all operators.
 var operators = []string{
-	opSub,
+	OpSub,
 	OpAdd,
-	opDiv,
-	opMul,
-	opExp,
+	OpDiv,
+	OpMul,
+	OpExp,
 }
 
 // opPrecedence defines operator precedence. The higher the number the higher
 // the precedence.
 var opPrecedence = map[string]int{
-	opSub: 1,
+	OpSub: 1,
 	OpAdd: 1,
-	opDiv: 2,
-	opMul: 2,
-	opExp: 3,
+	OpDiv: 2,
+	OpMul: 2,
+	OpExp: 3,
 }
 
 type lexer struct {
