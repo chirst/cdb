@@ -89,12 +89,21 @@ func TestPrimaryKeyUniqueConstraintViolation(t *testing.T) {
 
 func TestOperators(t *testing.T) {
 	db := mustCreateDB(t)
-	res := db.Execute("SELECT 1+2-3*4+5^7-8*9/2")
-	if res.Err != nil {
-		t.Fatalf("expected no err but got %s", res.Err)
-	}
+	res := mustExecute(t, db, "SELECT 1+2-3*4+5^7-8*9/2")
 	got := *res.ResultRows[0][0]
 	want := "78080"
+	if got != want {
+		t.Fatalf("want %s but got %s", want, got)
+	}
+}
+
+func TestAddColumns(t *testing.T) {
+	db := mustCreateDB(t)
+	mustExecute(t, db, "CREATE TABLE test (id INTEGER PRIMARY KEY, val INTEGER)")
+	mustExecute(t, db, "INSERT INTO test (id, val) VALUES (78, 112)")
+	res := mustExecute(t, db, "SELECT id + val FROM test")
+	got := *res.ResultRows[0][0]
+	want := "190"
 	if got != want {
 		t.Fatalf("want %s but got %s", want, got)
 	}
