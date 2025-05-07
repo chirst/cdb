@@ -86,3 +86,16 @@ func TestPrimaryKeyUniqueConstraintViolation(t *testing.T) {
 		t.Fatalf("expected unique constraint error to be raised but got %s", dupePKResponse.Err)
 	}
 }
+
+func TestOperators(t *testing.T) {
+	db := mustCreateDB(t)
+	res := db.Execute("SELECT 1+2-3*4+5^7-8*9/2")
+	if res.Err != nil {
+		t.Fatalf("expected no err but got %s", res.Err)
+	}
+	got := *res.ResultRows[0][0]
+	want := "78080"
+	if got != want {
+		t.Fatalf("want %s but got %s", want, got)
+	}
+}

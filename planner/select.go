@@ -409,15 +409,21 @@ func (e *exprCommandBuilder) Init(cursorId int, openRegister int, litRegisters m
 	e.outputRegister = outputRegister
 }
 
+func (e *exprCommandBuilder) getNextRegister(level int) int {
+	if level == 0 {
+		return e.outputRegister
+	}
+	r := e.openRegister
+	e.openRegister += 1
+	return r
+}
+
 func (e *exprCommandBuilder) BuildCommands(root compiler.Expr, level int) (outRegister int) {
 	switch n := root.(type) {
 	case *compiler.BinaryExpr:
 		ol := e.BuildCommands(n.Left, level+1)
 		or := e.BuildCommands(n.Right, level+1)
-		r := e.openRegister
-		if level == 0 {
-			r = e.outputRegister
-		}
+		r := e.getNextRegister(level)
 		switch n.Operator {
 		case compiler.OpAdd:
 			e.commands = append(e.commands, &vm.AddCmd{P1: ol, P2: or, P3: r})
@@ -432,18 +438,15 @@ func (e *exprCommandBuilder) BuildCommands(root compiler.Expr, level int) (outRe
 		default:
 			panic("no vm command for operator")
 		}
-		return e.openRegister
+		return r
 	case *compiler.ColumnRef:
-		r := e.openRegister
-		if level == 0 {
-			r = e.outputRegister
-		}
+		r := e.getNextRegister(level)
 		if n.IsPrimaryKey {
 			e.commands = append(e.commands, &vm.RowIdCmd{P1: e.cursorId, P2: r})
-			return e.openRegister
+		} else {
+			e.commands = append(e.commands, &vm.ColumnCmd{P1: e.cursorId, P2: n.ColIdx, P3: r})
 		}
-		e.commands = append(e.commands, &vm.ColumnCmd{P1: e.cursorId, P2: n.ColIdx, P3: r})
-		return e.openRegister
+		return r
 	case *compiler.IntLit:
 		if level == 0 {
 			e.commands = append(e.commands, &vm.CopyCmd{P1: e.litRegisters[n.Value], P2: e.outputRegister})
