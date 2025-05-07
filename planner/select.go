@@ -99,8 +99,7 @@ func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
 // numbers, column names with their indices within a tuple, and column names
 // with their constraints and available indexes.
 func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
-	// TODO revisit this functions comment and look into breaking this into
-	// smaller functions.
+	// Constant query has no "from".
 	if p.stmt.From == nil || p.stmt.From.TableName == "" {
 		child := &constantNode{
 			resultColumns: p.stmt.ResultColumns,
@@ -115,41 +114,24 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 		}
 		return newQueryPlan(p.queryPlan, p.stmt.ExplainQueryPlan), nil
 	}
+
 	tableName := p.stmt.From.TableName
 	rootPageNumber, err := p.catalog.GetRootPageNumber(tableName)
 	if err != nil {
 		return nil, err
 	}
-	// For now, count function is handled specially.
-	for i, resultColumn := range p.stmt.ResultColumns {
-		if i != 0 {
-			return nil, errors.New("count with other result columns not supported")
-		}
-		switch e := resultColumn.Expression.(type) {
-		case *compiler.FunctionExpr:
-			if e.FnType != compiler.FnCount {
-				return nil, fmt.Errorf("only %s function is supported", e.FnType)
-			}
-			child := &countNode{
-				tableName: tableName,
-				rootPage:  rootPageNumber,
-			}
-			projections, err := p.getProjections()
-			if err != nil {
-				return nil, err
-			}
-			p.queryPlan = &projectNode{
-				projections: projections,
-				child:       child,
-			}
-			return newQueryPlan(p.queryPlan, p.stmt.ExplainQueryPlan), nil
-		}
-		break
+
+	// Count node is specially supported for now.
+	qp, err := p.getCountNode(tableName, rootPageNumber)
+	if err != nil {
+		return nil, err
+	}
+	if qp != nil {
+		return qp, nil
 	}
 
-	// At this point a constantNode and countNode should be ruled out. The
-	// planner isn't looking at using indexes yet so we are safe to focus on
-	// scanNodes.
+	// At this point a constant and count should be ruled out. The planner isn't
+	// looking at using indexes yet so we are safe to focus on scanNodes.
 	child := &scanNode{
 		tableName:   tableName,
 		rootPage:    rootPageNumber,
@@ -192,6 +174,36 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 		child:       child,
 	}
 	return newQueryPlan(p.queryPlan, p.stmt.ExplainQueryPlan), nil
+}
+
+// getCountNode supports the count function under special circumstances.
+func (p *selectQueryPlanner) getCountNode(tableName string, rootPageNumber int) (*QueryPlan, error) {
+	if len(p.stmt.ResultColumns) == 0 {
+		return nil, nil
+	}
+	switch e := p.stmt.ResultColumns[0].Expression.(type) {
+	case *compiler.FunctionExpr:
+		if len(p.stmt.ResultColumns) != 1 {
+			return nil, errors.New("count with other result columns not supported")
+		}
+		if e.FnType != compiler.FnCount {
+			return nil, fmt.Errorf("only %s function is supported", e.FnType)
+		}
+		child := &countNode{
+			tableName: tableName,
+			rootPage:  rootPageNumber,
+		}
+		projections, err := p.getProjections()
+		if err != nil {
+			return nil, err
+		}
+		p.queryPlan = &projectNode{
+			projections: projections,
+			child:       child,
+		}
+		return newQueryPlan(p.queryPlan, p.stmt.ExplainQueryPlan), nil
+	}
+	return nil, nil
 }
 
 func (p *selectQueryPlanner) getScanColumns() ([]scanColumn, error) {
@@ -288,7 +300,7 @@ func (sp *selectPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
 
 func (p *selectExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 	p.setResultHeader()
-	p.buildInit()
+	p.executionPlan.Append(&vm.InitCmd{P2: 1})
 	switch c := p.queryPlan.child.(type) {
 	case *scanNode:
 		p.executionPlan.Append(&vm.TransactionCmd{P2: 0})
@@ -315,150 +327,9 @@ func (p *selectExecutionPlanner) setResultHeader() {
 	p.executionPlan.ResultHeader = resultHeader
 }
 
-func (p *selectExecutionPlanner) buildInit() {
-	p.executionPlan.Append(&vm.InitCmd{P2: 1})
-}
-
-// TODO look into refactoring/moving visitors throughout this file.
-type catalogExprVisitor struct {
-	catalog   selectCatalog
-	tableName string
-	err       error
-}
-
-func (c *catalogExprVisitor) Init(catalog selectCatalog, tableName string) {
-	c.catalog = catalog
-	c.tableName = tableName
-}
-func (c *catalogExprVisitor) VisitBinaryExpr(e *compiler.BinaryExpr) {}
-func (c *catalogExprVisitor) VisitUnaryExpr(e *compiler.UnaryExpr)   {}
-func (c *catalogExprVisitor) VisitColumnRefExpr(e *compiler.ColumnRef) {
-	pkCol, err := c.catalog.GetPrimaryKeyColumn(c.tableName)
-	if err != nil {
-		c.err = err
-		return
-	}
-	cols, err := c.catalog.GetColumns(c.tableName)
-	if err != nil {
-		c.err = err
-		return
-	}
-	idx := 0
-	e.IsPrimaryKey = e.Column == pkCol
-	for _, col := range cols {
-		if col != pkCol {
-			if e.Column == col {
-				e.ColIdx = idx
-			}
-			idx += 1
-		}
-	}
-}
-func (c *catalogExprVisitor) VisitIntLit(e *compiler.IntLit)             {}
-func (c *catalogExprVisitor) VisitStringLit(e *compiler.StringLit)       {}
-func (c *catalogExprVisitor) VisitFunctionExpr(e *compiler.FunctionExpr) {}
-
-type constantRegisterVisitor struct {
-	nextOpenRegister  int
-	constantRegisters map[int]int
-}
-
-func (c *constantRegisterVisitor) Init(openRegister int) {
-	c.constantRegisters = make(map[int]int)
-	c.nextOpenRegister = openRegister
-}
-func (c *constantRegisterVisitor) fillRegisterIfNeeded(v int) {
-	found := false
-	for k := range c.constantRegisters {
-		if k == v {
-			found = true
-		}
-	}
-	if !found {
-		c.constantRegisters[v] = c.nextOpenRegister
-		c.nextOpenRegister += 1
-	}
-}
-func (c *constantRegisterVisitor) GetRegisters() map[int]int { return c.constantRegisters }
-func (c *constantRegisterVisitor) GetRegisterCommands() []vm.Command {
-	ret := []vm.Command{}
-	for k := range c.constantRegisters {
-		ret = append(ret, &vm.IntegerCmd{P1: k, P2: c.constantRegisters[k]})
-	}
-	return ret
-}
-func (c *constantRegisterVisitor) VisitBinaryExpr(e *compiler.BinaryExpr)     {}
-func (c *constantRegisterVisitor) VisitUnaryExpr(e *compiler.UnaryExpr)       {}
-func (c *constantRegisterVisitor) VisitColumnRefExpr(e *compiler.ColumnRef)   {}
-func (c *constantRegisterVisitor) VisitIntLit(e *compiler.IntLit)             { c.fillRegisterIfNeeded(e.Value) }
-func (c *constantRegisterVisitor) VisitStringLit(e *compiler.StringLit)       {}
-func (c *constantRegisterVisitor) VisitFunctionExpr(e *compiler.FunctionExpr) {}
-
-type exprCommandBuilder struct {
-	cursorId       int
-	openRegister   int
-	outputRegister int
-	commands       []vm.Command
-	litRegisters   map[int]int
-}
-
-func (e *exprCommandBuilder) Init(cursorId int, openRegister int, litRegisters map[int]int, outputRegister int) {
-	e.cursorId = cursorId
-	e.openRegister = openRegister
-	e.litRegisters = litRegisters
-	e.outputRegister = outputRegister
-}
-
-func (e *exprCommandBuilder) getNextRegister(level int) int {
-	if level == 0 {
-		return e.outputRegister
-	}
-	r := e.openRegister
-	e.openRegister += 1
-	return r
-}
-
-func (e *exprCommandBuilder) BuildCommands(root compiler.Expr, level int) (outRegister int) {
-	switch n := root.(type) {
-	case *compiler.BinaryExpr:
-		ol := e.BuildCommands(n.Left, level+1)
-		or := e.BuildCommands(n.Right, level+1)
-		r := e.getNextRegister(level)
-		switch n.Operator {
-		case compiler.OpAdd:
-			e.commands = append(e.commands, &vm.AddCmd{P1: ol, P2: or, P3: r})
-		case compiler.OpDiv:
-			e.commands = append(e.commands, &vm.DivideCmd{P1: ol, P2: or, P3: r})
-		case compiler.OpMul:
-			e.commands = append(e.commands, &vm.MultiplyCmd{P1: ol, P2: or, P3: r})
-		case compiler.OpExp:
-			e.commands = append(e.commands, &vm.ExponentCmd{P1: ol, P2: or, P3: r})
-		case compiler.OpSub:
-			e.commands = append(e.commands, &vm.SubtractCmd{P1: ol, P2: or, P3: r})
-		default:
-			panic("no vm command for operator")
-		}
-		return r
-	case *compiler.ColumnRef:
-		r := e.getNextRegister(level)
-		if n.IsPrimaryKey {
-			e.commands = append(e.commands, &vm.RowIdCmd{P1: e.cursorId, P2: r})
-		} else {
-			e.commands = append(e.commands, &vm.ColumnCmd{P1: e.cursorId, P2: n.ColIdx, P3: r})
-		}
-		return r
-	case *compiler.IntLit:
-		if level == 0 {
-			e.commands = append(e.commands, &vm.CopyCmd{P1: e.litRegisters[n.Value], P2: e.outputRegister})
-		}
-		return e.litRegisters[n.Value]
-	}
-	panic("unhandled expression in expr command builder")
-}
-
 func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
 	// Walks scan columns and builds a map of constant values to registers.
-	// These constants can be used in the innards of the scan.
+	// These constants can be used in the scan.
 	const beginningRegister = 1
 	crv := &constantRegisterVisitor{}
 	crv.Init(beginningRegister)
@@ -469,7 +340,6 @@ func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
 	for _, rc := range rcs {
 		p.executionPlan.Append(rc)
 	}
-	constantRegisters := crv.GetRegisters()
 
 	// Open an available cursor. Can just be 1 for now since no queries are
 	// supported at the moment that requires more than one cursor.
@@ -480,30 +350,35 @@ func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
 	rwc := &vm.RewindCmd{P1: cursorId}
 	p.executionPlan.Append(rwc)
 
-	// Mark beginning of innards for rewind
-	innardsBeginningCommand := len(p.executionPlan.Commands)
+	// Mark beginning of scan for rewind
+	scanBeginningCommand := len(p.executionPlan.Commands)
 
 	// Reserve registers for the column result. Claim registers after as needed.
 	startScanRegister := crv.nextOpenRegister
 	endScanRegisterOffset := len(n.scanColumns)
 
-	// This is the innards of the scan meaning how each result column is handled
+	// This is the inside of the scan meaning how each result column is handled
 	// per iteration of the scan (loop).
 	for i, c := range n.scanColumns {
 		exprBuilder := &exprCommandBuilder{}
-		exprBuilder.Init(1, startScanRegister+endScanRegisterOffset, constantRegisters, startScanRegister+i)
-		exprBuilder.BuildCommands(c, 0)
+		exprBuilder.Init(
+			1,
+			startScanRegister+endScanRegisterOffset,
+			crv.constantRegisters,
+			startScanRegister+i,
+		)
+		exprBuilder.BuildCommands(c)
 		for _, tc := range exprBuilder.commands {
 			p.executionPlan.Append(tc)
 		}
 	}
 
-	// Result row gathers the aforementioned innards of the scan and makes them
+	// Result row gathers the aforementioned inside of the scan and makes them
 	// into a single row for the query results.
 	p.executionPlan.Append(&vm.ResultRowCmd{P1: startScanRegister, P2: endScanRegisterOffset})
 
 	// Falls through or goes back to the start of the scan loop.
-	p.executionPlan.Append(&vm.NextCmd{P1: cursorId, P2: innardsBeginningCommand})
+	p.executionPlan.Append(&vm.NextCmd{P1: cursorId, P2: scanBeginningCommand})
 
 	// Must tell the rewind command where to go in case the table is empty.
 	rwc.P2 = len(p.executionPlan.Commands)
@@ -536,18 +411,100 @@ func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) {
 	for _, rc := range rcs {
 		p.executionPlan.Append(rc)
 	}
-	constantRegisters := crv.GetRegisters()
 
 	// Like a scan, but for a single row.
 	reservedRegisterStart := crv.nextOpenRegister
 	reservedRegisterOffset := len(n.resultColumns)
 	for i, rc := range n.resultColumns {
 		exprBuilder := &exprCommandBuilder{}
-		exprBuilder.Init(1, reservedRegisterStart+reservedRegisterOffset, constantRegisters, reservedRegisterStart+i)
-		exprBuilder.BuildCommands(rc.Expression, 0)
+		exprBuilder.Init(
+			1,
+			reservedRegisterStart+reservedRegisterOffset,
+			crv.constantRegisters,
+			reservedRegisterStart+i,
+		)
+		exprBuilder.BuildCommands(rc.Expression)
 		for _, tc := range exprBuilder.commands {
 			p.executionPlan.Append(tc)
 		}
 	}
 	p.executionPlan.Append(&vm.ResultRowCmd{P1: reservedRegisterStart, P2: reservedRegisterOffset})
+}
+
+// exprCommandBuilder builds commands for the given expression.
+type exprCommandBuilder struct {
+	cursorId       int
+	openRegister   int
+	outputRegister int
+	commands       []vm.Command
+	litRegisters   map[int]int
+}
+
+func (e *exprCommandBuilder) Init(
+	cursorId int,
+	openRegister int,
+	litRegisters map[int]int,
+	outputRegister int,
+) {
+	e.cursorId = cursorId
+	e.openRegister = openRegister
+	e.litRegisters = litRegisters
+	e.outputRegister = outputRegister
+}
+
+func (e *exprCommandBuilder) BuildCommands(root compiler.Expr) int {
+	return e.buildCommands(root, 0)
+}
+
+func (e *exprCommandBuilder) buildCommands(root compiler.Expr, level int) int {
+	switch n := root.(type) {
+	case *compiler.BinaryExpr:
+		ol := e.buildCommands(n.Left, level+1)
+		or := e.buildCommands(n.Right, level+1)
+		r := e.getNextRegister(level)
+		switch n.Operator {
+		case compiler.OpAdd:
+			e.commands = append(e.commands, &vm.AddCmd{P1: ol, P2: or, P3: r})
+		case compiler.OpDiv:
+			e.commands = append(e.commands, &vm.DivideCmd{P1: ol, P2: or, P3: r})
+		case compiler.OpMul:
+			e.commands = append(e.commands, &vm.MultiplyCmd{P1: ol, P2: or, P3: r})
+		case compiler.OpExp:
+			e.commands = append(e.commands, &vm.ExponentCmd{P1: ol, P2: or, P3: r})
+		case compiler.OpSub:
+			e.commands = append(e.commands, &vm.SubtractCmd{P1: ol, P2: or, P3: r})
+		default:
+			panic("no vm command for operator")
+		}
+		return r
+	case *compiler.ColumnRef:
+		r := e.getNextRegister(level)
+		if n.IsPrimaryKey {
+			e.commands = append(e.commands, &vm.RowIdCmd{P1: e.cursorId, P2: r})
+		} else {
+			e.commands = append(
+				e.commands,
+				&vm.ColumnCmd{P1: e.cursorId, P2: n.ColIdx, P3: r},
+			)
+		}
+		return r
+	case *compiler.IntLit:
+		if level == 0 {
+			e.commands = append(
+				e.commands,
+				&vm.CopyCmd{P1: e.litRegisters[n.Value], P2: e.outputRegister},
+			)
+		}
+		return e.litRegisters[n.Value]
+	}
+	panic("unhandled expression in expr command builder")
+}
+
+func (e *exprCommandBuilder) getNextRegister(level int) int {
+	if level == 0 {
+		return e.outputRegister
+	}
+	r := e.openRegister
+	e.openRegister += 1
+	return r
 }
