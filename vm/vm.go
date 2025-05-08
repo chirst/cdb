@@ -182,6 +182,25 @@ func (v *vm) explain(plan *ExecutionPlan) *ExecuteResult {
 	}
 }
 
+// TODO need to consider how values enter and exit the vm. There are many
+// inconsistencies at the moment due to the "any" types used throughout. Will
+// need to consider values being decoded or assigned through commands to
+// registers. This anyToInt likely won't be good enough due to it having no way
+// to handle floats.
+func anyToInt(a any) (int, error) {
+	switch t := a.(type) {
+	case int:
+		return t, nil
+	case string:
+		ti, err := strconv.Atoi(t)
+		if err != nil {
+			return 0, err
+		}
+		return ti, nil
+	}
+	return 0, fmt.Errorf("unsupported any to int for variable %#v of type %T", a, a)
+}
+
 // InitCmd jumps to the instruction at address P2.
 type InitCmd cmd
 
@@ -526,17 +545,13 @@ func (c *IntegerCmd) explain(addr int) []*string {
 type AddCmd cmd
 
 func (c *AddCmd) execute(vm *vm, routine *routine) cmdRes {
-	l, ok := routine.registers[c.P1].(int)
-	if !ok {
-		return cmdRes{
-			err: fmt.Errorf("expected left operand to be int, but got %#v", l),
-		}
+	l, err := anyToInt(routine.registers[c.P1])
+	if err != nil {
+		return cmdRes{err: err}
 	}
-	r, ok := routine.registers[c.P2].(int)
-	if !ok {
-		return cmdRes{
-			err: fmt.Errorf("expected right operand to be int, but got %#v", r),
-		}
+	r, err := anyToInt(routine.registers[c.P2])
+	if err != nil {
+		return cmdRes{err: err}
 	}
 	routine.registers[c.P3] = l + r
 	return cmdRes{}
@@ -551,17 +566,13 @@ func (c *AddCmd) explain(addr int) []*string {
 type SubtractCmd cmd
 
 func (c *SubtractCmd) execute(vm *vm, routine *routine) cmdRes {
-	l, ok := routine.registers[c.P1].(int)
-	if !ok {
-		return cmdRes{
-			err: fmt.Errorf("expected left operand to be int, but got %#v", l),
-		}
+	l, err := anyToInt(routine.registers[c.P1])
+	if err != nil {
+		return cmdRes{err: err}
 	}
-	r, ok := routine.registers[c.P2].(int)
-	if !ok {
-		return cmdRes{
-			err: fmt.Errorf("expected right operand to be int, but got %#v", r),
-		}
+	r, err := anyToInt(routine.registers[c.P2])
+	if err != nil {
+		return cmdRes{err: err}
 	}
 	routine.registers[c.P3] = l - r
 	return cmdRes{}
@@ -576,17 +587,13 @@ func (c *SubtractCmd) explain(addr int) []*string {
 type MultiplyCmd cmd
 
 func (c *MultiplyCmd) execute(vm *vm, routine *routine) cmdRes {
-	l, ok := routine.registers[c.P1].(int)
-	if !ok {
-		return cmdRes{
-			err: fmt.Errorf("expected left operand to be int, but got %#v", l),
-		}
+	l, err := anyToInt(routine.registers[c.P1])
+	if err != nil {
+		return cmdRes{err: err}
 	}
-	r, ok := routine.registers[c.P2].(int)
-	if !ok {
-		return cmdRes{
-			err: fmt.Errorf("expected right operand to be int, but got %#v", r),
-		}
+	r, err := anyToInt(routine.registers[c.P2])
+	if err != nil {
+		return cmdRes{err: err}
 	}
 	routine.registers[c.P3] = l * r
 	return cmdRes{}
@@ -602,17 +609,13 @@ func (c *MultiplyCmd) explain(addr int) []*string {
 type DivideCmd cmd
 
 func (c *DivideCmd) execute(vm *vm, routine *routine) cmdRes {
-	l, ok := routine.registers[c.P1].(int)
-	if !ok {
-		return cmdRes{
-			err: fmt.Errorf("expected left operand to be int, but got %#v", l),
-		}
+	l, err := anyToInt(routine.registers[c.P1])
+	if err != nil {
+		return cmdRes{err: err}
 	}
-	r, ok := routine.registers[c.P2].(int)
-	if !ok {
-		return cmdRes{
-			err: fmt.Errorf("expected right operand to be int, but got %#v", r),
-		}
+	r, err := anyToInt(routine.registers[c.P2])
+	if err != nil {
+		return cmdRes{err: err}
 	}
 	if r == 0 {
 		return cmdRes{
@@ -632,19 +635,14 @@ func (c *DivideCmd) explain(addr int) []*string {
 type ExponentCmd cmd
 
 func (c *ExponentCmd) execute(vm *vm, routine *routine) cmdRes {
-	l, ok := routine.registers[c.P1].(int)
-	if !ok {
-		return cmdRes{
-			err: fmt.Errorf("expected left operand to be int, but got %#v", l),
-		}
+	l, err := anyToInt(routine.registers[c.P1])
+	if err != nil {
+		return cmdRes{err: err}
 	}
-	r, ok := routine.registers[c.P2].(int)
-	if !ok {
-		return cmdRes{
-			err: fmt.Errorf("expected right operand to be int, but got %#v", r),
-		}
+	r, err := anyToInt(routine.registers[c.P2])
+	if err != nil {
+		return cmdRes{err: err}
 	}
-
 	routine.registers[c.P3] = int(math.Pow(float64(l), float64(r)))
 	return cmdRes{}
 }

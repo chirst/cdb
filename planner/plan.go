@@ -117,6 +117,9 @@ func (p *projection) print() string {
 	if p.isCount {
 		return "count(*)"
 	}
+	if p.colName == "" {
+		return "<anonymous>"
+	}
 	return p.colName
 }
 
