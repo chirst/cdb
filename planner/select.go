@@ -3,6 +3,7 @@ package planner
 import (
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
@@ -99,6 +100,11 @@ func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
 // numbers, column names with their indices within a tuple, and column names
 // with their constraints and available indexes.
 func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
+	err := p.optimizeResultColumns()
+	if err != nil {
+		return nil, err
+	}
+
 	// Constant query has no "from".
 	if p.stmt.From == nil || p.stmt.From.TableName == "" {
 		child := &constantNode{
@@ -174,6 +180,64 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 		child:       child,
 	}
 	return newQueryPlan(p.queryPlan, p.stmt.ExplainQueryPlan), nil
+}
+
+func (p *selectQueryPlanner) optimizeResultColumns() error {
+	var err error
+	for i := range p.stmt.ResultColumns {
+		if p.stmt.ResultColumns[i].Expression != nil {
+			p.stmt.ResultColumns[i].Expression, err = foldExpr(
+				p.stmt.ResultColumns[i].Expression,
+			)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// foldExpr folds expressions that can be computed before the query is executed.
+// This optimization cuts down on instructions.
+func foldExpr(e compiler.Expr) (compiler.Expr, error) {
+	// Currently this only focuses on squashing binary expressions, but it could
+	// do unary expressions or certain string manipulations. Anything involving
+	// two constants.
+	be, bok := e.(*compiler.BinaryExpr)
+	if !bok {
+		return e, nil
+	}
+	var err error
+	be.Left, err = foldExpr(be.Left)
+	if err != nil {
+		return nil, err
+	}
+	be.Right, err = foldExpr(be.Right)
+	if err != nil {
+		return nil, err
+	}
+	le, lok := be.Left.(*compiler.IntLit)
+	re, rok := be.Right.(*compiler.IntLit)
+	if !lok || !rok {
+		return be, nil
+	}
+	switch be.Operator {
+	case compiler.OpAdd:
+		return &compiler.IntLit{Value: le.Value + re.Value}, nil
+	case compiler.OpDiv:
+		if re.Value == 0 {
+			return nil, errors.New("cannot divide by 0")
+		}
+		return &compiler.IntLit{Value: le.Value / re.Value}, nil
+	case compiler.OpExp:
+		return &compiler.IntLit{Value: int(math.Pow(float64(le.Value), float64(re.Value)))}, nil
+	case compiler.OpMul:
+		return &compiler.IntLit{Value: le.Value * re.Value}, nil
+	case compiler.OpSub:
+		return &compiler.IntLit{Value: le.Value - re.Value}, nil
+	default:
+		return nil, fmt.Errorf("folding not implemented for %s", be.Operator)
+	}
 }
 
 // getCountNode supports the count function under special circumstances.

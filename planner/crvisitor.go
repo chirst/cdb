@@ -1,6 +1,8 @@
 package planner
 
 import (
+	"slices"
+
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
 )
@@ -22,9 +24,17 @@ func (c *constantRegisterVisitor) Init(openRegister int) {
 // GetRegisterCommands returns commands to fill the current constantRegister
 // map.
 func (c *constantRegisterVisitor) GetRegisterCommands() []vm.Command {
-	ret := []vm.Command{}
+	// Maps are unordered so there is some extra work to keep commands in order.
+	unordered := []*vm.IntegerCmd{}
 	for k := range c.constantRegisters {
-		ret = append(ret, &vm.IntegerCmd{P1: k, P2: c.constantRegisters[k]})
+		unordered = append(unordered, &vm.IntegerCmd{P1: k, P2: c.constantRegisters[k]})
+	}
+	slices.SortFunc(unordered, func(a, b *vm.IntegerCmd) int {
+		return a.P2 - b.P2
+	})
+	ret := []vm.Command{}
+	for _, s := range unordered {
+		ret = append(ret, vm.Command(s))
 	}
 	return ret
 }
