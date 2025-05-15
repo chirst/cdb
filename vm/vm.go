@@ -700,3 +700,27 @@ func (c *NotExistsCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Jump to register[%d] if cursor %d does not contain key %d", c.P2, c.P1, c.P3)
 	return formatExplain(addr, "NotExists", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
+
+// NotEqualCmd jumps to register P2 if register P1 and P3 are not equal.
+// Otherwise fall through.
+type NotEqualCmd cmd
+
+func (c *NotEqualCmd) execute(vm *vm, routine *routine) cmdRes {
+	v1, err := anyToInt(routine.registers[c.P1])
+	if err != nil {
+		return cmdRes{err: err}
+	}
+	v2, err := anyToInt(routine.registers[c.P3])
+	if err != nil {
+		return cmdRes{err: err}
+	}
+	if v1 != v2 {
+		return cmdRes{nextAddress: c.P2}
+	}
+	return cmdRes{}
+}
+
+func (c *NotEqualCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Jump to address %d if register[%d] does not equal register[%d]", c.P2, c.P1, c.P3)
+	return formatExplain(addr, "NotEqual", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}

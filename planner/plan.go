@@ -124,6 +124,9 @@ func (p *projection) print() string {
 }
 
 func (s *scanNode) print() string {
+	if s.scanPredicate != nil {
+		return fmt.Sprintf("scan table %s with predicate", s.tableName)
+	}
 	return fmt.Sprintf("scan table %s", s.tableName)
 }
 

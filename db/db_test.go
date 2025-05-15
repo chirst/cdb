@@ -108,3 +108,18 @@ func TestAddColumns(t *testing.T) {
 		t.Fatalf("want %s but got %s", want, got)
 	}
 }
+
+func TestSelectWithWhere(t *testing.T) {
+	db := mustCreateDB(t)
+	mustExecute(t, db, "CREATE TABLE test (id INTEGER PRIMARY KEY, val INTEGER)")
+	mustExecute(t, db, "INSERT INTO test (id, val) VALUES (3, 929), (1, 444), (2, 438)")
+	res := mustExecute(t, db, "SELECT * FROM test WHERE val = 444")
+	if rowCount := len(res.ResultRows); rowCount != 1 {
+		t.Fatalf("want 1 row but got %d", rowCount)
+	}
+	got := *res.ResultRows[0][0]
+	want := "1"
+	if got != want {
+		t.Fatalf("want %s but got %s", want, got)
+	}
+}

@@ -32,6 +32,9 @@ type scanNode struct {
 	rootPage int
 	// scanColumns contains information about how the scan will project columns
 	scanColumns []scanColumn
+	// scanPredicate is an expression evaluated as a boolean. This behaves as a
+	// filter in the scan.
+	scanPredicate compiler.Expr
 }
 
 type scanColumn = compiler.Expr

@@ -73,6 +73,40 @@ func TestParseSelect(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "with where clause",
+			tokens: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkOperator, "*"},
+				{tkWhitespace, " "},
+				{tkKeyword, "FROM"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+				{tkWhitespace, " "},
+				{tkKeyword, "WHERE"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "id"},
+				{tkWhitespace, " "},
+				{tkOperator, "="},
+				{tkWhitespace, " "},
+				{tkNumeric, "1"},
+			},
+			expect: &SelectStmt{
+				StmtBase: &StmtBase{},
+				From: &From{
+					TableName: "foo",
+				},
+				ResultColumns: []ResultColumn{
+					{All: true},
+				},
+				Where: &BinaryExpr{
+					Left:     &ColumnRef{Column: "id"},
+					Right:    &IntLit{Value: 1},
+					Operator: OpEq,
+				},
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

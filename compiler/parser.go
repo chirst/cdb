@@ -92,6 +92,16 @@ func (p *parser) parseSelect(sb *StmtBase) (*SelectStmt, error) {
 	stmt.From = &From{
 		TableName: t.value,
 	}
+
+	w := p.nextNonSpace()
+	if w.value == kwWhere {
+		exp, err := p.parseExpression(0)
+		if err != nil {
+			return nil, err
+		}
+		stmt.Where = exp
+	}
+
 	return stmt, nil
 }
 
