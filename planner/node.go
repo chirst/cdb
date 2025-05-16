@@ -43,6 +43,8 @@ type scanColumn = compiler.Expr
 type constantNode struct {
 	// resultColumns are the result columns containing expressions.
 	resultColumns []compiler.ResultColumn
+	// predicate filters the result depending on the result of the expression.
+	predicate compiler.Expr
 }
 
 // countNode represents a special optimization when a table needs a full count

@@ -109,6 +109,7 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 	if p.stmt.From == nil || p.stmt.From.TableName == "" {
 		child := &constantNode{
 			resultColumns: p.stmt.ResultColumns,
+			predicate:     p.stmt.Where,
 		}
 		projections, err := p.getProjections()
 		if err != nil {
@@ -385,7 +386,9 @@ func (p *selectExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 		p.executionPlan.Append(&vm.TransactionCmd{P2: 0})
 		p.buildOptimizedCountScan(c)
 	case *constantNode:
-		p.buildConstantNode(c)
+		if err := p.buildConstantNode(c); err != nil {
+			return nil, err
+		}
 	default:
 		return nil, fmt.Errorf("unhandled node %#v", c)
 	}
@@ -508,7 +511,7 @@ func (p *selectExecutionPlanner) buildOptimizedCountScan(n *countNode) {
 
 // buildConstantNode is a single row operation produced by a "select" without a
 // "from".
-func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) {
+func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) error {
 	// Build registers with constants. These are likely extra instructions, but
 	// okay since it allows this to follow the same pattern a scan does.
 	const beginningRegister = 1
@@ -516,6 +519,9 @@ func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) {
 	crv.Init(beginningRegister)
 	for _, c := range n.resultColumns {
 		c.Expression.BreadthWalk(crv)
+	}
+	if n.predicate != nil {
+		n.predicate.BreadthWalk(crv)
 	}
 	rcs := crv.GetRegisterCommands()
 	for _, rc := range rcs {
@@ -525,6 +531,7 @@ func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) {
 	// Like a scan, but for a single row.
 	reservedRegisterStart := crv.nextOpenRegister
 	reservedRegisterOffset := len(n.resultColumns)
+	var openRegister int
 	for i, rc := range n.resultColumns {
 		exprBuilder := &resultColumnCommandBuilder{}
 		exprBuilder.Build(
@@ -537,9 +544,28 @@ func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) {
 		for _, tc := range exprBuilder.commands {
 			p.executionPlan.Append(tc)
 		}
+		openRegister = exprBuilder.openRegister
 	}
-	// TODO add predicate to constant node and handle predicate.
+
+	bpb := &booleanPredicateBuilder{}
+	err := bpb.Build(
+		0,
+		openRegister,
+		len(p.executionPlan.Commands),
+		crv.constantRegisters,
+		map[int]int{},
+		0,
+		n.predicate,
+	)
+	if err != nil {
+		return err
+	}
+	for _, bc := range bpb.commands {
+		p.executionPlan.Append(bc)
+	}
+
 	p.executionPlan.Append(&vm.ResultRowCmd{P1: reservedRegisterStart, P2: reservedRegisterOffset})
+	return nil
 }
 
 // resultColumnCommandBuilder builds commands for the given expression.

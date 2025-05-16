@@ -107,6 +107,25 @@ func TestParseSelect(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "constant with where clause",
+			tokens: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkNumeric, "1"},
+				{tkWhitespace, " "},
+				{tkKeyword, "WHERE"},
+				{tkWhitespace, " "},
+				{tkNumeric, "1"},
+			},
+			expect: &SelectStmt{
+				StmtBase: &StmtBase{},
+				ResultColumns: []ResultColumn{
+					{Expression: &IntLit{Value: 1}},
+				},
+				Where: &IntLit{Value: 1},
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
