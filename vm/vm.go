@@ -724,3 +724,22 @@ func (c *NotEqualCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Jump to address %d if register[%d] does not equal register[%d]", c.P2, c.P1, c.P3)
 	return formatExplain(addr, "NotEqual", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
+
+// IfNotCmd jumps to P2 if P1 is false otherwise fall through.
+type IfNotCmd cmd
+
+func (c *IfNotCmd) execute(vm *vm, routine *routine) cmdRes {
+	v, err := anyToInt(routine.registers[c.P1])
+	if err != nil {
+		return cmdRes{err: err}
+	}
+	if v == 0 {
+		return cmdRes{nextAddress: c.P2}
+	}
+	return cmdRes{}
+}
+
+func (c *IfNotCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Jump to address %d if register[%d] is false", c.P2, c.P1)
+	return formatExplain(addr, "NotEqual", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}

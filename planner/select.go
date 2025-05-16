@@ -466,7 +466,8 @@ func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
 	// Walk scan predicate and build commands to calculate a conditional jump.
 	if n.scanPredicate != nil {
 		bpb := &booleanPredicateBuilder{}
-		bpb.Build(
+		err := bpb.Build(
+			cursorId,
 			openRegister,
 			len(p.executionPlan.Commands),
 			crv.constantRegisters,
@@ -474,6 +475,9 @@ func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
 			pkRegister,
 			n.scanPredicate,
 		)
+		if err != nil {
+			return err
+		}
 		for _, bc := range bpb.commands {
 			p.executionPlan.Append(bc)
 		}
@@ -633,6 +637,8 @@ func (e *resultColumnCommandBuilder) getNextRegister(level int) int {
 // booleanPredicateBuilder builds commands to calculate the boolean result of an
 // expression.
 type booleanPredicateBuilder struct {
+	// cursorId is the cursor for the associated table.
+	cursorId int
 	// openRegister is the next available register
 	openRegister int
 	// jumpAddress is the address the result of the boolean expression should
@@ -657,96 +663,120 @@ type booleanPredicateBuilder struct {
 }
 
 func (p *booleanPredicateBuilder) Build(
+	cursorId int,
 	openRegister int,
 	jumpAddress int,
 	litRegisters map[int]int,
 	colRegisters map[int]int,
 	pkRegister int,
 	e compiler.Expr,
-) {
+) error {
+	p.cursorId = cursorId
 	p.openRegister = openRegister
 	p.jumpAddress = jumpAddress
 	p.litRegisters = litRegisters
 	p.colRegisters = colRegisters
 	p.pkRegister = pkRegister
-	p.build(e, 0)
+	_, err := p.build(e, 0)
+	return err
 }
 
-func (p *booleanPredicateBuilder) build(e compiler.Expr, level int) int {
-	// TODO handle panic paths throughout.
+func (p *booleanPredicateBuilder) build(e compiler.Expr, level int) (int, error) {
 	switch ce := e.(type) {
 	case *compiler.BinaryExpr:
-		ol := p.build(ce.Left, level+1)
-		or := p.build(ce.Right, level+1)
+		ol, err := p.build(ce.Left, level+1)
+		if err != nil {
+			return 0, err
+		}
+		or, err := p.build(ce.Right, level+1)
+		if err != nil {
+			return 0, err
+		}
 		r := p.getNextRegister()
 		switch ce.Operator {
 		case compiler.OpAdd:
 			p.commands = append(p.commands, &vm.AddCmd{P1: ol, P2: or, P3: r})
 			if level == 0 {
-				panic("must calculate boolean result")
+				p.commands = append(p.commands, &vm.IfNotCmd{P1: r, P2: p.getJumpAddress()})
 			}
+			return r, nil
 		case compiler.OpDiv:
 			p.commands = append(p.commands, &vm.DivideCmd{P1: ol, P2: or, P3: r})
 			if level == 0 {
-				panic("must calculate boolean result")
+				p.commands = append(p.commands, &vm.IfNotCmd{P1: r, P2: p.getJumpAddress()})
 			}
+			return r, nil
 		case compiler.OpMul:
 			p.commands = append(p.commands, &vm.MultiplyCmd{P1: ol, P2: or, P3: r})
 			if level == 0 {
-				panic("must calculate boolean result")
+				p.commands = append(p.commands, &vm.IfNotCmd{P1: r, P2: p.getJumpAddress()})
 			}
+			return r, nil
 		case compiler.OpExp:
 			p.commands = append(p.commands, &vm.ExponentCmd{P1: ol, P2: or, P3: r})
 			if level == 0 {
-				panic("must calculate boolean result")
+				p.commands = append(p.commands, &vm.IfNotCmd{P1: r, P2: p.getJumpAddress()})
 			}
+			return r, nil
 		case compiler.OpSub:
 			p.commands = append(p.commands, &vm.SubtractCmd{P1: ol, P2: or, P3: r})
 			if level == 0 {
-				panic("must calculate boolean result")
+				p.commands = append(p.commands, &vm.IfNotCmd{P1: r, P2: p.getJumpAddress()})
 			}
+			return r, nil
 		case compiler.OpEq:
 			if level == 0 {
 				p.commands = append(
 					p.commands,
-					&vm.NotEqualCmd{P1: ol, P2: p.jumpAddress + len(p.commands) + 2, P3: or},
+					&vm.NotEqualCmd{P1: ol, P2: p.getJumpAddress(), P3: or},
 				)
-				return p.jumpAddress
+				return 0, nil
 			}
-			// TODO calc boolean and store in register. return register.
-			panic("not implemented non root eq")
+			// TODO should be able to make this work.
+			return 0, errors.New("cannot have a non root '=' expression")
 		default:
 			panic("no vm command for operator")
 		}
-		return r
 	case *compiler.ColumnRef:
+		colRefReg := p.valueRegisterFor(ce)
 		if level == 0 {
-			// TODO jump based on boolean conversion
-			panic("not implemented column ref predicate")
+			p.commands = append(p.commands, &vm.IfNotCmd{P1: colRefReg, P2: p.getJumpAddress()})
 		}
-		if ce.IsPrimaryKey {
-			if p.pkRegister == 0 {
-				panic("pk register is unset")
-			}
-			return p.pkRegister
-		}
-		cr := p.colRegisters[ce.ColIdx]
-		if cr == 0 {
-			panic("col register is unset")
-		}
-		return cr
+		return colRefReg, nil
 	case *compiler.IntLit:
+		litReg := p.litRegisters[ce.Value]
 		if level == 0 {
-			// TODO jump based on boolean conversion
-			panic("not implemented lit predicate")
+			p.commands = append(p.commands, &vm.IfNotCmd{P1: litReg, P2: p.getJumpAddress()})
 		}
-		return p.litRegisters[ce.Value]
+		return litReg, nil
 	}
 	panic("unhandled expression in predicate builder")
 }
 
-func (e *booleanPredicateBuilder) getNextRegister() int {
-	r := e.openRegister
-	e.openRegister += 1
+func (p *booleanPredicateBuilder) getJumpAddress() int {
+	return p.jumpAddress + len(p.commands) + 2
+}
+
+func (p *booleanPredicateBuilder) valueRegisterFor(ce *compiler.ColumnRef) int {
+	if ce.IsPrimaryKey {
+		if p.pkRegister == 0 {
+			r := p.getNextRegister()
+			p.commands = append(p.commands, &vm.RowIdCmd{P1: p.cursorId, P2: r})
+			return r
+		}
+		return p.pkRegister
+	}
+	cr := p.colRegisters[ce.ColIdx]
+	if cr == 0 {
+		r := p.getNextRegister()
+		p.commands = append(p.commands, &vm.ColumnCmd{P1: p.cursorId, P2: ce.ColIdx, P3: r})
+		return r
+	}
+	return cr
+}
+
+func (p *booleanPredicateBuilder) getNextRegister() int {
+	r := p.openRegister
+	p.openRegister += 1
 	return r
 }
