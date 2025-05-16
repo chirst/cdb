@@ -15,6 +15,7 @@ type SelectStmt struct {
 	*StmtBase
 	From          *From
 	ResultColumns []ResultColumn
+	Where         Expr
 }
 
 // ResultColumn is the column definitions in a select statement.

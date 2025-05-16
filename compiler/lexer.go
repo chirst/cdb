@@ -56,6 +56,7 @@ const (
 	kwPrimary = "PRIMARY"
 	kwKey     = "KEY"
 	kwAs      = "AS"
+	kwWhere   = "WHERE"
 )
 
 // keywords is a list of all keywords.
@@ -76,6 +77,7 @@ var keywords = []string{
 	kwPrimary,
 	kwKey,
 	kwAs,
+	kwWhere,
 }
 
 // Operators where op is operator.
@@ -85,6 +87,9 @@ const (
 	OpDiv = "/"
 	OpMul = "*"
 	OpExp = "^"
+	OpEq  = "="
+	OpLt  = "<"
+	OpGt  = ">"
 )
 
 // operators is a list of all operators.
@@ -94,16 +99,22 @@ var operators = []string{
 	OpDiv,
 	OpMul,
 	OpExp,
+	OpEq,
+	OpLt,
+	OpGt,
 }
 
 // opPrecedence defines operator precedence. The higher the number the higher
 // the precedence.
 var opPrecedence = map[string]int{
-	OpSub: 1,
-	OpAdd: 1,
-	OpDiv: 2,
-	OpMul: 2,
-	OpExp: 3,
+	OpEq:  1,
+	OpLt:  2,
+	OpGt:  2,
+	OpSub: 3,
+	OpAdd: 3,
+	OpDiv: 4,
+	OpMul: 4,
+	OpExp: 5,
 }
 
 type lexer struct {

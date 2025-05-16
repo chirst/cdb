@@ -81,16 +81,27 @@ func (p *parser) parseSelect(sb *StmtBase) (*SelectStmt, error) {
 	if f.tokenType == tkEOF || f.value == ";" {
 		return stmt, nil
 	}
-	if f.tokenType != tkKeyword || f.value != kwFrom {
-		return nil, fmt.Errorf(tokenErr, f.value)
+	w := f
+	if f.value == kwFrom {
+		t := p.nextNonSpace()
+		if t.tokenType != tkIdentifier {
+			return nil, fmt.Errorf(tokenErr, t.value)
+		}
+		stmt.From = &From{
+			TableName: t.value,
+		}
+		w = p.nextNonSpace()
 	}
 
-	t := p.nextNonSpace()
-	if t.tokenType != tkIdentifier {
-		return nil, fmt.Errorf(tokenErr, t.value)
+	if w.tokenType == tkEOF || w.value == ";" {
+		return stmt, nil
 	}
-	stmt.From = &From{
-		TableName: t.value,
+	if w.value == kwWhere {
+		exp, err := p.parseExpression(0)
+		if err != nil {
+			return nil, err
+		}
+		stmt.Where = exp
 	}
 	return stmt, nil
 }

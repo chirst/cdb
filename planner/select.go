@@ -109,6 +109,7 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 	if p.stmt.From == nil || p.stmt.From.TableName == "" {
 		child := &constantNode{
 			resultColumns: p.stmt.ResultColumns,
+			predicate:     p.stmt.Where,
 		}
 		projections, err := p.getProjections()
 		if err != nil {
@@ -136,12 +137,22 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 		return qp, nil
 	}
 
+	if p.stmt.Where != nil {
+		cev := &catalogExprVisitor{}
+		cev.Init(p.catalog, p.stmt.From.TableName)
+		if cev.err != nil {
+			return nil, err
+		}
+		p.stmt.Where.BreadthWalk(cev)
+	}
+
 	// At this point a constant and count should be ruled out. The planner isn't
 	// looking at using indexes yet so we are safe to focus on scanNodes.
 	child := &scanNode{
-		tableName:   tableName,
-		rootPage:    rootPageNumber,
-		scanColumns: []scanColumn{},
+		tableName:     tableName,
+		rootPage:      rootPageNumber,
+		scanColumns:   []scanColumn{},
+		scanPredicate: p.stmt.Where,
 	}
 	for _, resultColumn := range p.stmt.ResultColumns {
 		if resultColumn.All {
@@ -375,7 +386,9 @@ func (p *selectExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 		p.executionPlan.Append(&vm.TransactionCmd{P2: 0})
 		p.buildOptimizedCountScan(c)
 	case *constantNode:
-		p.buildConstantNode(c)
+		if err := p.buildConstantNode(c); err != nil {
+			return nil, err
+		}
 	default:
 		return nil, fmt.Errorf("unhandled node %#v", c)
 	}
@@ -392,13 +405,16 @@ func (p *selectExecutionPlanner) setResultHeader() {
 }
 
 func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
-	// Walks scan columns and builds a map of constant values to registers.
-	// These constants can be used in the scan.
+	// Build a map of constant values to registers by walking result columns and
+	// the scan predicate.
 	const beginningRegister = 1
 	crv := &constantRegisterVisitor{}
 	crv.Init(beginningRegister)
 	for _, c := range n.scanColumns {
 		c.BreadthWalk(crv)
+	}
+	if n.scanPredicate != nil {
+		n.scanPredicate.BreadthWalk(crv)
 	}
 	rcs := crv.GetRegisterCommands()
 	for _, rc := range rcs {
@@ -423,17 +439,50 @@ func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
 
 	// This is the inside of the scan meaning how each result column is handled
 	// per iteration of the scan (loop).
+	var pkRegister int
+	var openRegister int
+	colRegisters := make(map[int]int)
 	for i, c := range n.scanColumns {
-		exprBuilder := &exprCommandBuilder{}
-		exprBuilder.Init(
-			1,
+		exprBuilder := &resultColumnCommandBuilder{}
+		exprBuilder.Build(
+			cursorId,
 			startScanRegister+endScanRegisterOffset,
 			crv.constantRegisters,
 			startScanRegister+i,
+			c,
 		)
-		exprBuilder.BuildCommands(c)
+		if exprBuilder.pkRegister != 0 {
+			pkRegister = exprBuilder.pkRegister
+		}
+		openRegister = exprBuilder.openRegister
+		for crk, crv := range exprBuilder.colRegisters {
+			colRegisters[crk] = crv
+		}
 		for _, tc := range exprBuilder.commands {
 			p.executionPlan.Append(tc)
+		}
+	}
+
+	// TODO predicate commands should come as early as possible to save
+	// instructions, but for now this is easier.
+	//
+	// Walk scan predicate and build commands to calculate a conditional jump.
+	if n.scanPredicate != nil {
+		bpb := &booleanPredicateBuilder{}
+		err := bpb.Build(
+			cursorId,
+			openRegister,
+			len(p.executionPlan.Commands),
+			crv.constantRegisters,
+			colRegisters,
+			pkRegister,
+			n.scanPredicate,
+		)
+		if err != nil {
+			return err
+		}
+		for _, bc := range bpb.commands {
+			p.executionPlan.Append(bc)
 		}
 	}
 
@@ -462,7 +511,7 @@ func (p *selectExecutionPlanner) buildOptimizedCountScan(n *countNode) {
 
 // buildConstantNode is a single row operation produced by a "select" without a
 // "from".
-func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) {
+func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) error {
 	// Build registers with constants. These are likely extra instructions, but
 	// okay since it allows this to follow the same pattern a scan does.
 	const beginningRegister = 1
@@ -470,6 +519,9 @@ func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) {
 	crv.Init(beginningRegister)
 	for _, c := range n.resultColumns {
 		c.Expression.BreadthWalk(crv)
+	}
+	if n.predicate != nil {
+		n.predicate.BreadthWalk(crv)
 	}
 	rcs := crv.GetRegisterCommands()
 	for _, rc := range rcs {
@@ -479,52 +531,86 @@ func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) {
 	// Like a scan, but for a single row.
 	reservedRegisterStart := crv.nextOpenRegister
 	reservedRegisterOffset := len(n.resultColumns)
+	var openRegister int
 	for i, rc := range n.resultColumns {
-		exprBuilder := &exprCommandBuilder{}
-		exprBuilder.Init(
+		exprBuilder := &resultColumnCommandBuilder{}
+		exprBuilder.Build(
 			1,
 			reservedRegisterStart+reservedRegisterOffset,
 			crv.constantRegisters,
 			reservedRegisterStart+i,
+			rc.Expression,
 		)
-		exprBuilder.BuildCommands(rc.Expression)
 		for _, tc := range exprBuilder.commands {
 			p.executionPlan.Append(tc)
 		}
+		openRegister = exprBuilder.openRegister
 	}
+
+	if n.predicate != nil {
+		bpb := &booleanPredicateBuilder{}
+		err := bpb.Build(
+			0,
+			openRegister,
+			len(p.executionPlan.Commands),
+			crv.constantRegisters,
+			map[int]int{},
+			0,
+			n.predicate,
+		)
+		if err != nil {
+			return err
+		}
+		for _, bc := range bpb.commands {
+			p.executionPlan.Append(bc)
+		}
+	}
+
 	p.executionPlan.Append(&vm.ResultRowCmd{P1: reservedRegisterStart, P2: reservedRegisterOffset})
+	return nil
 }
 
-// exprCommandBuilder builds commands for the given expression.
-type exprCommandBuilder struct {
-	cursorId       int
-	openRegister   int
+// resultColumnCommandBuilder builds commands for the given expression.
+type resultColumnCommandBuilder struct {
+	// cursorId is the cursor for the related table.
+	cursorId int
+	// openRegister is the next available register.
+	openRegister int
+	// outputRegister is the target register for the result of the expression.
 	outputRegister int
-	commands       []vm.Command
-	litRegisters   map[int]int
+	// commands are the commands to evaluate the expression.
+	commands []vm.Command
+	// litRegisters is a mapping of scalar values to registers containing them.
+	litRegisters map[int]int
+	// colRegisters is a mapping of column indexes to registers containing the
+	// column. This is for subsequent routines to reuse the result of these
+	// commands.
+	colRegisters map[int]int
+	// pkRegister is 0 value unless a register has been filled as part of Build.
+	// This is for subsequent routines to reuse the result of the command.
+	pkRegister int
 }
 
-func (e *exprCommandBuilder) Init(
+func (e *resultColumnCommandBuilder) Build(
 	cursorId int,
 	openRegister int,
 	litRegisters map[int]int,
 	outputRegister int,
-) {
+	root compiler.Expr,
+) int {
 	e.cursorId = cursorId
 	e.openRegister = openRegister
 	e.litRegisters = litRegisters
+	e.colRegisters = make(map[int]int)
 	e.outputRegister = outputRegister
+	return e.build(root, 0)
 }
 
-func (e *exprCommandBuilder) BuildCommands(root compiler.Expr) int {
-	return e.buildCommands(root, 0)
-}
-
-func (e *exprCommandBuilder) buildCommands(root compiler.Expr, level int) int {
+func (e *resultColumnCommandBuilder) build(root compiler.Expr, level int) int {
 	switch n := root.(type) {
 	case *compiler.BinaryExpr:
-		ol := e.buildCommands(n.Left, level+1)
-		or := e.buildCommands(n.Right, level+1)
+		ol := e.build(n.Left, level+1)
+		or := e.build(n.Right, level+1)
 		r := e.getNextRegister(level)
 		switch n.Operator {
 		case compiler.OpAdd:
@@ -537,6 +623,9 @@ func (e *exprCommandBuilder) buildCommands(root compiler.Expr, level int) int {
 			e.commands = append(e.commands, &vm.ExponentCmd{P1: ol, P2: or, P3: r})
 		case compiler.OpSub:
 			e.commands = append(e.commands, &vm.SubtractCmd{P1: ol, P2: or, P3: r})
+		// TODO handle OpEq
+		// TODO handle OpLt
+		// TODO handle OpGt
 		default:
 			panic("no vm command for operator")
 		}
@@ -544,8 +633,10 @@ func (e *exprCommandBuilder) buildCommands(root compiler.Expr, level int) int {
 	case *compiler.ColumnRef:
 		r := e.getNextRegister(level)
 		if n.IsPrimaryKey {
+			e.pkRegister = r
 			e.commands = append(e.commands, &vm.RowIdCmd{P1: e.cursorId, P2: r})
 		} else {
+			e.colRegisters[n.ColIdx] = r
 			e.commands = append(
 				e.commands,
 				&vm.ColumnCmd{P1: e.cursorId, P2: n.ColIdx, P3: r},
@@ -564,11 +655,178 @@ func (e *exprCommandBuilder) buildCommands(root compiler.Expr, level int) int {
 	panic("unhandled expression in expr command builder")
 }
 
-func (e *exprCommandBuilder) getNextRegister(level int) int {
+func (e *resultColumnCommandBuilder) getNextRegister(level int) int {
 	if level == 0 {
 		return e.outputRegister
 	}
 	r := e.openRegister
 	e.openRegister += 1
+	return r
+}
+
+// booleanPredicateBuilder builds commands to calculate the boolean result of an
+// expression.
+type booleanPredicateBuilder struct {
+	// cursorId is the cursor for the associated table.
+	cursorId int
+	// openRegister is the next available register
+	openRegister int
+	// jumpAddress is the address the result of the boolean expression should
+	// conditionally jump to.
+	jumpAddress int
+	// commands is a list of commands representing the expression.
+	commands []vm.Command
+	// litRegisters is a mapping of scalar values to the register containing
+	// them. litRegisters should be guaranteed since they have a minimal cost
+	// due to being calculated outside of any scans/loops.
+	litRegisters map[int]int
+	// colRegisters is a mapping of table column index to register containing
+	// the column value. colRegisters may not be guaranteed since a projection
+	// may not require them, in which case colRegisters should be calculated as
+	// part of the predicate.
+	colRegisters map[int]int
+	// pkRegister is unset when 0. Otherwise, pkRegister is the register
+	// containing the table row id. pkRegister may not be guaranteed depending
+	// on the projection in which case the register should be calculated as part
+	// of the expression evaluation.
+	pkRegister int
+}
+
+func (p *booleanPredicateBuilder) Build(
+	cursorId int,
+	openRegister int,
+	jumpAddress int,
+	litRegisters map[int]int,
+	colRegisters map[int]int,
+	pkRegister int,
+	e compiler.Expr,
+) error {
+	p.cursorId = cursorId
+	p.openRegister = openRegister
+	p.jumpAddress = jumpAddress
+	p.litRegisters = litRegisters
+	p.colRegisters = colRegisters
+	p.pkRegister = pkRegister
+	_, err := p.build(e, 0)
+	return err
+}
+
+func (p *booleanPredicateBuilder) build(e compiler.Expr, level int) (int, error) {
+	switch ce := e.(type) {
+	case *compiler.BinaryExpr:
+		ol, err := p.build(ce.Left, level+1)
+		if err != nil {
+			return 0, err
+		}
+		or, err := p.build(ce.Right, level+1)
+		if err != nil {
+			return 0, err
+		}
+		r := p.getNextRegister()
+		switch ce.Operator {
+		case compiler.OpAdd:
+			p.commands = append(p.commands, &vm.AddCmd{P1: ol, P2: or, P3: r})
+			if level == 0 {
+				p.commands = append(p.commands, &vm.IfNotCmd{P1: r, P2: p.getJumpAddress()})
+			}
+			return r, nil
+		case compiler.OpDiv:
+			p.commands = append(p.commands, &vm.DivideCmd{P1: ol, P2: or, P3: r})
+			if level == 0 {
+				p.commands = append(p.commands, &vm.IfNotCmd{P1: r, P2: p.getJumpAddress()})
+			}
+			return r, nil
+		case compiler.OpMul:
+			p.commands = append(p.commands, &vm.MultiplyCmd{P1: ol, P2: or, P3: r})
+			if level == 0 {
+				p.commands = append(p.commands, &vm.IfNotCmd{P1: r, P2: p.getJumpAddress()})
+			}
+			return r, nil
+		case compiler.OpExp:
+			p.commands = append(p.commands, &vm.ExponentCmd{P1: ol, P2: or, P3: r})
+			if level == 0 {
+				p.commands = append(p.commands, &vm.IfNotCmd{P1: r, P2: p.getJumpAddress()})
+			}
+			return r, nil
+		case compiler.OpSub:
+			p.commands = append(p.commands, &vm.SubtractCmd{P1: ol, P2: or, P3: r})
+			if level == 0 {
+				p.commands = append(p.commands, &vm.IfNotCmd{P1: r, P2: p.getJumpAddress()})
+			}
+			return r, nil
+		case compiler.OpEq:
+			if level == 0 {
+				p.commands = append(
+					p.commands,
+					&vm.NotEqualCmd{P1: ol, P2: p.getJumpAddress(), P3: or},
+				)
+				return 0, nil
+			}
+			// TODO should be able to make this work.
+			return 0, errors.New("cannot have a non root '=' expression")
+		case compiler.OpLt:
+			if level == 0 {
+				p.commands = append(
+					p.commands,
+					&vm.LteCmd{P1: ol, P2: p.getJumpAddress(), P3: or},
+				)
+				return 0, nil
+			}
+			// TODO should be able to make this work.
+			return 0, errors.New("cannot have a non root '<' expression")
+		case compiler.OpGt:
+			if level == 0 {
+				p.commands = append(
+					p.commands,
+					&vm.GteCmd{P1: ol, P2: p.getJumpAddress(), P3: or},
+				)
+				return 0, nil
+			}
+			// TODO should be able to make this work.
+			return 0, errors.New("cannot have a non root '>' expression")
+		default:
+			panic("no vm command for operator")
+		}
+	case *compiler.ColumnRef:
+		colRefReg := p.valueRegisterFor(ce)
+		if level == 0 {
+			p.commands = append(p.commands, &vm.IfNotCmd{P1: colRefReg, P2: p.getJumpAddress()})
+		}
+		return colRefReg, nil
+	case *compiler.IntLit:
+		litReg := p.litRegisters[ce.Value]
+		if level == 0 {
+			p.commands = append(p.commands, &vm.IfNotCmd{P1: litReg, P2: p.getJumpAddress()})
+		}
+		return litReg, nil
+	}
+	panic("unhandled expression in predicate builder")
+}
+
+func (p *booleanPredicateBuilder) getJumpAddress() int {
+	return p.jumpAddress + len(p.commands) + 2
+}
+
+func (p *booleanPredicateBuilder) valueRegisterFor(ce *compiler.ColumnRef) int {
+	if ce.IsPrimaryKey {
+		if p.pkRegister == 0 {
+			r := p.getNextRegister()
+			p.commands = append(p.commands, &vm.RowIdCmd{P1: p.cursorId, P2: r})
+			return r
+		}
+		return p.pkRegister
+	}
+	cr := p.colRegisters[ce.ColIdx]
+	if cr == 0 {
+		r := p.getNextRegister()
+		p.commands = append(p.commands, &vm.ColumnCmd{P1: p.cursorId, P2: ce.ColIdx, P3: r})
+		return r
+	}
+	return cr
+}
+
+func (p *booleanPredicateBuilder) getNextRegister() int {
+	r := p.openRegister
+	p.openRegister += 1
 	return r
 }

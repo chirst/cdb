@@ -700,3 +700,92 @@ func (c *NotExistsCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Jump to register[%d] if cursor %d does not contain key %d", c.P2, c.P1, c.P3)
 	return formatExplain(addr, "NotExists", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
+
+// NotEqualCmd jumps to register P2 if register P1 and P3 are not equal.
+// Otherwise fall through.
+type NotEqualCmd cmd
+
+func (c *NotEqualCmd) execute(vm *vm, routine *routine) cmdRes {
+	v1, err := anyToInt(routine.registers[c.P1])
+	if err != nil {
+		return cmdRes{err: err}
+	}
+	v2, err := anyToInt(routine.registers[c.P3])
+	if err != nil {
+		return cmdRes{err: err}
+	}
+	if v1 != v2 {
+		return cmdRes{nextAddress: c.P2}
+	}
+	return cmdRes{}
+}
+
+func (c *NotEqualCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Jump to address %d if register[%d] does not equal register[%d]", c.P2, c.P1, c.P3)
+	return formatExplain(addr, "NotEqual", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
+// IfNotCmd jumps to P2 if P1 is false otherwise fall through.
+type IfNotCmd cmd
+
+func (c *IfNotCmd) execute(vm *vm, routine *routine) cmdRes {
+	v, err := anyToInt(routine.registers[c.P1])
+	if err != nil {
+		return cmdRes{err: err}
+	}
+	if v == 0 {
+		return cmdRes{nextAddress: c.P2}
+	}
+	return cmdRes{}
+}
+
+func (c *IfNotCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Jump to address %d if register[%d] is false", c.P2, c.P1)
+	return formatExplain(addr, "IfNot", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
+// GteCmd if P1 is greater than or equal to P3 jump to P2
+type GteCmd cmd
+
+func (c *GteCmd) execute(vm *vm, routine *routine) cmdRes {
+	vl, err := anyToInt(routine.registers[c.P1])
+	if err != nil {
+		return cmdRes{err: err}
+	}
+	vr, err := anyToInt(routine.registers[c.P3])
+	if err != nil {
+		return cmdRes{err: err}
+	}
+	if vl <= vr {
+		return cmdRes{nextAddress: c.P2}
+	}
+	return cmdRes{}
+}
+
+func (c *GteCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Jump to address %d if register[%d] <= register[%d]", c.P2, c.P1, c.P3)
+	return formatExplain(addr, "Gte", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
+// LteCmd if P1 is less than or equal to P3 jump to P2
+type LteCmd cmd
+
+func (c *LteCmd) execute(vm *vm, routine *routine) cmdRes {
+	vl, err := anyToInt(routine.registers[c.P1])
+	if err != nil {
+		return cmdRes{err: err}
+	}
+	vr, err := anyToInt(routine.registers[c.P3])
+	if err != nil {
+		return cmdRes{err: err}
+	}
+	if vl >= vr {
+		return cmdRes{nextAddress: c.P2}
+	}
+	return cmdRes{}
+}
+
+func (c *LteCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Jump to address %d if register[%d] >= register[%d]", c.P2, c.P1, c.P3)
+	return formatExplain(addr, "Lte", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}

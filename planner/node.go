@@ -32,6 +32,9 @@ type scanNode struct {
 	rootPage int
 	// scanColumns contains information about how the scan will project columns
 	scanColumns []scanColumn
+	// scanPredicate is an expression evaluated as a boolean. This behaves as a
+	// filter in the scan.
+	scanPredicate compiler.Expr
 }
 
 type scanColumn = compiler.Expr
@@ -40,6 +43,8 @@ type scanColumn = compiler.Expr
 type constantNode struct {
 	// resultColumns are the result columns containing expressions.
 	resultColumns []compiler.ResultColumn
+	// predicate filters the result depending on the result of the expression.
+	predicate compiler.Expr
 }
 
 // countNode represents a special optimization when a table needs a full count

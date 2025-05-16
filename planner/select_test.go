@@ -342,6 +342,43 @@ func TestSelectPlan(t *testing.T) {
 				},
 			},
 		},
+		{
+			description: "with where clause",
+			expectedCommands: []vm.Command{
+				&vm.InitCmd{P2: 1},
+				&vm.TransactionCmd{P1: 0},
+				&vm.IntegerCmd{P1: 1, P2: 1},
+				&vm.OpenReadCmd{P1: 1, P2: 2},
+				&vm.RewindCmd{P1: 1, P2: 9},
+				&vm.RowIdCmd{P1: 1, P2: 2},
+				&vm.NotEqualCmd{P1: 2, P2: 8, P3: 1},
+				&vm.ResultRowCmd{P1: 2, P2: 1},
+				&vm.NextCmd{P1: 1, P2: 5},
+				&vm.HaltCmd{},
+			},
+			ast: &compiler.SelectStmt{
+				StmtBase: &compiler.StmtBase{},
+				From: &compiler.From{
+					TableName: "foo",
+				},
+				ResultColumns: []compiler.ResultColumn{
+					{
+						Expression: &compiler.ColumnRef{
+							Column: "id",
+						},
+					},
+				},
+				Where: &compiler.BinaryExpr{
+					Left:     &compiler.ColumnRef{Column: "id"},
+					Right:    &compiler.IntLit{Value: 1},
+					Operator: compiler.OpEq,
+				},
+			},
+			mockCatalogSetup: func(m *mockSelectCatalog) *mockSelectCatalog {
+				m.primaryKeyColumnName = "id"
+				return m
+			},
+		},
 	}
 	for _, c := range cases {
 		if c.description == "" {
