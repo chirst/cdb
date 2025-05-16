@@ -547,21 +547,23 @@ func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) error {
 		openRegister = exprBuilder.openRegister
 	}
 
-	bpb := &booleanPredicateBuilder{}
-	err := bpb.Build(
-		0,
-		openRegister,
-		len(p.executionPlan.Commands),
-		crv.constantRegisters,
-		map[int]int{},
-		0,
-		n.predicate,
-	)
-	if err != nil {
-		return err
-	}
-	for _, bc := range bpb.commands {
-		p.executionPlan.Append(bc)
+	if n.predicate != nil {
+		bpb := &booleanPredicateBuilder{}
+		err := bpb.Build(
+			0,
+			openRegister,
+			len(p.executionPlan.Commands),
+			crv.constantRegisters,
+			map[int]int{},
+			0,
+			n.predicate,
+		)
+		if err != nil {
+			return err
+		}
+		for _, bc := range bpb.commands {
+			p.executionPlan.Append(bc)
+		}
 	}
 
 	p.executionPlan.Append(&vm.ResultRowCmd{P1: reservedRegisterStart, P2: reservedRegisterOffset})
@@ -622,6 +624,8 @@ func (e *resultColumnCommandBuilder) build(root compiler.Expr, level int) int {
 		case compiler.OpSub:
 			e.commands = append(e.commands, &vm.SubtractCmd{P1: ol, P2: or, P3: r})
 		// TODO handle OpEq
+		// TODO handle OpLt
+		// TODO handle OpGt
 		default:
 			panic("no vm command for operator")
 		}
@@ -760,6 +764,26 @@ func (p *booleanPredicateBuilder) build(e compiler.Expr, level int) (int, error)
 			}
 			// TODO should be able to make this work.
 			return 0, errors.New("cannot have a non root '=' expression")
+		case compiler.OpLt:
+			if level == 0 {
+				p.commands = append(
+					p.commands,
+					&vm.LteCmd{P1: ol, P2: p.getJumpAddress(), P3: or},
+				)
+				return 0, nil
+			}
+			// TODO should be able to make this work.
+			return 0, errors.New("cannot have a non root '<' expression")
+		case compiler.OpGt:
+			if level == 0 {
+				p.commands = append(
+					p.commands,
+					&vm.GteCmd{P1: ol, P2: p.getJumpAddress(), P3: or},
+				)
+				return 0, nil
+			}
+			// TODO should be able to make this work.
+			return 0, errors.New("cannot have a non root '>' expression")
 		default:
 			panic("no vm command for operator")
 		}

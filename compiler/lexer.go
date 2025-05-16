@@ -88,6 +88,8 @@ const (
 	OpMul = "*"
 	OpExp = "^"
 	OpEq  = "="
+	OpLt  = "<"
+	OpGt  = ">"
 )
 
 // operators is a list of all operators.
@@ -98,17 +100,21 @@ var operators = []string{
 	OpMul,
 	OpExp,
 	OpEq,
+	OpLt,
+	OpGt,
 }
 
 // opPrecedence defines operator precedence. The higher the number the higher
 // the precedence.
 var opPrecedence = map[string]int{
 	OpEq:  1,
-	OpSub: 2,
-	OpAdd: 2,
-	OpDiv: 3,
-	OpMul: 3,
-	OpExp: 4,
+	OpLt:  2,
+	OpGt:  2,
+	OpSub: 3,
+	OpAdd: 3,
+	OpDiv: 4,
+	OpMul: 4,
+	OpExp: 5,
 }
 
 type lexer struct {
