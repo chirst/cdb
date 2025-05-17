@@ -8,7 +8,7 @@ import (
 
 type selectTestCase struct {
 	name   string
-	tokens []Token
+	tokens []token
 	expect Stmt
 }
 
@@ -16,15 +16,15 @@ func TestParseSelect(t *testing.T) {
 	cases := []selectTestCase{
 		{
 			name: "with explain",
-			tokens: []Token{
+			tokens: []token{
 				{tkKeyword, "EXPLAIN"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "SELECT"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkOperator, "*"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "FROM"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkIdentifier, "foo"},
 			},
 			expect: &SelectStmt{
@@ -43,19 +43,19 @@ func TestParseSelect(t *testing.T) {
 		},
 		{
 			name: "with explain query plan",
-			tokens: []Token{
+			tokens: []token{
 				{tkKeyword, "EXPLAIN"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "QUERY"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "PLAN"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "SELECT"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkOperator, "*"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "FROM"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkIdentifier, "foo"},
 			},
 			expect: &SelectStmt{
@@ -75,21 +75,21 @@ func TestParseSelect(t *testing.T) {
 		},
 		{
 			name: "with where clause",
-			tokens: []Token{
+			tokens: []token{
 				{tkKeyword, "SELECT"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkOperator, "*"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "FROM"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkIdentifier, "foo"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "WHERE"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkIdentifier, "id"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkOperator, "="},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkNumeric, "1"},
 			},
 			expect: &SelectStmt{
@@ -109,13 +109,13 @@ func TestParseSelect(t *testing.T) {
 		},
 		{
 			name: "constant with where clause",
-			tokens: []Token{
+			tokens: []token{
 				{tkKeyword, "SELECT"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkNumeric, "1"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "WHERE"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkNumeric, "1"},
 			},
 			expect: &SelectStmt{
@@ -141,37 +141,37 @@ func TestParseSelect(t *testing.T) {
 }
 
 type createTestCase struct {
-	tokens   []Token
+	tokens   []token
 	expected Stmt
 }
 
 func TestParseCreate(t *testing.T) {
 	cases := []createTestCase{
 		{
-			tokens: []Token{
+			tokens: []token{
 				{tkKeyword, "CREATE"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "TABLE"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkIdentifier, "foo"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkSeparator, "("},
 				{tkIdentifier, "id"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "INTEGER"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "PRIMARY"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "KEY"},
 				{tkSeparator, ","},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkIdentifier, "first_name"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "TEXT"},
 				{tkSeparator, ","},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkIdentifier, "last_name"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "TEXT"},
 				{tkSeparator, ")"},
 			},
@@ -210,61 +210,61 @@ func TestParseCreate(t *testing.T) {
 }
 
 type insertTestCase struct {
-	tokens   []Token
+	tokens   []token
 	expected Stmt
 }
 
 func TestParseInsert(t *testing.T) {
 	cases := []insertTestCase{
 		{
-			tokens: []Token{
+			tokens: []token{
 				{tkKeyword, "INSERT"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "INTO"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkIdentifier, "foo"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkSeparator, "("},
 				{tkIdentifier, "id"},
 				{tkSeparator, ","},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkIdentifier, "first_name"},
 				{tkSeparator, ","},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkIdentifier, "last_name"},
 				{tkSeparator, ")"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "VALUES"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkSeparator, "("},
 				{tkNumeric, "1"},
 				{tkSeparator, ","},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkLiteral, "'gud'"},
 				{tkSeparator, ","},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkLiteral, "'dude'"},
 				{tkSeparator, ")"},
 				{tkSeparator, ","},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkSeparator, "("},
 				{tkNumeric, "2"},
 				{tkSeparator, ","},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkLiteral, "'joe'"},
 				{tkSeparator, ","},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkLiteral, "'doe'"},
 				{tkSeparator, ")"},
 				{tkSeparator, ","},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkSeparator, "("},
 				{tkNumeric, "3"},
 				{tkSeparator, ","},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkLiteral, "'jan'"},
 				{tkSeparator, ","},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkLiteral, "'ice'"},
 				{tkSeparator, ")"},
 			},
@@ -311,23 +311,23 @@ func TestParseInsert(t *testing.T) {
 
 type resultColumnTestCase struct {
 	name   string
-	tokens []Token
+	tokens []token
 	expect []ResultColumn
 }
 
 func TestParseResultColumn(t *testing.T) {
-	template := []Token{
+	template := []token{
 		{tkKeyword, "SELECT"},
-		{TkWhitespace, " "},
-		{TkWhitespace, " "},
+		{tkWhitespace, " "},
+		{tkWhitespace, " "},
 		{tkKeyword, "FROM"},
-		{TkWhitespace, " "},
+		{tkWhitespace, " "},
 		{tkIdentifier, "foo"},
 	}
 	cases := []resultColumnTestCase{
 		{
 			name: "*",
-			tokens: []Token{
+			tokens: []token{
 				{tkOperator, "*"},
 			},
 			expect: []ResultColumn{
@@ -338,7 +338,7 @@ func TestParseResultColumn(t *testing.T) {
 		},
 		{
 			name: "foo.*",
-			tokens: []Token{
+			tokens: []token{
 				{tkIdentifier, "foo"},
 				{tkOperator, "."},
 				{tkOperator, "*"},
@@ -351,7 +351,7 @@ func TestParseResultColumn(t *testing.T) {
 		},
 		{
 			name: "COUNT(*)",
-			tokens: []Token{
+			tokens: []token{
 				{tkKeyword, "COUNT"},
 				{tkSeparator, "("},
 				{tkOperator, "*"},
@@ -365,14 +365,14 @@ func TestParseResultColumn(t *testing.T) {
 		},
 		{
 			name: "COUNT(*) + 1",
-			tokens: []Token{
+			tokens: []token{
 				{tkKeyword, "COUNT"},
 				{tkSeparator, "("},
 				{tkOperator, "*"},
 				{tkSeparator, ")"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkOperator, "+"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkNumeric, "1"},
 			},
 			expect: []ResultColumn{
@@ -387,39 +387,39 @@ func TestParseResultColumn(t *testing.T) {
 		},
 		{
 			name: "(1 + 2 - (3 * 4) + (5 / (6 ^ 7)) - (8 * 9))",
-			tokens: []Token{
+			tokens: []token{
 				{tkNumeric, "1"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkOperator, "+"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkNumeric, "2"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkOperator, "-"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkNumeric, "3"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkOperator, "*"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkNumeric, "4"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkOperator, "+"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkNumeric, "5"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkOperator, "/"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkNumeric, "6"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkOperator, "^"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkNumeric, "7"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkOperator, "-"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkNumeric, "8"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkOperator, "*"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkNumeric, "9"},
 			},
 			expect: []ResultColumn{
@@ -462,13 +462,13 @@ func TestParseResultColumn(t *testing.T) {
 		},
 		{
 			name: "foo.id AS bar",
-			tokens: []Token{
+			tokens: []token{
 				{tkIdentifier, "foo"},
 				{tkSeparator, "."},
 				{tkIdentifier, "id"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "AS"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkIdentifier, "bar"},
 			},
 			expect: []ResultColumn{
@@ -483,25 +483,25 @@ func TestParseResultColumn(t *testing.T) {
 		},
 		{
 			name: "1 + 2 AS foo, id, id2 AS id1",
-			tokens: []Token{
+			tokens: []token{
 				{tkNumeric, "1"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkOperator, "+"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkNumeric, "2"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "AS"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkIdentifier, "foo"},
 				{tkSeparator, ","},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkIdentifier, "id"},
 				{tkSeparator, ","},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkIdentifier, "id2"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkKeyword, "AS"},
-				{TkWhitespace, " "},
+				{tkWhitespace, " "},
 				{tkIdentifier, "id1"},
 			},
 			expect: []ResultColumn{

@@ -5,7 +5,6 @@ package db
 
 import (
 	"errors"
-	"slices"
 	"time"
 
 	"github.com/chirst/cdb/compiler"
@@ -49,42 +48,25 @@ func New(useMemory bool, filename string) (*DB, error) {
 	}, nil
 }
 
-func (db *DB) Tokenize(sql string) [][]compiler.Token {
-	tokens := compiler.NewLexer(sql).Lex()
-	statements := [][]compiler.Token{}
-	start := 0
-	for i := range tokens {
-		if tokens[i].Value == ";" {
-			statements = append(statements, tokens[start:i+1])
-			start = i + 1
-		}
-	}
-	if start == len(tokens) {
-		return statements
-	}
-	return append(statements, tokens[start:])
+func (db *DB) Tokenize(sql string) compiler.Statements {
+	return compiler.NewLexer(sql).ToStatements()
 }
 
-func (db *DB) IsTerminated(statements [][]compiler.Token) bool {
-	if len(statements) == 0 {
-		return false
-	}
-	lastStatement := statements[len(statements)-1]
-	for _, token := range slices.Backward(lastStatement) {
-		if token.TokenType == compiler.TkWhitespace {
-			continue
-		}
-		if token.Value == ";" {
-			return true
-		}
-		break
-	}
-	return false
+func (db *DB) IsTerminated(statements compiler.Statements) bool {
+	return compiler.IsTerminated(statements)
 }
 
-func (db *DB) Execute(tokens []compiler.Token) vm.ExecuteResult {
+func (db *DB) ExecuteRaw(sql string) vm.ExecuteResult {
+	statements := compiler.NewLexer(sql).ToStatements()
+	if len(statements) != 1 {
+		return vm.ExecuteResult{Err: errors.New("must be single statement")}
+	}
+	return db.Execute(statements[0])
+}
+
+func (db *DB) Execute(statements compiler.Statement) vm.ExecuteResult {
 	start := time.Now()
-	statement, err := compiler.NewParser(tokens).Parse()
+	statement, err := compiler.NewParser(statements).Parse()
 	if err != nil {
 		return vm.ExecuteResult{Err: err}
 	}

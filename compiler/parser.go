@@ -18,12 +18,12 @@ const (
 )
 
 type parser struct {
-	tokens []Token
+	tokens []token
 	start  int
 	end    int
 }
 
-func NewParser(tokens []Token) *parser {
+func NewParser(tokens []token) *parser {
 	return &parser{tokens: tokens}
 }
 
@@ -34,29 +34,29 @@ func (p *parser) Parse() (Stmt, error) {
 func (p *parser) parseStmt() (Stmt, error) {
 	t := p.tokens[p.start]
 	for {
-		if t.TokenType != TkWhitespace {
+		if t.tokenType != tkWhitespace {
 			break
 		}
 		p.end = p.end + 1
 		t = p.tokens[p.end]
 	}
 	sb := &StmtBase{}
-	if t.Value == kwExplain {
+	if t.value == kwExplain {
 		nv := p.nextNonSpace()
-		if nv.Value == kwQuery {
+		if nv.value == kwQuery {
 			tp := p.nextNonSpace()
-			if tp.Value == kwPlan {
+			if tp.value == kwPlan {
 				sb.ExplainQueryPlan = true
 				t = p.nextNonSpace()
 			} else {
-				return nil, fmt.Errorf(tokenErr, p.tokens[p.end].Value)
+				return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 			}
 		} else {
 			sb.Explain = true
 			t = nv
 		}
 	}
-	switch t.Value {
+	switch t.value {
 	case kwSelect:
 		return p.parseSelect(sb)
 	case kwCreate:
@@ -64,13 +64,13 @@ func (p *parser) parseStmt() (Stmt, error) {
 	case kwInsert:
 		return p.parseInsert(sb)
 	}
-	return nil, fmt.Errorf(tokenErr, t.Value)
+	return nil, fmt.Errorf(tokenErr, t.value)
 }
 
 func (p *parser) parseSelect(sb *StmtBase) (*SelectStmt, error) {
 	stmt := &SelectStmt{StmtBase: sb}
-	if p.tokens[p.end].Value != kwSelect {
-		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].Value)
+	if p.tokens[p.end].value != kwSelect {
+		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
 	for {
 		resultColumn, err := p.parseResultColumn()
@@ -79,31 +79,31 @@ func (p *parser) parseSelect(sb *StmtBase) (*SelectStmt, error) {
 		}
 		stmt.ResultColumns = append(stmt.ResultColumns, *resultColumn)
 		n := p.peekNextNonSpace()
-		if n.Value != "," {
+		if n.value != "," {
 			break
 		}
 		p.nextNonSpace()
 	}
 	f := p.nextNonSpace()
-	if f.TokenType == tkEOF || f.Value == ";" {
+	if f.tokenType == tkEOF || f.value == ";" {
 		return stmt, nil
 	}
 	w := f
-	if f.Value == kwFrom {
+	if f.value == kwFrom {
 		t := p.nextNonSpace()
-		if t.TokenType != tkIdentifier {
-			return nil, fmt.Errorf(tokenErr, t.Value)
+		if t.tokenType != tkIdentifier {
+			return nil, fmt.Errorf(tokenErr, t.value)
 		}
 		stmt.From = &From{
-			TableName: t.Value,
+			TableName: t.value,
 		}
 		w = p.nextNonSpace()
 	}
 
-	if w.TokenType == tkEOF || w.Value == ";" {
+	if w.tokenType == tkEOF || w.value == ";" {
 		return stmt, nil
 	}
-	if w.Value == kwWhere {
+	if w.value == kwWhere {
 		exp, err := p.parseExpression(0)
 		if err != nil {
 			return nil, err
@@ -124,15 +124,15 @@ func (p *parser) parseResultColumn() (*ResultColumn, error) {
 	// We simply try and identify the first two then fall into expression
 	// parsing if the first two cases are not present. This is a smart way to do
 	// things since expressions are not limited to result columns.
-	if r.Value == "*" {
+	if r.value == "*" {
 		resultColumn.All = true
 		return resultColumn, nil
-	} else if r.TokenType == tkIdentifier {
-		if p.peekNextNonSpace().Value == "." {
-			if p.peekNonSpaceBy(2).Value == "*" {
+	} else if r.tokenType == tkIdentifier {
+		if p.peekNextNonSpace().value == "." {
+			if p.peekNonSpaceBy(2).value == "*" {
 				p.nextNonSpace() // move to .
 				p.nextNonSpace() // move to *
-				resultColumn.AllTable = r.Value
+				resultColumn.AllTable = r.value
 				return resultColumn, nil
 			}
 		}
@@ -163,10 +163,10 @@ func (p *parser) parseExpression(rbp int) (Expr, error) {
 	}
 	for {
 		nextToken := p.peekNextNonSpace()
-		if nextToken.TokenType != tkOperator {
+		if nextToken.tokenType != tkOperator {
 			return left, nil
 		}
-		lbp := opPrecedence[nextToken.Value]
+		lbp := opPrecedence[nextToken.value]
 		if lbp <= rbp {
 			return left, nil
 		}
@@ -177,7 +177,7 @@ func (p *parser) parseExpression(rbp int) (Expr, error) {
 		}
 		left = &BinaryExpr{
 			Left:     left,
-			Operator: nextToken.Value,
+			Operator: nextToken.value,
 			Right:    right,
 		}
 	}
@@ -189,41 +189,41 @@ func (p *parser) parseExpression(rbp int) (Expr, error) {
 // as three tokens, but needs to be "squashed" into the expression `ColumnRef`.
 func (p *parser) getOperand() (Expr, error) {
 	first := p.nextNonSpace()
-	if first.TokenType == tkLiteral {
-		return &StringLit{Value: first.Value}, nil
+	if first.tokenType == tkLiteral {
+		return &StringLit{Value: first.value}, nil
 	}
-	if first.TokenType == tkNumeric {
-		intValue, err := strconv.Atoi(first.Value)
+	if first.tokenType == tkNumeric {
+		intValue, err := strconv.Atoi(first.value)
 		if err != nil {
 			return nil, errors.New("failed to parse numeric token")
 		}
 		return &IntLit{Value: intValue}, nil
 	}
-	if first.TokenType == tkIdentifier {
+	if first.tokenType == tkIdentifier {
 		next := p.peekNextNonSpace()
-		if next.Value == "." {
+		if next.value == "." {
 			p.nextNonSpace()
 			prop := p.peekNextNonSpace()
-			if prop.TokenType == tkIdentifier {
+			if prop.tokenType == tkIdentifier {
 				p.nextNonSpace()
 				return &ColumnRef{
-					Table:  first.Value,
-					Column: prop.Value,
+					Table:  first.value,
+					Column: prop.value,
 				}, nil
 			}
 		}
 		return &ColumnRef{
-			Column: first.Value,
+			Column: first.value,
 		}, nil
 	}
-	if first.TokenType == tkKeyword && first.Value == kwCount {
-		if v := p.nextNonSpace().Value; v != "(" {
+	if first.tokenType == tkKeyword && first.value == kwCount {
+		if v := p.nextNonSpace().value; v != "(" {
 			return nil, fmt.Errorf(tokenErr, v)
 		}
-		if v := p.nextNonSpace().Value; v != "*" {
+		if v := p.nextNonSpace().value; v != "*" {
 			return nil, fmt.Errorf(tokenErr, v)
 		}
-		if v := p.nextNonSpace().Value; v != ")" {
+		if v := p.nextNonSpace().value; v != ")" {
 			return nil, fmt.Errorf(tokenErr, v)
 		}
 		return &FunctionExpr{FnType: FnCount}, nil
@@ -234,66 +234,66 @@ func (p *parser) getOperand() (Expr, error) {
 }
 
 func (p *parser) parseAlias(resultColumn *ResultColumn) error {
-	a := p.peekNextNonSpace().Value
+	a := p.peekNextNonSpace().value
 	if a == kwAs {
 		p.nextNonSpace()
 		alias := p.nextNonSpace()
-		if alias.TokenType != tkIdentifier {
-			return fmt.Errorf(identErr, alias.Value)
+		if alias.tokenType != tkIdentifier {
+			return fmt.Errorf(identErr, alias.value)
 		}
-		resultColumn.Alias = alias.Value
+		resultColumn.Alias = alias.value
 	}
 	return nil
 }
 
 func (p *parser) parseCreate(sb *StmtBase) (*CreateStmt, error) {
 	stmt := &CreateStmt{StmtBase: sb}
-	if p.tokens[p.end].Value != kwCreate {
-		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].Value)
+	if p.tokens[p.end].value != kwCreate {
+		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
 	t := p.nextNonSpace()
-	if t.Value != kwTable {
-		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].Value)
+	if t.value != kwTable {
+		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
 	tn := p.nextNonSpace()
-	if tn.TokenType != tkIdentifier {
-		return nil, fmt.Errorf(identErr, tn.Value)
+	if tn.tokenType != tkIdentifier {
+		return nil, fmt.Errorf(identErr, tn.value)
 	}
-	stmt.TableName = tn.Value
+	stmt.TableName = tn.value
 	lp := p.nextNonSpace()
-	if lp.Value != "(" {
-		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].Value)
+	if lp.value != "(" {
+		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
 	stmt.ColDefs = []ColDef{}
 	for {
 		colName := p.nextNonSpace()
-		if colName.TokenType != tkIdentifier {
-			return nil, fmt.Errorf(identErr, colName.Value)
+		if colName.tokenType != tkIdentifier {
+			return nil, fmt.Errorf(identErr, colName.value)
 		}
 		colType := p.nextNonSpace()
-		if colType.Value != kwInteger && colType.Value != kwText {
-			return nil, fmt.Errorf(columnErr, colType.Value)
+		if colType.value != kwInteger && colType.value != kwText {
+			return nil, fmt.Errorf(columnErr, colType.value)
 		}
 		sep := p.nextNonSpace()
 		isPrimaryKey := false
-		if sep.Value == kwPrimary {
+		if sep.value == kwPrimary {
 			keyKw := p.nextNonSpace()
-			if keyKw.Value != kwKey {
-				return nil, fmt.Errorf(tokenErr, tn.Value)
+			if keyKw.value != kwKey {
+				return nil, fmt.Errorf(tokenErr, tn.value)
 			}
 			isPrimaryKey = true
 			sep = p.nextNonSpace()
 		}
 		stmt.ColDefs = append(stmt.ColDefs, ColDef{
-			ColName:    colName.Value,
-			ColType:    colType.Value,
+			ColName:    colName.value,
+			ColType:    colType.value,
 			PrimaryKey: isPrimaryKey,
 		})
-		if sep.Value != "," {
-			if sep.Value == ")" {
+		if sep.value != "," {
+			if sep.value == ")" {
 				break
 			}
-			return nil, fmt.Errorf(tokenErr, p.tokens[p.end].Value)
+			return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 		}
 	}
 	return stmt, nil
@@ -301,104 +301,104 @@ func (p *parser) parseCreate(sb *StmtBase) (*CreateStmt, error) {
 
 func (p *parser) parseInsert(sb *StmtBase) (*InsertStmt, error) {
 	stmt := &InsertStmt{StmtBase: sb}
-	if p.tokens[p.end].Value != kwInsert {
-		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].Value)
+	if p.tokens[p.end].value != kwInsert {
+		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
-	if p.nextNonSpace().Value != kwInto {
-		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].Value)
+	if p.nextNonSpace().value != kwInto {
+		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
 	tn := p.nextNonSpace()
-	if tn.TokenType != tkIdentifier {
-		return nil, fmt.Errorf(identErr, tn.Value)
+	if tn.tokenType != tkIdentifier {
+		return nil, fmt.Errorf(identErr, tn.value)
 	}
-	stmt.TableName = tn.Value
-	if p.nextNonSpace().Value != "(" {
-		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].Value)
+	stmt.TableName = tn.value
+	if p.nextNonSpace().value != "(" {
+		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
 	for {
 		i := p.nextNonSpace()
-		if i.TokenType != tkIdentifier {
-			return nil, fmt.Errorf(identErr, i.Value)
+		if i.tokenType != tkIdentifier {
+			return nil, fmt.Errorf(identErr, i.value)
 		}
-		stmt.ColNames = append(stmt.ColNames, i.Value)
+		stmt.ColNames = append(stmt.ColNames, i.value)
 		sep := p.nextNonSpace()
-		if sep.Value != "," {
-			if sep.Value == ")" {
+		if sep.value != "," {
+			if sep.value == ")" {
 				break
 			}
-			return nil, fmt.Errorf(tokenErr, p.tokens[p.end].Value)
+			return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 		}
 	}
-	if p.nextNonSpace().Value != kwValues {
-		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].Value)
+	if p.nextNonSpace().value != kwValues {
+		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
 	return p.parseValue(stmt, 0)
 }
 
 func (p *parser) parseValue(stmt *InsertStmt, valueIdx int) (*InsertStmt, error) {
-	if p.nextNonSpace().Value != "(" {
-		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].Value)
+	if p.nextNonSpace().value != "(" {
+		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
 	stmt.ColValues = append(stmt.ColValues, []string{})
 	for {
 		v := p.nextNonSpace()
-		if v.TokenType != tkNumeric && v.TokenType != tkLiteral {
-			return nil, fmt.Errorf(literalErr, v.Value)
+		if v.tokenType != tkNumeric && v.tokenType != tkLiteral {
+			return nil, fmt.Errorf(literalErr, v.value)
 		}
-		if v.TokenType == tkLiteral && v.Value[0] == '\'' && v.Value[len(v.Value)-1] == '\'' {
-			stmt.ColValues[valueIdx] = append(stmt.ColValues[valueIdx], v.Value[1:len(v.Value)-1])
+		if v.tokenType == tkLiteral && v.value[0] == '\'' && v.value[len(v.value)-1] == '\'' {
+			stmt.ColValues[valueIdx] = append(stmt.ColValues[valueIdx], v.value[1:len(v.value)-1])
 		} else {
-			stmt.ColValues[valueIdx] = append(stmt.ColValues[valueIdx], v.Value)
+			stmt.ColValues[valueIdx] = append(stmt.ColValues[valueIdx], v.value)
 		}
 		sep := p.nextNonSpace()
-		if sep.Value != "," {
-			if sep.Value == ")" {
+		if sep.value != "," {
+			if sep.value == ")" {
 				sep2 := p.nextNonSpace()
-				if sep2.Value == "," {
+				if sep2.value == "," {
 					p.parseValue(stmt, valueIdx+1)
 				}
 				break
 			}
-			return nil, fmt.Errorf(tokenErr, p.tokens[p.end].Value)
+			return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 		}
 	}
 	return stmt, nil
 }
 
-func (p *parser) nextNonSpace() Token {
+func (p *parser) nextNonSpace() token {
 	p.end = p.end + 1
 	if p.end > len(p.tokens)-1 {
-		return Token{tkEOF, ""}
+		return token{tkEOF, ""}
 	}
-	for p.tokens[p.end].TokenType == TkWhitespace {
+	for p.tokens[p.end].tokenType == tkWhitespace {
 		p.end = p.end + 1
 		if p.end > len(p.tokens)-1 {
-			return Token{tkEOF, ""}
+			return token{tkEOF, ""}
 		}
 	}
 	return p.tokens[p.end]
 }
 
-func (p *parser) peekNextNonSpace() Token {
+func (p *parser) peekNextNonSpace() token {
 	return p.peekNonSpaceBy(1)
 }
 
 // peekNonSpaceBy will peek more than one space ahead.
-func (p *parser) peekNonSpaceBy(next int) Token {
+func (p *parser) peekNonSpaceBy(next int) token {
 	tmpEnd := p.end + next
 	if tmpEnd > len(p.tokens)-1 {
-		return Token{tkEOF, ""}
+		return token{tkEOF, ""}
 	}
-	for p.tokens[tmpEnd].TokenType == TkWhitespace {
+	for p.tokens[tmpEnd].tokenType == tkWhitespace {
 		tmpEnd = tmpEnd + 1
 		if tmpEnd > len(p.tokens)-1 {
-			return Token{tkEOF, ""}
+			return token{tkEOF, ""}
 		}
 	}
 	return p.tokens[tmpEnd]
 }
 
-func (p *parser) rewind() Token {
+func (p *parser) rewind() token {
 	p.end = p.end - 1
 	return p.tokens[p.end]
 }

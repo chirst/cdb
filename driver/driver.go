@@ -75,7 +75,7 @@ func (c *cdbStmt) Close() error {
 
 // Exec implements driver.Stmt.
 func (c *cdbStmt) Exec(args []driver.Value) (driver.Result, error) {
-	result := c.cdb.Execute(c.query)
+	result := c.cdb.ExecuteRaw(c.query)
 	if result.Err != nil {
 		return nil, result.Err
 	}
@@ -90,7 +90,7 @@ func (c *cdbStmt) NumInput() int {
 
 // Query implements driver.Stmt.
 func (c *cdbStmt) Query(args []driver.Value) (driver.Rows, error) {
-	result := c.cdb.Execute(c.query)
+	result := c.cdb.ExecuteRaw(c.query)
 	if result.Err != nil {
 		return nil, result.Err
 	}
