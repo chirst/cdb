@@ -11,9 +11,9 @@ import (
 
 type tokenType int
 
-type token struct {
-	tokenType tokenType
-	value     string
+type Token struct {
+	TokenType tokenType
+	Value     string
 }
 
 // TokenTypes where tk is token
@@ -22,8 +22,8 @@ const (
 	tkKeyword = iota + 1
 	// tkIdentifier is a word that is not a keyword like a table or column name.
 	tkIdentifier
-	//  tkWhitespace is a space, tab, or newline.
-	tkWhitespace
+	//  TkWhitespace is a space, tab, or newline.
+	TkWhitespace
 	// tkEOF (End of file) is the end of input.
 	tkEOF
 	// tkSeparator is punctuation such as "(", ",", ";".
@@ -128,18 +128,18 @@ func NewLexer(src string) *lexer {
 	return &lexer{src: ts}
 }
 
-func (l *lexer) Lex() []token {
-	ret := []token{}
+func (l *lexer) Lex() []Token {
+	ret := []Token{}
 	for {
 		t := l.getToken()
-		if t.tokenType == tkEOF {
+		if t.TokenType == tkEOF {
 			return ret
 		}
 		ret = append(ret, t)
 	}
 }
 
-func (l *lexer) getToken() token {
+func (l *lexer) getToken() Token {
 	l.start = l.end
 	r := l.peek(l.start)
 	switch {
@@ -156,7 +156,7 @@ func (l *lexer) getToken() token {
 	case l.isOperator(r):
 		return l.scanOperator()
 	}
-	return token{tkEOF, ""}
+	return Token{tkEOF, ""}
 }
 
 func (l *lexer) peek(pos int) rune {
@@ -173,51 +173,51 @@ func (l *lexer) next() rune {
 	return r
 }
 
-func (l *lexer) scanWhiteSpace() token {
+func (l *lexer) scanWhiteSpace() Token {
 	l.next()
 	for l.isWhiteSpace(l.peek(l.end)) {
 		l.next()
 	}
-	return token{tokenType: tkWhitespace, value: " "}
+	return Token{TokenType: TkWhitespace, Value: " "}
 }
 
-func (l *lexer) scanWord() token {
+func (l *lexer) scanWord() Token {
 	l.next()
 	for l.isLetter(l.peek(l.end)) || l.isUnderscore(l.peek(l.end)) {
 		l.next()
 	}
 	value := l.src[l.start:l.end]
 	if l.isKeyword(value) {
-		return token{tokenType: tkKeyword, value: strings.ToUpper(value)}
+		return Token{TokenType: tkKeyword, Value: strings.ToUpper(value)}
 	}
-	return token{tokenType: tkIdentifier, value: value}
+	return Token{TokenType: tkIdentifier, Value: value}
 }
 
-func (l *lexer) scanDigit() token {
+func (l *lexer) scanDigit() Token {
 	l.next()
 	for l.isDigit(l.peek(l.end)) {
 		l.next()
 	}
-	return token{tokenType: tkNumeric, value: l.src[l.start:l.end]}
+	return Token{TokenType: tkNumeric, Value: l.src[l.start:l.end]}
 }
 
-func (l *lexer) scanSeparator() token {
+func (l *lexer) scanSeparator() Token {
 	l.next()
-	return token{tokenType: tkSeparator, value: l.src[l.start:l.end]}
+	return Token{TokenType: tkSeparator, Value: l.src[l.start:l.end]}
 }
 
-func (l *lexer) scanLiteral() token {
+func (l *lexer) scanLiteral() Token {
 	l.next()
 	for !l.isSingleQuote(l.peek(l.end)) {
 		l.next()
 	}
 	l.next()
-	return token{tokenType: tkLiteral, value: l.src[l.start:l.end]}
+	return Token{TokenType: tkLiteral, Value: l.src[l.start:l.end]}
 }
 
-func (l *lexer) scanOperator() token {
+func (l *lexer) scanOperator() Token {
 	l.next()
-	return token{tokenType: tkOperator, value: l.src[l.start:l.end]}
+	return Token{TokenType: tkOperator, Value: l.src[l.start:l.end]}
 }
 
 func (*lexer) isWhiteSpace(r rune) bool {

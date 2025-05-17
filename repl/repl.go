@@ -37,8 +37,9 @@ func (r *repl) Run() {
 		fmt.Println(ansiWarn + "WARN database is running in memory and will not persist changes" + ansiReset)
 	}
 	reader := bufio.NewScanner(os.Stdin)
-	for r.getInput(reader) {
-		input := reader.Text()
+	previousInput := ""
+	for r.getInput(reader, previousInput) {
+		input := previousInput + reader.Text()
 		if len(input) == 0 {
 			continue
 		}
@@ -49,23 +50,37 @@ func (r *repl) Run() {
 			fmt.Println("Command not supported")
 			continue
 		}
-		result := r.db.Execute(input)
-		if result.Err != nil {
-			fmt.Printf("Err: %s\n", result.Err)
+
+		statements := r.db.Tokenize(input)
+		terminated := r.db.IsTerminated(statements)
+		if !terminated {
+			previousInput = input + "\n"
 			continue
 		}
-		if result.Text != "" {
-			fmt.Println(result.Text)
+		previousInput = ""
+		for _, statement := range statements {
+			result := r.db.Execute(statement)
+			if result.Err != nil {
+				fmt.Printf("Err: %s\n", result.Err)
+				continue
+			}
+			if result.Text != "" {
+				fmt.Println(result.Text)
+			}
+			if len(result.ResultRows) != 0 {
+				fmt.Println(r.printRows(result.ResultHeader, result.ResultRows))
+			}
+			fmt.Printf("Time: %s\n", result.Duration)
 		}
-		if len(result.ResultRows) != 0 {
-			fmt.Println(r.printRows(result.ResultHeader, result.ResultRows))
-		}
-		fmt.Printf("Time: %s\n", result.Duration)
 	}
 }
 
-func (*repl) getInput(reader *bufio.Scanner) bool {
-	fmt.Printf("cdb> ")
+func (*repl) getInput(reader *bufio.Scanner, previousInput string) bool {
+	if previousInput == "" {
+		fmt.Printf("cdb> ")
+	} else {
+		fmt.Printf("...> ")
+	}
 	return reader.Scan()
 }
 
