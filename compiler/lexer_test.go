@@ -341,3 +341,89 @@ func TestLexInsert(t *testing.T) {
 		})
 	}
 }
+
+func TestToStatements(t *testing.T) {
+	type testCase struct {
+		src         string
+		expectedLen int
+	}
+	testCases := []testCase{
+		{
+			src:         "SELECT 1",
+			expectedLen: 1,
+		},
+		{
+			src:         "SELECT 1;",
+			expectedLen: 1,
+		},
+		{
+			src:         "SELECT 1;  ",
+			expectedLen: 1,
+		},
+		{
+			src:         "SELECT 1;  SELECT 1",
+			expectedLen: 2,
+		},
+		{
+			src:         "SELECT 1;  SELECT 1; ",
+			expectedLen: 2,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.src, func(t *testing.T) {
+			statements := NewLexer(tc.src).ToStatements()
+			if gotLen := len(statements); gotLen != tc.expectedLen {
+				t.Fatalf("expected %d statements but got %d", tc.expectedLen, gotLen)
+			}
+		})
+	}
+}
+
+func TestIsTerminated(t *testing.T) {
+	type testCase struct {
+		src  string
+		want bool
+	}
+	testCases := []testCase{
+		{
+			src:  "",
+			want: false,
+		},
+		{
+			src:  "SELECT 1",
+			want: false,
+		},
+		{
+			src:  "SELECT 1;",
+			want: true,
+		},
+		{
+			src:  "SELECT 1; ",
+			want: true,
+		},
+		{
+			src:  "SELECT 1;  ",
+			want: true,
+		},
+		{
+			src:  "SELECT 1;  SELECT",
+			want: false,
+		},
+		{
+			src:  "SELECT 1;  SELECT 1;",
+			want: true,
+		},
+		{
+			src:  "SELECT 1;  SELECT 1; ",
+			want: true,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.src, func(t *testing.T) {
+			statements := NewLexer(tc.src).ToStatements()
+			if got := IsTerminated(statements); got != tc.want {
+				t.Fatalf("want %t got %t", tc.want, got)
+			}
+		})
+	}
+}

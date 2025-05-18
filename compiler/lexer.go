@@ -9,8 +9,11 @@ import (
 	"unicode/utf8"
 )
 
-type Statements [][]token
+// Statement is a individual SQL statement.
 type Statement []token
+
+// Statements is a list of SQL statements that have been split by semi colons.
+type Statements [][]token
 
 type tokenType int
 
@@ -131,6 +134,8 @@ func NewLexer(src string) *lexer {
 	return &lexer{src: ts}
 }
 
+// ToStatements splits the src string into a list of statements where each
+// statement is terminated by a semi colon.
 func (l *lexer) ToStatements() Statements {
 	tokens := l.Lex()
 	statements := [][]token{}
@@ -147,6 +152,8 @@ func (l *lexer) ToStatements() Statements {
 	return append(statements, tokens[start:])
 }
 
+// IsTerminated returns true when the last Statement in the list of Statements
+// is terminated by a semi colon.
 func IsTerminated(statements Statements) bool {
 	if len(statements) == 0 {
 		return false
@@ -164,6 +171,7 @@ func IsTerminated(statements Statements) bool {
 	return false
 }
 
+// Lex tokenizes the src string.
 func (l *lexer) Lex() []token {
 	ret := []token{}
 	for {
