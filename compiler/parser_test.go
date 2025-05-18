@@ -126,6 +126,22 @@ func TestParseSelect(t *testing.T) {
 				Where: &IntLit{Value: 1},
 			},
 		},
+		{
+			name: "leading and trailing space",
+			tokens: []token{
+				{tkWhitespace, " "},
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkNumeric, "1"},
+				{tkWhitespace, " "},
+			},
+			expect: &SelectStmt{
+				StmtBase: &StmtBase{},
+				ResultColumns: []ResultColumn{
+					{Expression: &IntLit{Value: 1}},
+				},
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -33,6 +33,13 @@ func (p *parser) Parse() (Stmt, error) {
 
 func (p *parser) parseStmt() (Stmt, error) {
 	t := p.tokens[p.start]
+	for {
+		if t.tokenType != tkWhitespace {
+			break
+		}
+		p.end = p.end + 1
+		t = p.tokens[p.end]
+	}
 	sb := &StmtBase{}
 	if t.value == kwExplain {
 		nv := p.nextNonSpace()
