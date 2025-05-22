@@ -200,3 +200,32 @@ func TestCreateWithMoreThanOnePrimaryKey(t *testing.T) {
 		t.Fatalf("got error %s expected error %s", err, errMoreThanOnePK)
 	}
 }
+
+func TestCreateIfNotExistsNoop(t *testing.T) {
+	stmt := &compiler.CreateStmt{
+		StmtBase:    &compiler.StmtBase{},
+		TableName:   "foo",
+		IfNotExists: true,
+		ColDefs: []compiler.ColDef{
+			{
+				ColName: "first",
+				ColType: "TEXT",
+			},
+		},
+	}
+	mc := &mockCreateCatalog{tableExistsRes: true}
+	expectedCommands := []vm.Command{
+		&vm.InitCmd{P2: 1},
+		&vm.TransactionCmd{P2: 1},
+		&vm.HaltCmd{},
+	}
+	plan, err := NewCreate(mc, stmt).ExecutionPlan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, c := range expectedCommands {
+		if !reflect.DeepEqual(c, plan.Commands[i]) {
+			t.Errorf("got %#v want %#v", plan.Commands[i], c)
+		}
+	}
+}

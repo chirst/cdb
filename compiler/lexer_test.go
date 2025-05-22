@@ -275,6 +275,29 @@ func TestLexCreate(t *testing.T) {
 				{tkSeparator, ")"},
 			},
 		},
+		{
+			sql: "CREATE TABLE IF NOT EXISTS bar (id INTEGER);",
+			expected: []token{
+				{tkKeyword, "CREATE"},
+				{tkWhitespace, " "},
+				{tkKeyword, "TABLE"},
+				{tkWhitespace, " "},
+				{tkKeyword, "IF"},
+				{tkWhitespace, " "},
+				{tkKeyword, "NOT"},
+				{tkWhitespace, " "},
+				{tkKeyword, "EXISTS"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "bar"},
+				{tkWhitespace, " "},
+				{tkSeparator, "("},
+				{tkIdentifier, "id"},
+				{tkWhitespace, " "},
+				{tkKeyword, "INTEGER"},
+				{tkSeparator, ")"},
+				{tkSeparator, ";"},
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.sql, func(t *testing.T) {

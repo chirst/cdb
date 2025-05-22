@@ -63,6 +63,9 @@ const (
 	kwKey     = "KEY"
 	kwAs      = "AS"
 	kwWhere   = "WHERE"
+	kwIf      = "IF"
+	kwNot     = "NOT"
+	kwExists  = "EXISTS"
 )
 
 // keywords is a list of all keywords.
@@ -84,6 +87,9 @@ var keywords = []string{
 	kwKey,
 	kwAs,
 	kwWhere,
+	kwIf,
+	kwNot,
+	kwExists,
 }
 
 // Operators where op is operator.

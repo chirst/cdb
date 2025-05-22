@@ -88,9 +88,17 @@ func (p *createPlanner) QueryPlan() (*QueryPlan, error) {
 }
 
 func (p *createQueryPlanner) getQueryPlan() (*QueryPlan, error) {
-	tableName, err := p.ensureTableDoesNotExist()
-	if err != nil {
-		return nil, err
+	tableExists := p.catalog.TableExists(p.stmt.TableName)
+	if p.stmt.IfNotExists && tableExists {
+		noopCreateNode := &createNode{
+			noop:      true,
+			tableName: p.stmt.TableName,
+		}
+		p.queryPlan = noopCreateNode
+		return newQueryPlan(noopCreateNode, p.stmt.ExplainQueryPlan), nil
+	}
+	if tableExists {
+		return nil, errTableExists
 	}
 	jSchema, err := p.getSchemaString()
 	if err != nil {
@@ -98,20 +106,12 @@ func (p *createQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 	}
 	createNode := &createNode{
 		objectType: "table",
-		objectName: tableName,
-		tableName:  tableName,
+		objectName: p.stmt.TableName,
+		tableName:  p.stmt.TableName,
 		schema:     jSchema,
 	}
 	p.queryPlan = createNode
 	return newQueryPlan(createNode, p.stmt.ExplainQueryPlan), nil
-}
-
-func (p *createQueryPlanner) ensureTableDoesNotExist() (string, error) {
-	tableName := p.stmt.TableName
-	if p.catalog.TableExists(tableName) {
-		return "", errTableExists
-	}
-	return tableName, nil
 }
 
 func (p *createQueryPlanner) getSchemaString() (string, error) {
@@ -185,10 +185,23 @@ func (p *createPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
 			return nil, err
 		}
 	}
-	return p.executionPlanner.getExecutionPlan()
+	if p.queryPlanner.queryPlan.noop {
+		return p.executionPlanner.getNoopExecutionPlan(), nil
+	}
+	return p.executionPlanner.getExecutionPlan(), nil
 }
 
-func (p *createExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
+// getNoopExecutionPlan asserts the query can be ran based on the information
+// provided by the catalog. If the catalog were to go out of date this execution
+// plan will be recompiled before it is ever ran.
+func (p *createExecutionPlanner) getNoopExecutionPlan() *vm.ExecutionPlan {
+	p.executionPlan.Append(&vm.InitCmd{P2: 1})
+	p.executionPlan.Append(&vm.TransactionCmd{P2: 1})
+	p.executionPlan.Append(&vm.HaltCmd{})
+	return p.executionPlan
+}
+
+func (p *createExecutionPlanner) getExecutionPlan() *vm.ExecutionPlan {
 	const cursorId = 1
 	p.executionPlan.Append(&vm.InitCmd{P2: 1})
 	p.executionPlan.Append(&vm.TransactionCmd{P2: 1})
@@ -204,5 +217,5 @@ func (p *createExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 	p.executionPlan.Append(&vm.InsertCmd{P1: cursorId, P2: 8, P3: 2})
 	p.executionPlan.Append(&vm.ParseSchemaCmd{})
 	p.executionPlan.Append(&vm.HaltCmd{})
-	return p.executionPlan, nil
+	return p.executionPlan
 }

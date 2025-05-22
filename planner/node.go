@@ -78,6 +78,15 @@ type createNode struct {
 	tableName string
 	// schema is the json serialized schema definition for the object.
 	schema string
+	// noop is true when the node will perform no operation other than starting
+	// a write transaction and then halting. The idea behind this is asserting
+	// there is no work to do.
+	//
+	// Because the existence of the the object has already been determined while
+	// generating the query plan. The query being ran means a noop is valid. This is
+	// because the query plan would be invalidated given the existence of the object
+	// has changed between query planning and query execution.
+	noop bool
 }
 
 // insertNode represents an insert operation.

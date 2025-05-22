@@ -36,8 +36,12 @@ type From struct {
 
 type CreateStmt struct {
 	*StmtBase
-	TableName string
-	ColDefs   []ColDef
+	// IfNotExists is true when the create statement includes `CREATE TABLE IF
+	// NOT EXISTS` meaning the statement should not throw if the table already
+	// exists.
+	IfNotExists bool
+	TableName   string
+	ColDefs     []ColDef
 }
 
 type ColDef struct {
