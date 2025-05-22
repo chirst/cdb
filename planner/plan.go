@@ -143,6 +143,9 @@ func (j *joinNode) print() string {
 }
 
 func (c *createNode) print() string {
+	if c.noop {
+		return fmt.Sprintf("assert table %s does not exist", c.tableName)
+	}
 	return fmt.Sprintf("create table %s", c.tableName)
 }
 

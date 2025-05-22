@@ -156,14 +156,15 @@ func TestParseSelect(t *testing.T) {
 	}
 }
 
-type createTestCase struct {
-	tokens   []token
-	expected Stmt
-}
-
 func TestParseCreate(t *testing.T) {
+	type createTestCase struct {
+		name     string
+		tokens   []token
+		expected Stmt
+	}
 	cases := []createTestCase{
 		{
+			name: "basic create",
 			tokens: []token{
 				{tkKeyword, "CREATE"},
 				{tkWhitespace, " "},
@@ -213,15 +214,53 @@ func TestParseCreate(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "create with if not exists",
+			tokens: []token{
+				{tkKeyword, "CREATE"},
+				{tkWhitespace, " "},
+				{tkKeyword, "TABLE"},
+				{tkWhitespace, " "},
+				{tkKeyword, "IF"},
+				{tkWhitespace, " "},
+				{tkKeyword, "NOT"},
+				{tkWhitespace, " "},
+				{tkKeyword, "EXISTS"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "bar"},
+				{tkWhitespace, " "},
+				{tkSeparator, "("},
+				{tkIdentifier, "id"},
+				{tkWhitespace, " "},
+				{tkKeyword, "INTEGER"},
+				{tkSeparator, ")"},
+				{tkSeparator, ";"},
+			},
+			expected: &CreateStmt{
+				StmtBase: &StmtBase{
+					Explain: false,
+				},
+				IfNotExists: true,
+				TableName:   "bar",
+				ColDefs: []ColDef{
+					{
+						ColName: "id",
+						ColType: "INTEGER",
+					},
+				},
+			},
+		},
 	}
 	for _, c := range cases {
-		ret, err := NewParser(c.tokens).Parse()
-		if err != nil {
-			t.Errorf("expected no err got err %s", err)
-		}
-		if !reflect.DeepEqual(ret, c.expected) {
-			t.Errorf("expected %#v got %#v", c.expected, ret)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			ret, err := NewParser(c.tokens).Parse()
+			if err != nil {
+				t.Errorf("expected no err got err %s", err)
+			}
+			if !reflect.DeepEqual(ret, c.expected) {
+				t.Errorf("expected %#v got %#v", c.expected, ret)
+			}
+		})
 	}
 }
 

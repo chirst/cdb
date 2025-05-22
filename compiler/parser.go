@@ -255,6 +255,18 @@ func (p *parser) parseCreate(sb *StmtBase) (*CreateStmt, error) {
 	if t.value != kwTable {
 		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
+	if p.peekNextNonSpace().value == kwIf {
+		p.nextNonSpace()
+		ifn := p.nextNonSpace()
+		if ifn.value != kwNot {
+			return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
+		}
+		ifn = p.nextNonSpace()
+		if ifn.value != kwExists {
+			return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
+		}
+		stmt.IfNotExists = true
+	}
 	tn := p.nextNonSpace()
 	if tn.tokenType != tkIdentifier {
 		return nil, fmt.Errorf(identErr, tn.value)
