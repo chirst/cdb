@@ -144,8 +144,8 @@ func (c *Cursor) GotoFirstRecord() bool {
 	for !candidatePage.IsLeaf() {
 		pagePointers := candidatePage.GetEntries()
 		ascendingPageNum := pagePointers[0].Value
-		ascendingPageNum16 := binary.LittleEndian.Uint16(ascendingPageNum)
-		candidatePage = c.pager.GetPage(int(ascendingPageNum16))
+		ascendingPageNum32 := binary.LittleEndian.Uint32(ascendingPageNum)
+		candidatePage = c.pager.GetPage(int(ascendingPageNum32))
 	}
 	c.moveToPage(candidatePage)
 	return true
@@ -162,8 +162,8 @@ func (c *Cursor) GotoLastRecord() bool {
 	for !candidatePage.IsLeaf() {
 		pagePointers := candidatePage.GetEntries()
 		descendingPageNum := pagePointers[len(pagePointers)-1].Value
-		descendingPageNum16 := binary.LittleEndian.Uint16(descendingPageNum)
-		candidatePage = c.pager.GetPage(int(descendingPageNum16))
+		descendingPageNum32 := binary.LittleEndian.Uint32(descendingPageNum)
+		candidatePage = c.pager.GetPage(int(descendingPageNum32))
 	}
 	c.moveToPage(candidatePage)
 	c.currentTupleIndex = len(c.currentPageEntries) - 1
@@ -247,7 +247,7 @@ func (c *Cursor) Exists(key []byte) bool {
 		if !found {
 			return false
 		}
-		pageNumber = int(binary.LittleEndian.Uint16(v))
+		pageNumber = int(binary.LittleEndian.Uint32(v))
 	}
 }
 
@@ -262,8 +262,8 @@ func (c *Cursor) NewRowID() int {
 	for !candidate.IsLeaf() {
 		pagePointers := candidate.GetEntries()
 		descendingPageNum := pagePointers[len(pagePointers)-1].Value
-		descendingPageNum16 := binary.LittleEndian.Uint16(descendingPageNum)
-		candidate = c.pager.GetPage(int(descendingPageNum16))
+		descendingPageNum32 := binary.LittleEndian.Uint32(descendingPageNum)
+		candidate = c.pager.GetPage(int(descendingPageNum32))
 	}
 	k := candidate.GetEntries()[len(candidate.GetEntries())-1].Key
 	dk, err := DecodeKey(k)
@@ -292,7 +292,7 @@ func (c *Cursor) Get(key []byte) ([]byte, bool) {
 		if !found {
 			return nil, false
 		}
-		pageNumber = int(binary.LittleEndian.Uint16(v))
+		pageNumber = int(binary.LittleEndian.Uint32(v))
 	}
 }
 
@@ -300,21 +300,29 @@ func (c *Cursor) Get(key []byte) ([]byte, bool) {
 // with the root page of the corresponding table. The system catalog uses the
 // page number 1.
 func (c *Cursor) Set(key, value []byte) {
-	// TODO set doesn't differentiate between insert and update
-	// TODO improve to move the cursor
+	// Find leaf page with key as the search param.
 	leafPage := c.getLeafPage(c.rootPageNumber, key)
+	// If the leaf page can hold the new tuple be done.
 	if leafPage.CanInsertTuple(key, value) {
 		leafPage.SetValue(key, value)
 		return
 	}
+	// Split page when the leaf cannot hold the tuple.
 	leftPage, rightPage := c.splitPage(leafPage)
+	// Find which page out of the split can best hold the tuple.
 	c.insertIntoOne(key, value, leftPage, rightPage)
+	// Having a parent means the parent must have the new pages inserted.
 	hasParent, parentPageNumber := leafPage.GetParentPageNumber()
 	if hasParent {
+		leftPage.SetParentPageNumber(parentPageNumber)
+		rightPage.SetParentPageNumber(parentPageNumber)
 		parentPage := c.pager.GetPage(parentPageNumber)
 		c.parentInsert(parentPage, leftPage, rightPage)
 		return
 	}
+	// Falling through to here means there is no parent of the split so the root
+	// node has split. This is a special optimization to keep the root page
+	// number the same.
 	leafPage.SetTypeInternal()
 	leafPage.SetEntries([]pager.PageTuple{
 		{
@@ -355,8 +363,8 @@ func (c *Cursor) getLeafPage(nextPageNumber int, key []byte) *pager.Page {
 		if !found {
 			return nil
 		}
-		nextPageNumber16 := binary.LittleEndian.Uint16(nextPage)
-		p = c.pager.GetPage(int(nextPageNumber16))
+		nextPageNumber32 := binary.LittleEndian.Uint32(nextPage)
+		p = c.pager.GetPage(int(nextPageNumber32))
 	}
 	return p
 }
@@ -398,12 +406,18 @@ func (c *Cursor) splitPage(page *pager.Page) (left, right *pager.Page) {
 	return leftPage, rightPage
 }
 
+// parentInsert is new left and right pointers needing to be inserted into the
+// parent. This means the parent may need to be split and inserted into its
+// parent and so on.
 func (c *Cursor) parentInsert(p, l, r *pager.Page) {
+	// k1/v1 and k2/v2 are the new page pointers. These will go in the parent
+	// node.
 	k1 := l.GetEntries()[0].Key
 	v1 := l.GetNumberAsBytes()
 	k2 := r.GetEntries()[0].Key
 	v2 := r.GetNumberAsBytes()
 	tuples := []pager.PageTuple{{Key: k1, Value: v1}, {Key: k2, Value: v2}}
+	// If the parent is able to insert the page pointers we are done.
 	if p.CanInsertTuples(tuples) {
 		p.SetValue(k1, v1)
 		p.SetValue(k2, v2)
@@ -411,9 +425,16 @@ func (c *Cursor) parentInsert(p, l, r *pager.Page) {
 		r.SetParentPageNumber(p.GetNumber())
 		return
 	}
+	// This case is the parent needing to be split. We then check if the parents
+	// parent is there or not. In case it is there we can make a recursive call.
+	// In case it is not we fall through.
 	leftPage, rightPage := c.splitPage(p)
+	c.insertIntoOne(k1, v1, leftPage, rightPage)
+	c.insertIntoOne(k2, v2, leftPage, rightPage)
 	hasParent, parentPageNumber := p.GetParentPageNumber()
 	if hasParent {
+		leftPage.SetParentPageNumber(parentPageNumber)
+		rightPage.SetParentPageNumber(parentPageNumber)
 		l.SetParentPageNumber(parentPageNumber)
 		r.SetParentPageNumber(parentPageNumber)
 		parentParent := c.pager.GetPage(parentPageNumber)
