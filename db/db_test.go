@@ -66,6 +66,15 @@ func TestBulkInsert(t *testing.T) {
 	if gotT := len(selectRes.ResultRows); expectedTotal != gotT {
 		t.Fatalf("expected %d got %d", expectedTotal, gotT)
 	}
+	for i, r := range selectRes.ResultRows {
+		left, err := strconv.Atoi(*r[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if left != i+1 {
+			t.Fatalf("expected %d got %d", i+1, left)
+		}
+	}
 	selectCountRes := mustExecute(t, db, "SELECT COUNT(*) FROM test")
 	gotCS := selectCountRes.ResultRows[0][0]
 	gotC, err := strconv.Atoi(*gotCS)
