@@ -478,10 +478,10 @@ func (c *NewRowIdCmd) explain(addr int) []*string {
 type InsertCmd cmd
 
 func (c *InsertCmd) execute(vm *vm, routine *routine) cmdRes {
-	bp3i, ok := routine.registers[c.P3].(int)
-	if !ok {
+	bp3i, err := anyToInt(routine.registers[c.P3])
+	if err != nil {
 		return cmdRes{
-			err: fmt.Errorf("failed to convert %v to int", bp3i),
+			err: err,
 		}
 	}
 	bp3, err := kv.EncodeKey(bp3i)
@@ -685,16 +685,52 @@ func (c *CountCmd) explain(addr int) []*string {
 	return formatExplain(addr, "Count", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
 
-// NotExistsCmd if the cursor P1 does not contain key P3 jump to P2 otherwise
-// fall through.
+// If the value in register P1 is not an integer raise an exception.
+type MustBeIntCmd cmd
+
+func (c *MustBeIntCmd) execute(vm *vm, routine *routine) cmdRes {
+	v := routine.registers[c.P1]
+	switch vi := v.(type) {
+	case int:
+		return cmdRes{}
+	case int64:
+		return cmdRes{}
+	default:
+		return cmdRes{err: fmt.Errorf("value %v must be int", vi)}
+	}
+}
+
+func (c *MustBeIntCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Throw error if register[%d] is not an integer", c.P1)
+	return formatExplain(addr, "MustBeInt", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
+// NotExistsCmd if the cursor P1 does not contain key in register P3 jump to
+// address P2 otherwise fall through.
 type NotExistsCmd cmd
 
 func (c *NotExistsCmd) execute(vm *vm, routine *routine) cmdRes {
-	bp3, err := kv.EncodeKey(c.P3)
-	if err != nil {
-		return cmdRes{err: err}
+	// TODO P2 may be zero based which is not consistent with most address jumps
+	// I think.
+	var ek []byte
+	v := routine.registers[c.P3]
+	switch vi := v.(type) {
+	case int:
+		ekb, err := kv.EncodeKey(routine.registers[c.P3])
+		if err != nil {
+			return cmdRes{err: err}
+		}
+		ek = ekb
+	case int64:
+		ekb, err := kv.EncodeKey(routine.registers[c.P3])
+		if err != nil {
+			return cmdRes{err: err}
+		}
+		ek = ekb
+	default:
+		return cmdRes{err: fmt.Errorf("%v must be int", vi)}
 	}
-	exists := routine.cursors[c.P1].Exists(bp3)
+	exists := routine.cursors[c.P1].Exists(ek)
 	if !exists {
 		return cmdRes{nextAddress: c.P2}
 	}
@@ -702,7 +738,7 @@ func (c *NotExistsCmd) execute(vm *vm, routine *routine) cmdRes {
 }
 
 func (c *NotExistsCmd) explain(addr int) []*string {
-	comment := fmt.Sprintf("Jump to register[%d] if cursor %d does not contain key %d", c.P2, c.P1, c.P3)
+	comment := fmt.Sprintf("Jump to register[%d] if cursor %d does not contain key in register[%d]", c.P2, c.P1, c.P3)
 	return formatExplain(addr, "NotExists", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
 

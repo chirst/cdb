@@ -7,6 +7,8 @@ import (
 	"github.com/chirst/cdb/vm"
 )
 
+// TODO test insert on id primary key only table
+
 func mustCreateDB(t *testing.T) *DB {
 	db, err := New(true, "")
 	if err != nil {

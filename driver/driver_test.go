@@ -40,9 +40,6 @@ func TestSchema1(t *testing.T) {
 	mustExecute(t, db, "CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)")
 	mustExecute(t, db, "INSERT INTO foo (name) VALUES ('one')")
 
-	// TODO make params work for statements other than select. Will also test
-	// exec.
-
 	t.Run("TestQuery", func(t *testing.T) {
 		rows, err := db.Query("SELECT * FROM foo")
 		if err != nil {
@@ -84,4 +81,52 @@ func TestSchema1(t *testing.T) {
 			t.Fatalf("expected %d got %d", expectCount, d)
 		}
 	})
+}
+
+func TestInsertWithParam(t *testing.T) {
+	db := mustOpenSqlDb(t)
+	mustExecute(t, db, "CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)")
+	param := "'w'); DROP TABLE foo;--"
+	_, err := db.Exec("INSERT INTO foo (name) VALUES (?)", param)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := db.Query("SELECT * FROM foo")
+	if err != nil {
+		t.Fatalf("query err %s", err)
+	}
+	expectCount := 1
+	fs := toFoos(rows)
+	if d := len(fs); d != expectCount {
+		t.Fatalf("expected %d got %d", expectCount, d)
+	}
+	if fs[0].name != param {
+		t.Fatalf("expected %s got %s", param, fs[0].name)
+	}
+	if fs[0].id != 1 {
+		t.Fatalf("expected %d got %d", 1, fs[0].id)
+	}
+}
+
+// TODO make table driven test to test variations of parameterized statements
+func TestPrimaryKeyInsertWithParam(t *testing.T) {
+	db := mustOpenSqlDb(t)
+	mustExecute(t, db, "CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)")
+	param := 3
+	_, err := db.Exec("INSERT INTO foo (id, name) VALUES (?, 'asdf')", param)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := db.Query("SELECT * FROM foo")
+	if err != nil {
+		t.Fatalf("query err %s", err)
+	}
+	expectCount := 1
+	fs := toFoos(rows)
+	if d := len(fs); d != expectCount {
+		t.Fatalf("expected %d got %d", expectCount, d)
+	}
+	if fs[0].id != param {
+		t.Fatalf("expected %d got %d", param, fs[0].id)
+	}
 }

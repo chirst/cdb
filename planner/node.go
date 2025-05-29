@@ -103,5 +103,5 @@ type insertNode struct {
 	colNames []string
 	// colValues are the values specified in the insert statement. It is two
 	// dimensional i.e. VALUES (v1, v2), (v3, v4) is [[v1, v2], [v3, v4]].
-	colValues [][]string
+	colValues [][]compiler.Expr
 }

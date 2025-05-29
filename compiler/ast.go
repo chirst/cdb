@@ -54,7 +54,9 @@ type InsertStmt struct {
 	*StmtBase
 	TableName string
 	ColNames  []string
-	ColValues [][]string
+	// ColValues is a 2d list where the first dimension represents a row and the
+	// second dimension represents a column value.
+	ColValues [][]Expr
 }
 
 type ExprVisitor interface {
