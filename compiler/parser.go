@@ -21,6 +21,9 @@ type parser struct {
 	tokens []token
 	start  int
 	end    int
+	// paramCount begins at 0 and is used to label what "position" a parameter
+	// comes in.
+	paramCount int
 }
 
 func NewParser(tokens []token) *parser {
@@ -215,6 +218,11 @@ func (p *parser) getOperand() (Expr, error) {
 		return &ColumnRef{
 			Column: first.value,
 		}, nil
+	}
+	if first.tokenType == tkParam {
+		v := &Variable{Position: p.paramCount}
+		p.paramCount += 1
+		return v, nil
 	}
 	if first.tokenType == tkKeyword && first.value == kwCount {
 		if v := p.nextNonSpace().value; v != "(" {

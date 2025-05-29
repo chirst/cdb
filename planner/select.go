@@ -448,6 +448,7 @@ func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
 			cursorId,
 			startScanRegister+endScanRegisterOffset,
 			crv.constantRegisters,
+			crv.variableRegisters,
 			startScanRegister+i,
 			c,
 		)
@@ -475,6 +476,7 @@ func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
 			len(p.executionPlan.Commands),
 			crv.constantRegisters,
 			colRegisters,
+			crv.variableRegisters,
 			pkRegister,
 			n.scanPredicate,
 		)
@@ -538,6 +540,7 @@ func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) error {
 			1,
 			reservedRegisterStart+reservedRegisterOffset,
 			crv.constantRegisters,
+			crv.variableRegisters,
 			reservedRegisterStart+i,
 			rc.Expression,
 		)
@@ -555,6 +558,7 @@ func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) error {
 			len(p.executionPlan.Commands),
 			crv.constantRegisters,
 			map[int]int{},
+			crv.variableRegisters,
 			0,
 			n.predicate,
 		)
@@ -586,6 +590,8 @@ type resultColumnCommandBuilder struct {
 	// column. This is for subsequent routines to reuse the result of these
 	// commands.
 	colRegisters map[int]int
+	// variableRegisters is a mapping of variable indices to registers.
+	variableRegisters map[int]int
 	// pkRegister is 0 value unless a register has been filled as part of Build.
 	// This is for subsequent routines to reuse the result of the command.
 	pkRegister int
@@ -595,6 +601,7 @@ func (e *resultColumnCommandBuilder) Build(
 	cursorId int,
 	openRegister int,
 	litRegisters map[int]int,
+	variableRegisters map[int]int,
 	outputRegister int,
 	root compiler.Expr,
 ) int {
@@ -602,6 +609,7 @@ func (e *resultColumnCommandBuilder) Build(
 	e.openRegister = openRegister
 	e.litRegisters = litRegisters
 	e.colRegisters = make(map[int]int)
+	e.variableRegisters = variableRegisters
 	e.outputRegister = outputRegister
 	return e.build(root, 0)
 }
@@ -651,6 +659,14 @@ func (e *resultColumnCommandBuilder) build(root compiler.Expr, level int) int {
 			)
 		}
 		return e.litRegisters[n.Value]
+	case *compiler.Variable:
+		if level == 0 {
+			e.commands = append(
+				e.commands,
+				&vm.CopyCmd{P1: e.variableRegisters[n.Position], P2: e.outputRegister},
+			)
+		}
+		return e.variableRegisters[n.Position]
 	}
 	panic("unhandled expression in expr command builder")
 }
@@ -685,6 +701,8 @@ type booleanPredicateBuilder struct {
 	// may not require them, in which case colRegisters should be calculated as
 	// part of the predicate.
 	colRegisters map[int]int
+	// variableRegisters is a mapping of variable indices to registers.
+	variableRegisters map[int]int
 	// pkRegister is unset when 0. Otherwise, pkRegister is the register
 	// containing the table row id. pkRegister may not be guaranteed depending
 	// on the projection in which case the register should be calculated as part
@@ -698,6 +716,7 @@ func (p *booleanPredicateBuilder) Build(
 	jumpAddress int,
 	litRegisters map[int]int,
 	colRegisters map[int]int,
+	variableRegisters map[int]int,
 	pkRegister int,
 	e compiler.Expr,
 ) error {
@@ -706,6 +725,7 @@ func (p *booleanPredicateBuilder) Build(
 	p.jumpAddress = jumpAddress
 	p.litRegisters = litRegisters
 	p.colRegisters = colRegisters
+	p.variableRegisters = variableRegisters
 	p.pkRegister = pkRegister
 	_, err := p.build(e, 0)
 	return err
@@ -799,6 +819,12 @@ func (p *booleanPredicateBuilder) build(e compiler.Expr, level int) (int, error)
 			p.commands = append(p.commands, &vm.IfNotCmd{P1: litReg, P2: p.getJumpAddress()})
 		}
 		return litReg, nil
+	case *compiler.Variable:
+		varReg := p.variableRegisters[ce.Position]
+		if level == 0 {
+			p.commands = append(p.commands, &vm.IfNotCmd{P1: varReg, P2: p.getJumpAddress()})
+		}
+		return varReg, nil
 	}
 	panic("unhandled expression in predicate builder")
 }

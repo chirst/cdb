@@ -227,6 +227,26 @@ func TestLexSelect(t *testing.T) {
 				{tkNumeric, "2"},
 			},
 		},
+		{
+			sql: "SELECT * FROM foo WHERE id = ?",
+			expected: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkOperator, "*"},
+				{tkWhitespace, " "},
+				{tkKeyword, "FROM"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+				{tkWhitespace, " "},
+				{tkKeyword, "WHERE"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "id"},
+				{tkWhitespace, " "},
+				{tkOperator, "="},
+				{tkWhitespace, " "},
+				{tkParam, "?"},
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.sql, func(t *testing.T) {

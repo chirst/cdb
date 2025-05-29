@@ -63,13 +63,12 @@ type ExprVisitor interface {
 	VisitColumnRefExpr(*ColumnRef)
 	VisitIntLit(*IntLit)
 	VisitStringLit(*StringLit)
+	VisitVariable(*Variable)
 	VisitFunctionExpr(*FunctionExpr)
 }
 
 // Expr defines the interface of an expression.
 type Expr interface {
-	// Type is a string of the underlying type.
-	Type() string // TODO this pattern may not be the best
 	// BreadthWalk implements the visitor pattern for a in-order breadth first
 	// walk.
 	BreadthWalk(v ExprVisitor)
@@ -82,7 +81,6 @@ type BinaryExpr struct {
 	Right    Expr
 }
 
-func (*BinaryExpr) Type() string { return "BinaryExpr" }
 func (be *BinaryExpr) BreadthWalk(v ExprVisitor) {
 	v.VisitBinaryExpr(be)
 	be.Left.BreadthWalk(v)
@@ -95,7 +93,6 @@ type UnaryExpr struct {
 	Operand  Expr
 }
 
-func (*UnaryExpr) Type() string { return "UnaryExpr" }
 func (ue *UnaryExpr) Accept(v ExprVisitor) {
 	v.VisitUnaryExpr(ue)
 	ue.Operand.BreadthWalk(v)
@@ -114,7 +111,6 @@ type ColumnRef struct {
 	ColIdx int
 }
 
-func (*ColumnRef) Type() string { return "ColumnRef" }
 func (cr *ColumnRef) BreadthWalk(v ExprVisitor) {
 	v.VisitColumnRefExpr(cr)
 }
@@ -124,7 +120,6 @@ type IntLit struct {
 	Value int
 }
 
-func (*IntLit) Type() string { return "IntLit" }
 func (il *IntLit) BreadthWalk(v ExprVisitor) {
 	v.VisitIntLit(il)
 }
@@ -134,9 +129,18 @@ type StringLit struct {
 	Value string
 }
 
-func (*StringLit) Type() string { return "StringLit" }
 func (sl *StringLit) BreadthWalk(v ExprVisitor) {
 	v.VisitStringLit(sl)
+}
+
+type Variable struct {
+	// Position is a unique integer defining what order the variable appeared in
+	// the statement.
+	Position int
+}
+
+func (vi *Variable) BreadthWalk(v ExprVisitor) {
+	v.VisitVariable(vi)
 }
 
 // FunctionExpr is an expression that represents a function.
@@ -151,7 +155,6 @@ const (
 	FnCount = "COUNT"
 )
 
-func (*FunctionExpr) Type() string { return "FunctionExpr" }
 func (f *FunctionExpr) BreadthWalk(v ExprVisitor) {
 	v.VisitFunctionExpr(f)
 }

@@ -32,6 +32,7 @@ type routine struct {
 	registers        map[int]any
 	resultRows       *[][]*string
 	cursors          map[int]*kv.Cursor
+	parameters       []any
 	readTransaction  bool
 	writeTransaction bool
 	schemaVersion    string
@@ -93,7 +94,8 @@ func (e *ExecutionPlan) Append(command Command) {
 // explain Execute does not execute the plan. If the plan is out of date with
 // the system catalog Execute will return ErrVersionChanged in the ExecuteResult
 // err field so the plan can be recompiled.
-func (v *vm) Execute(plan *ExecutionPlan) *ExecuteResult {
+func (v *vm) Execute(plan *ExecutionPlan, parameters []any) *ExecuteResult {
+	// TODO optional params?
 	if plan.Explain {
 		return v.explain(plan)
 	}
@@ -101,6 +103,7 @@ func (v *vm) Execute(plan *ExecutionPlan) *ExecuteResult {
 		registers:        map[int]any{},
 		resultRows:       &[][]*string{},
 		cursors:          map[int]*kv.Cursor{},
+		parameters:       parameters,
 		readTransaction:  false,
 		writeTransaction: false,
 		schemaVersion:    plan.Version,
@@ -191,6 +194,8 @@ func anyToInt(a any) (int, error) {
 	switch t := a.(type) {
 	case int:
 		return t, nil
+	case int64:
+		return int(t), nil
 	case string:
 		ti, err := strconv.Atoi(t)
 		if err != nil {
@@ -788,4 +793,22 @@ func (c *LteCmd) execute(vm *vm, routine *routine) cmdRes {
 func (c *LteCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Jump to address %d if register[%d] >= register[%d]", c.P2, c.P1, c.P3)
 	return formatExplain(addr, "Lte", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
+// VariableCmd substitutes variable number P1 into register P2. Where P1 is a
+// zero based index.
+type VariableCmd cmd
+
+func (c *VariableCmd) execute(vm *vm, routine *routine) cmdRes {
+	paramIdx := c.P1
+	if len(routine.parameters)-1 < paramIdx {
+		return cmdRes{err: fmt.Errorf("no variable at index %d", paramIdx)}
+	}
+	routine.registers[c.P2] = routine.parameters[c.P1]
+	return cmdRes{}
+}
+
+func (c *VariableCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Substitute variable %d into register[%d]", c.P1, c.P2)
+	return formatExplain(addr, "Variable", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }

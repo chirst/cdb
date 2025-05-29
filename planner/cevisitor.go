@@ -41,4 +41,5 @@ func (c *catalogExprVisitor) VisitBinaryExpr(e *compiler.BinaryExpr)     {}
 func (c *catalogExprVisitor) VisitUnaryExpr(e *compiler.UnaryExpr)       {}
 func (c *catalogExprVisitor) VisitIntLit(e *compiler.IntLit)             {}
 func (c *catalogExprVisitor) VisitStringLit(e *compiler.StringLit)       {}
+func (c *catalogExprVisitor) VisitVariable(e *compiler.Variable)         {}
 func (c *catalogExprVisitor) VisitFunctionExpr(e *compiler.FunctionExpr) {}
