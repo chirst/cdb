@@ -184,7 +184,8 @@ func TestInsertWithPrimaryKeyParameter(t *testing.T) {
 		&vm.TransactionCmd{P2: 1},
 		&vm.OpenWriteCmd{P1: 1, P2: 2},
 		&vm.VariableCmd{P1: 0, P2: 1},
-		&vm.NotExistsCmd{P1: 1, P2: 6, P3: 1},
+		&vm.MustBeIntCmd{P1: 1},
+		&vm.NotExistsCmd{P1: 1, P2: 7, P3: 1},
 		&vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"},
 		&vm.StringCmd{P1: 2, P4: "feller"},
 		&vm.MakeRecordCmd{P1: 2, P2: 1, P3: 3},
@@ -220,14 +221,14 @@ func TestInsertWithPrimaryKeyParameter(t *testing.T) {
 	}
 }
 
-// TODO make use of must be int command
 func TestInsertWithParameter(t *testing.T) {
 	expectedCommands := []vm.Command{
 		&vm.InitCmd{P2: 1},
 		&vm.TransactionCmd{P2: 1},
 		&vm.OpenWriteCmd{P1: 1, P2: 2},
 		&vm.VariableCmd{P1: 0, P2: 1},
-		&vm.NotExistsCmd{P1: 1, P2: 6, P3: 1},
+		&vm.MustBeIntCmd{P1: 1},
+		&vm.NotExistsCmd{P1: 1, P2: 7, P3: 1},
 		&vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"},
 		&vm.VariableCmd{P1: 1, P2: 2},
 		&vm.MakeRecordCmd{P1: 2, P2: 1, P3: 3},

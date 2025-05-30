@@ -372,6 +372,9 @@ func (c *ResultRowCmd) execute(vm *vm, routine *routine) cmdRes {
 	row := []*string{}
 	for i := c.P1; i < c.P1+c.P2; i += 1 {
 		switch v := routine.registers[i].(type) {
+		case int64:
+			vs := strconv.Itoa(int(v))
+			row = append(row, &vs)
 		case int:
 			vs := strconv.Itoa(v)
 			row = append(row, &vs)
@@ -710,8 +713,6 @@ func (c *MustBeIntCmd) explain(addr int) []*string {
 type NotExistsCmd cmd
 
 func (c *NotExistsCmd) execute(vm *vm, routine *routine) cmdRes {
-	// TODO P2 may be zero based which is not consistent with most address jumps
-	// I think.
 	var ek []byte
 	v := routine.registers[c.P3]
 	switch vi := v.(type) {

@@ -186,7 +186,9 @@ func (p *insertExecutionPlanner) buildPrimaryKey(writeCursorId, keyRegister, val
 	case *compiler.IntLit:
 		p.executionPlan.Append(&vm.IntegerCmd{P1: rv.Value, P2: keyRegister})
 	case *compiler.Variable:
+		// TODO must be int could likely be used more to enforce schema types.
 		p.executionPlan.Append(&vm.VariableCmd{P1: rv.Position, P2: keyRegister})
+		p.executionPlan.Append(&vm.MustBeIntCmd{P1: keyRegister})
 	default:
 		return errors.New("unsupported row id value")
 	}
