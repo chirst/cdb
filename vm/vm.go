@@ -95,7 +95,6 @@ func (e *ExecutionPlan) Append(command Command) {
 // the system catalog Execute will return ErrVersionChanged in the ExecuteResult
 // err field so the plan can be recompiled.
 func (v *vm) Execute(plan *ExecutionPlan, parameters []any) *ExecuteResult {
-	// TODO optional params?
 	if plan.Explain {
 		return v.explain(plan)
 	}
