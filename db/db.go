@@ -14,7 +14,7 @@ import (
 )
 
 type executor interface {
-	Execute(*vm.ExecutionPlan) *vm.ExecuteResult
+	Execute(*vm.ExecutionPlan, []any) *vm.ExecuteResult
 }
 
 type statementPlanner interface {
@@ -48,23 +48,20 @@ func New(useMemory bool, filename string) (*DB, error) {
 	}, nil
 }
 
+// Tokenize makes a raw sql string into a slice of tokens. Otherwise known as
+// lexing.
 func (db *DB) Tokenize(sql string) compiler.Statements {
 	return compiler.NewLexer(sql).ToStatements()
 }
 
+// IsTerminated returns true when the given statements are terminated by a semi
+// colon.
 func (db *DB) IsTerminated(statements compiler.Statements) bool {
 	return compiler.IsTerminated(statements)
 }
 
-func (db *DB) ExecuteRaw(sql string) vm.ExecuteResult {
-	statements := compiler.NewLexer(sql).ToStatements()
-	if len(statements) != 1 {
-		return vm.ExecuteResult{Err: errors.New("must be single statement")}
-	}
-	return db.Execute(statements[0])
-}
-
-func (db *DB) Execute(statements compiler.Statement) vm.ExecuteResult {
+// Execute executes the given statements with the given params.
+func (db *DB) Execute(statements compiler.Statement, params []any) vm.ExecuteResult {
 	start := time.Now()
 	statement, err := compiler.NewParser(statements).Parse()
 	if err != nil {
@@ -88,7 +85,7 @@ func (db *DB) Execute(statements compiler.Statement) vm.ExecuteResult {
 		if err != nil {
 			return vm.ExecuteResult{Err: err}
 		}
-		executeResult = *db.vm.Execute(executionPlan)
+		executeResult = *db.vm.Execute(executionPlan, params)
 		if !errors.Is(executeResult.Err, vm.ErrVersionChanged) {
 			break
 		}

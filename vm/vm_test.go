@@ -26,7 +26,7 @@ func TestExec(t *testing.T) {
 		&NextCmd{P1: 1, P2: 4},
 		&HaltCmd{},
 	}
-	res := vm.Execute(ep)
+	res := vm.Execute(ep, []any{})
 	if res.Err != nil {
 		t.Errorf("expected no err got %s", res.Err)
 	}
@@ -47,7 +47,7 @@ func TestExecReturnsVersionErr(t *testing.T) {
 			&IntegerCmd{P1: 1, P2: 1},
 			&HaltCmd{},
 		}
-		res := vm.Execute(ep)
+		res := vm.Execute(ep, []any{})
 		if !errors.Is(res.Err, ErrVersionChanged) {
 			t.Errorf("expected version change err")
 		}
@@ -61,7 +61,7 @@ func TestExecReturnsVersionErr(t *testing.T) {
 			&IntegerCmd{P1: 1, P2: 1},
 			&HaltCmd{},
 		}
-		res := vm.Execute(ep)
+		res := vm.Execute(ep, []any{})
 		if !errors.Is(res.Err, ErrVersionChanged) {
 			t.Errorf("expected version change err")
 		}

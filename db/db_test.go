@@ -7,6 +7,8 @@ import (
 	"github.com/chirst/cdb/vm"
 )
 
+// TODO test insert on id primary key only table
+
 func mustCreateDB(t *testing.T) *DB {
 	db, err := New(true, "")
 	if err != nil {
@@ -16,7 +18,8 @@ func mustCreateDB(t *testing.T) *DB {
 }
 
 func mustExecute(t *testing.T, db *DB, sql string) vm.ExecuteResult {
-	res := db.ExecuteRaw(sql)
+	statements := db.Tokenize(sql)
+	res := db.Execute(statements[0], []any{})
 	if res.Err != nil {
 		t.Fatalf("%s executing sql: %s", res.Err, sql)
 	}
@@ -90,7 +93,8 @@ func TestPrimaryKeyUniqueConstraintViolation(t *testing.T) {
 	db := mustCreateDB(t)
 	mustExecute(t, db, "CREATE TABLE test (id INTEGER PRIMARY KEY, junk TEXT)")
 	mustExecute(t, db, "INSERT INTO test (id, junk) VALUES (1, 'asdf')")
-	dupePKResponse := db.ExecuteRaw("INSERT INTO test (id, junk) VALUES (1, 'asdf')")
+	statements := db.Tokenize("INSERT INTO test (id, junk) VALUES (1, 'asdf')")
+	dupePKResponse := db.Execute(statements[0], []any{})
 	if dupePKResponse.Err.Error() != "pk unique constraint violated" {
 		t.Fatalf("expected unique constraint error to be raised but got %s", dupePKResponse.Err)
 	}

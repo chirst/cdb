@@ -40,8 +40,8 @@ const (
 	tkLiteral
 	// tkNumeric is a numeric value like 1, 1.2, or -3.
 	tkNumeric
-	// tkPunctuator is punctuation that is neither a separator or operator.
-	// tkPunctuator
+	// tkParam is a placeholder variable such as ?.
+	tkParam
 )
 
 // Keywords where kw is keyword
@@ -205,6 +205,8 @@ func (l *lexer) getToken() token {
 		return l.scanLiteral()
 	case l.isOperator(r):
 		return l.scanOperator()
+	case l.isParam(r):
+		return l.scanParam()
 	}
 	return token{tkEOF, ""}
 }
@@ -270,6 +272,11 @@ func (l *lexer) scanOperator() token {
 	return token{tokenType: tkOperator, value: l.src[l.start:l.end]}
 }
 
+func (l *lexer) scanParam() token {
+	l.next()
+	return token{tokenType: tkParam, value: l.src[l.start:l.end]}
+}
+
 func (*lexer) isWhiteSpace(r rune) bool {
 	return r == ' ' || r == '\t' || r == '\n'
 }
@@ -280,10 +287,6 @@ func (*lexer) isLetter(r rune) bool {
 
 func (*lexer) isUnderscore(r rune) bool {
 	return r == '_'
-}
-
-func (*lexer) isAsterisk(r rune) bool {
-	return r == '*'
 }
 
 func (*lexer) isDigit(r rune) bool {
@@ -309,4 +312,8 @@ func (*lexer) isOperator(o rune) bool {
 		ros = append(ros, rune(op[0]))
 	}
 	return slices.Contains(ros, o)
+}
+
+func (*lexer) isParam(r rune) bool {
+	return r == '?'
 }

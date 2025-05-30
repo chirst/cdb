@@ -32,6 +32,7 @@ type routine struct {
 	registers        map[int]any
 	resultRows       *[][]*string
 	cursors          map[int]*kv.Cursor
+	parameters       []any
 	readTransaction  bool
 	writeTransaction bool
 	schemaVersion    string
@@ -93,7 +94,7 @@ func (e *ExecutionPlan) Append(command Command) {
 // explain Execute does not execute the plan. If the plan is out of date with
 // the system catalog Execute will return ErrVersionChanged in the ExecuteResult
 // err field so the plan can be recompiled.
-func (v *vm) Execute(plan *ExecutionPlan) *ExecuteResult {
+func (v *vm) Execute(plan *ExecutionPlan, parameters []any) *ExecuteResult {
 	if plan.Explain {
 		return v.explain(plan)
 	}
@@ -101,6 +102,7 @@ func (v *vm) Execute(plan *ExecutionPlan) *ExecuteResult {
 		registers:        map[int]any{},
 		resultRows:       &[][]*string{},
 		cursors:          map[int]*kv.Cursor{},
+		parameters:       parameters,
 		readTransaction:  false,
 		writeTransaction: false,
 		schemaVersion:    plan.Version,
@@ -191,6 +193,8 @@ func anyToInt(a any) (int, error) {
 	switch t := a.(type) {
 	case int:
 		return t, nil
+	case int64:
+		return int(t), nil
 	case string:
 		ti, err := strconv.Atoi(t)
 		if err != nil {
@@ -367,6 +371,9 @@ func (c *ResultRowCmd) execute(vm *vm, routine *routine) cmdRes {
 	row := []*string{}
 	for i := c.P1; i < c.P1+c.P2; i += 1 {
 		switch v := routine.registers[i].(type) {
+		case int64:
+			vs := strconv.Itoa(int(v))
+			row = append(row, &vs)
 		case int:
 			vs := strconv.Itoa(v)
 			row = append(row, &vs)
@@ -473,10 +480,10 @@ func (c *NewRowIdCmd) explain(addr int) []*string {
 type InsertCmd cmd
 
 func (c *InsertCmd) execute(vm *vm, routine *routine) cmdRes {
-	bp3i, ok := routine.registers[c.P3].(int)
-	if !ok {
+	bp3i, err := anyToInt(routine.registers[c.P3])
+	if err != nil {
 		return cmdRes{
-			err: fmt.Errorf("failed to convert %v to int", bp3i),
+			err: err,
 		}
 	}
 	bp3, err := kv.EncodeKey(bp3i)
@@ -680,16 +687,50 @@ func (c *CountCmd) explain(addr int) []*string {
 	return formatExplain(addr, "Count", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
 
-// NotExistsCmd if the cursor P1 does not contain key P3 jump to P2 otherwise
-// fall through.
+// If the value in register P1 is not an integer raise an exception.
+type MustBeIntCmd cmd
+
+func (c *MustBeIntCmd) execute(vm *vm, routine *routine) cmdRes {
+	v := routine.registers[c.P1]
+	switch vi := v.(type) {
+	case int:
+		return cmdRes{}
+	case int64:
+		return cmdRes{}
+	default:
+		return cmdRes{err: fmt.Errorf("value %v must be int", vi)}
+	}
+}
+
+func (c *MustBeIntCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Throw error if register[%d] is not an integer", c.P1)
+	return formatExplain(addr, "MustBeInt", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
+// NotExistsCmd if the cursor P1 does not contain key in register P3 jump to
+// address P2 otherwise fall through.
 type NotExistsCmd cmd
 
 func (c *NotExistsCmd) execute(vm *vm, routine *routine) cmdRes {
-	bp3, err := kv.EncodeKey(c.P3)
-	if err != nil {
-		return cmdRes{err: err}
+	var ek []byte
+	v := routine.registers[c.P3]
+	switch vi := v.(type) {
+	case int:
+		ekb, err := kv.EncodeKey(routine.registers[c.P3])
+		if err != nil {
+			return cmdRes{err: err}
+		}
+		ek = ekb
+	case int64:
+		ekb, err := kv.EncodeKey(routine.registers[c.P3])
+		if err != nil {
+			return cmdRes{err: err}
+		}
+		ek = ekb
+	default:
+		return cmdRes{err: fmt.Errorf("%v must be int", vi)}
 	}
-	exists := routine.cursors[c.P1].Exists(bp3)
+	exists := routine.cursors[c.P1].Exists(ek)
 	if !exists {
 		return cmdRes{nextAddress: c.P2}
 	}
@@ -697,7 +738,7 @@ func (c *NotExistsCmd) execute(vm *vm, routine *routine) cmdRes {
 }
 
 func (c *NotExistsCmd) explain(addr int) []*string {
-	comment := fmt.Sprintf("Jump to register[%d] if cursor %d does not contain key %d", c.P2, c.P1, c.P3)
+	comment := fmt.Sprintf("Jump to register[%d] if cursor %d does not contain key in register[%d]", c.P2, c.P1, c.P3)
 	return formatExplain(addr, "NotExists", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
 
@@ -788,4 +829,22 @@ func (c *LteCmd) execute(vm *vm, routine *routine) cmdRes {
 func (c *LteCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Jump to address %d if register[%d] >= register[%d]", c.P2, c.P1, c.P3)
 	return formatExplain(addr, "Lte", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
+// VariableCmd substitutes variable number P1 into register P2. Where P1 is a
+// zero based index.
+type VariableCmd cmd
+
+func (c *VariableCmd) execute(vm *vm, routine *routine) cmdRes {
+	paramIdx := c.P1
+	if len(routine.parameters)-1 < paramIdx {
+		return cmdRes{err: fmt.Errorf("no variable at index %d", paramIdx)}
+	}
+	routine.registers[c.P2] = routine.parameters[c.P1]
+	return cmdRes{}
+}
+
+func (c *VariableCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Substitute variable %d into register[%d]", c.P1, c.P2)
+	return formatExplain(addr, "Variable", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }

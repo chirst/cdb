@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
 
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
@@ -183,14 +182,19 @@ func (p *insertExecutionPlanner) buildPrimaryKey(writeCursorId, keyRegister, val
 		p.executionPlan.Append(&vm.NewRowIdCmd{P1: writeCursorId, P2: keyRegister})
 		return nil
 	}
-	rowId, err := strconv.Atoi(p.queryPlan.colValues[valueIdx][statementPkIdx])
-	if err != nil {
-		return err
+	switch rv := p.queryPlan.colValues[valueIdx][statementPkIdx].(type) {
+	case *compiler.IntLit:
+		p.executionPlan.Append(&vm.IntegerCmd{P1: rv.Value, P2: keyRegister})
+	case *compiler.Variable:
+		// TODO must be int could likely be used more to enforce schema types.
+		p.executionPlan.Append(&vm.VariableCmd{P1: rv.Position, P2: keyRegister})
+		p.executionPlan.Append(&vm.MustBeIntCmd{P1: keyRegister})
+	default:
+		return errors.New("unsupported row id value")
 	}
-	integerCmdIdx := len(p.executionPlan.Commands) + 2
-	p.executionPlan.Append(&vm.NotExistsCmd{P1: writeCursorId, P2: integerCmdIdx, P3: rowId})
+	continueIdx := len(p.executionPlan.Commands) + 2
+	p.executionPlan.Append(&vm.NotExistsCmd{P1: writeCursorId, P2: continueIdx, P3: keyRegister})
 	p.executionPlan.Append(&vm.HaltCmd{P1: 1, P4: pkConstraint})
-	p.executionPlan.Append(&vm.IntegerCmd{P1: rowId, P2: keyRegister})
 	return nil
 }
 
@@ -204,7 +208,16 @@ func (p *insertExecutionPlanner) buildNonPkValue(valueIdx, registerIdx int, cata
 	if stmtColIdx == -1 {
 		return fmt.Errorf("%w %s", errMissingColumnName, catalogColumnName)
 	}
-	p.executionPlan.Append(&vm.StringCmd{P1: registerIdx, P4: p.queryPlan.colValues[valueIdx][stmtColIdx]})
+	switch cv := p.queryPlan.colValues[valueIdx][stmtColIdx].(type) {
+	case *compiler.StringLit:
+		p.executionPlan.Append(&vm.StringCmd{P1: registerIdx, P4: cv.Value})
+	case *compiler.IntLit:
+		p.executionPlan.Append(&vm.IntegerCmd{P1: cv.Value, P2: registerIdx})
+	case *compiler.Variable:
+		p.executionPlan.Append(&vm.VariableCmd{P1: cv.Position, P2: registerIdx})
+	default:
+		return errors.New("unsupported type of value")
+	}
 	return nil
 }
 

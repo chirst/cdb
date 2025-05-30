@@ -21,6 +21,9 @@ type parser struct {
 	tokens []token
 	start  int
 	end    int
+	// paramCount begins at 0 and is used to label what "position" a parameter
+	// comes in.
+	paramCount int
 }
 
 func NewParser(tokens []token) *parser {
@@ -216,6 +219,11 @@ func (p *parser) getOperand() (Expr, error) {
 			Column: first.value,
 		}, nil
 	}
+	if first.tokenType == tkParam {
+		v := &Variable{Position: p.paramCount}
+		p.paramCount += 1
+		return v, nil
+	}
 	if first.tokenType == tkKeyword && first.value == kwCount {
 		if v := p.nextNonSpace().value; v != "(" {
 			return nil, fmt.Errorf(tokenErr, v)
@@ -351,16 +359,29 @@ func (p *parser) parseValue(stmt *InsertStmt, valueIdx int) (*InsertStmt, error)
 	if p.nextNonSpace().value != "(" {
 		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
-	stmt.ColValues = append(stmt.ColValues, []string{})
+	stmt.ColValues = append(stmt.ColValues, []Expr{})
 	for {
 		v := p.nextNonSpace()
-		if v.tokenType != tkNumeric && v.tokenType != tkLiteral {
+		if v.tokenType != tkNumeric && v.tokenType != tkLiteral && v.tokenType != tkParam {
 			return nil, fmt.Errorf(literalErr, v.value)
 		}
 		if v.tokenType == tkLiteral && v.value[0] == '\'' && v.value[len(v.value)-1] == '\'' {
-			stmt.ColValues[valueIdx] = append(stmt.ColValues[valueIdx], v.value[1:len(v.value)-1])
+			stmt.ColValues[valueIdx] = append(
+				stmt.ColValues[valueIdx],
+				&StringLit{
+					Value: v.value[1 : len(v.value)-1],
+				},
+			)
+		} else if v.tokenType == tkParam {
+			variableExpr := &Variable{Position: p.paramCount}
+			p.paramCount += 1
+			stmt.ColValues[valueIdx] = append(stmt.ColValues[valueIdx], variableExpr)
 		} else {
-			stmt.ColValues[valueIdx] = append(stmt.ColValues[valueIdx], v.value)
+			intValue, err := strconv.Atoi(v.value)
+			if err != nil {
+				return nil, fmt.Errorf("failed to convert %v to integer", v.value)
+			}
+			stmt.ColValues[valueIdx] = append(stmt.ColValues[valueIdx], &IntLit{Value: intValue})
 		}
 		sep := p.nextNonSpace()
 		if sep.value != "," {

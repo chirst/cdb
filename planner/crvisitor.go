@@ -14,10 +14,13 @@ type constantRegisterVisitor struct {
 	nextOpenRegister int
 	// constantRegisters is a mapping of register value to register index.
 	constantRegisters map[int]int
+	// variableRegisters is a mapping of variable indices to registers.
+	variableRegisters map[int]int
 }
 
 func (c *constantRegisterVisitor) Init(openRegister int) {
 	c.constantRegisters = make(map[int]int)
+	c.variableRegisters = make(map[int]int)
 	c.nextOpenRegister = openRegister
 }
 
@@ -25,11 +28,32 @@ func (c *constantRegisterVisitor) Init(openRegister int) {
 // map.
 func (c *constantRegisterVisitor) GetRegisterCommands() []vm.Command {
 	// Maps are unordered so there is some extra work to keep commands in order.
+	lc := c.getOrderedLitCommands()
+	rc := c.getOrderedVariableCommands()
+	return append(lc, rc...)
+}
+
+func (c *constantRegisterVisitor) getOrderedLitCommands() []vm.Command {
 	unordered := []*vm.IntegerCmd{}
 	for k := range c.constantRegisters {
 		unordered = append(unordered, &vm.IntegerCmd{P1: k, P2: c.constantRegisters[k]})
 	}
 	slices.SortFunc(unordered, func(a, b *vm.IntegerCmd) int {
+		return a.P2 - b.P2
+	})
+	ret := []vm.Command{}
+	for _, s := range unordered {
+		ret = append(ret, vm.Command(s))
+	}
+	return ret
+}
+
+func (c *constantRegisterVisitor) getOrderedVariableCommands() []vm.Command {
+	unordered := []*vm.VariableCmd{}
+	for k := range c.variableRegisters {
+		unordered = append(unordered, &vm.VariableCmd{P1: k, P2: c.variableRegisters[k]})
+	}
+	slices.SortFunc(unordered, func(a, b *vm.VariableCmd) int {
 		return a.P2 - b.P2
 	})
 	ret := []vm.Command{}
@@ -54,6 +78,11 @@ func (c *constantRegisterVisitor) fillRegisterIfNeeded(v int) {
 		c.constantRegisters[v] = c.nextOpenRegister
 		c.nextOpenRegister += 1
 	}
+}
+
+func (c *constantRegisterVisitor) VisitVariable(v *compiler.Variable) {
+	c.variableRegisters[v.Position] = c.nextOpenRegister
+	c.nextOpenRegister += 1
 }
 
 func (c *constantRegisterVisitor) VisitBinaryExpr(e *compiler.BinaryExpr)     {}

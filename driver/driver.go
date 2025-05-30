@@ -2,12 +2,15 @@
 package driver
 
 // TODO there are several context methods that are not implemented.
+// TODO transactions statements are not supported.
 
 import (
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"io"
 
+	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/db"
 )
 
@@ -53,19 +56,21 @@ func (c *cdbConn) Close() error {
 
 // Prepare implements driver.Conn.
 func (c *cdbConn) Prepare(query string) (driver.Stmt, error) {
-	// TODO Prepare is supposed to compile the query and allow different
-	// parameterized queries to be executed with the same compiled query. This
-	// isn't supported by cdb at the moment so it is a pass through.
-	st := &cdbStmt{
-		cdb:   c.cdb,
-		query: query,
+	statements := c.cdb.Tokenize(query)
+	if len(statements) != 1 {
+		return nil, errors.New("driver supports only one statement at a time")
 	}
-	return st, nil
+	return &cdbStmt{
+		cdb:       c.cdb,
+		query:     query,
+		statement: statements[0],
+	}, nil
 }
 
 type cdbStmt struct {
-	cdb   *db.DB
-	query string
+	cdb       *db.DB
+	query     string
+	statement compiler.Statement
 }
 
 // Close implements driver.Stmt.
@@ -75,7 +80,7 @@ func (c *cdbStmt) Close() error {
 
 // Exec implements driver.Stmt.
 func (c *cdbStmt) Exec(args []driver.Value) (driver.Result, error) {
-	result := c.cdb.ExecuteRaw(c.query)
+	result := c.cdb.Execute(c.statement, toAny(args))
 	if result.Err != nil {
 		return nil, result.Err
 	}
@@ -85,12 +90,16 @@ func (c *cdbStmt) Exec(args []driver.Value) (driver.Result, error) {
 
 // NumInput implements driver.Stmt.
 func (c *cdbStmt) NumInput() int {
-	return 0
+	// Per driver.Stmt docs a -1 means the driver will skip a sanity check for
+	// the number of arguments prepared vs passed to be executed. This sanity
+	// check could be supported, but would mean the prepare statement would have
+	// to start returning the number of parameters.
+	return -1
 }
 
 // Query implements driver.Stmt.
 func (c *cdbStmt) Query(args []driver.Value) (driver.Rows, error) {
-	result := c.cdb.ExecuteRaw(c.query)
+	result := c.cdb.Execute(c.statement, toAny(args))
 	if result.Err != nil {
 		return nil, result.Err
 	}
@@ -99,6 +108,14 @@ func (c *cdbStmt) Query(args []driver.Value) (driver.Rows, error) {
 		rows: result.ResultRows,
 	}
 	return cr, nil
+}
+
+func toAny(args []driver.Value) []any {
+	aarg := []any{}
+	for _, arg := range args {
+		aarg = append(aarg, arg)
+	}
+	return aarg
 }
 
 type cdbResult struct{}

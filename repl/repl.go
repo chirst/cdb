@@ -59,7 +59,7 @@ func (r *repl) Run() {
 		}
 		previousInput = ""
 		for _, statement := range statements {
-			result := r.db.Execute(statement)
+			result := r.db.Execute(statement, []any{})
 			if result.Err != nil {
 				fmt.Printf("Err: %s\n", result.Err)
 				continue
