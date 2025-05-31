@@ -1,2 +1,5 @@
 *.db
 *.sqlite
+cdb.h
+cdb.so
+testc.out

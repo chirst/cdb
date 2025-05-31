@@ -9,3 +9,12 @@ test-long:
 
 build:
 	go build -o cdb main.go
+
+buildclib:
+	go build -o cdb.so -buildmode=c-shared main.go
+
+testc:
+	cc -o testc.out test.c ./cdb.so && ./testc.out
+
+buildtest:
+	make buildclib && make testc
