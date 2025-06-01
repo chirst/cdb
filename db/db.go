@@ -48,6 +48,27 @@ func New(useMemory bool, filename string) (*DB, error) {
 	}, nil
 }
 
+type PreparedStatement struct {
+	Statement compiler.Statement
+	Args      []any
+	DB        *DB
+	Result    *vm.ExecuteResult
+	ResultIdx int
+}
+
+func (db *DB) NewPreparedStatement(sql string) (*PreparedStatement, error) {
+	statements := db.Tokenize(sql)
+	if len(statements) != 1 {
+		return nil, errors.New("only one statement supported")
+	}
+	return &PreparedStatement{
+		Statement: statements[0],
+		Args:      []any{},
+		DB:        db,
+		ResultIdx: -1,
+	}, nil
+}
+
 // Tokenize makes a raw sql string into a slice of tokens. Otherwise known as
 // lexing.
 func (db *DB) Tokenize(sql string) compiler.Statements {
