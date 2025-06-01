@@ -9,7 +9,6 @@ import (
 	"github.com/chirst/cdb/db"
 	"github.com/chirst/cdb/repl"
 )
-import "fmt"
 
 const fFlagHelp = "Specify the database file name"
 const mFlagHelp = "Run the database in memory with no persistence"
@@ -30,16 +29,27 @@ func main() {
 var _databases = make(map[string]*db.DB)
 var _plans = make(map[int]*db.PreparedStatement)
 
+// cdb_new_db opens a database with the given filename. A filename of ":memory:"
+// will open a database that does not persist data after it is closed. A non
+// zero int is returned in case an error occurs. The database can be closed with
+// cdb_close_db.
+//
 //export cdb_new_db
-func cdb_new_db(filename *C.char) {
+func cdb_new_db(filename *C.char) C.int {
 	fng := C.GoString(filename)
 	if _, ok := _databases[fng]; ok {
-		return
+		return C.int(0)
 	}
-	// TODO handle err
-	_databases[fng], _ = db.New(fng == ":memory:", fng)
+	d, err := db.New(fng == ":memory:", fng)
+	_databases[fng] = d
+	if err != nil {
+		return C.int(1)
+	}
+	return C.int(0)
 }
 
+// cdb_close_db closes the database with the given filename.
+//
 //export cdb_close_db
 func cdb_close_db(filename *C.char) {
 	fng := C.GoString(filename)
@@ -48,10 +58,10 @@ func cdb_close_db(filename *C.char) {
 
 //export cdb_prepare
 func cdb_prepare(filename *C.char, sql *C.char) C.int {
-	fng := C.GoString(filename)
-	sqlg := C.GoString(sql)
+	gfn := C.GoString(filename)
+	gSql := C.GoString(sql)
 	// TODO handle err
-	ps, _ := _databases[fng].NewPreparedStatement(sqlg)
+	ps, _ := _databases[gfn].NewPreparedStatement(gSql)
 	for i := 1; ; i += 1 {
 		_, ok := _plans[i]
 		if !ok {
@@ -77,7 +87,6 @@ func cdb_bind_int(prepareId C.int, bound C.int) {
 func cdb_bind_string(prepareId C.int, bound *C.char) {
 	p := _plans[int(prepareId)]
 	bs := C.GoString(bound)
-	fmt.Println(bs)
 	p.Args = append(p.Args, bs)
 }
 

@@ -74,7 +74,16 @@ typedef struct { void *data; GoInt len; GoInt cap; } GoSlice;
 extern "C" {
 #endif
 
-extern void cdb_new_db(char* filename);
+
+// cdb_new_db opens a database with the given filename. A filename of ":memory:"
+// will open a database that does not persist data after it is closed. A non
+// zero int is returned in case an error occurs. The database can be closed with
+// cdb_close_db.
+//
+extern int cdb_new_db(char* filename);
+
+// cdb_close_db closes the database with the given filename.
+//
 extern void cdb_close_db(char* filename);
 extern int cdb_prepare(char* filename, char* sql);
 extern void cdb_close_statement(int prepareId);
