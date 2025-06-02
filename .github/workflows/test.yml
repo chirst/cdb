@@ -17,3 +17,5 @@ jobs:
       run: make build
     - name: Test
       run: make test
+    - name: C Tests
+      run: make buildtestc

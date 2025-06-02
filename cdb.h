@@ -85,15 +85,51 @@ extern int cdb_new_db(char* filename);
 // cdb_close_db closes the database with the given filename.
 //
 extern void cdb_close_db(char* filename);
-extern int cdb_prepare(char* filename, char* sql);
+
+// cdb_prepare prepares a statement that can be bound and executed for the given
+// filename and sql. The prepareId is a handle used for further operations on
+// the prepared statement. Note the prepared statement must be cleaned up with
+// cdb_close_statement.
+//
+extern int cdb_prepare(int* prepareId, char* filename, char* sql);
+
+// cdb_close_statement cleans up a prepared statement.
+//
 extern void cdb_close_statement(int prepareId);
-extern void cdb_bind_int(int prepareId, int bound);
-extern void cdb_bind_string(int prepareId, char* bound);
-extern void cdb_execute(int prepareId);
-extern int cdb_result_err(int prepareId);
-extern int cdb_result_row(int prepareId);
-extern int cdb_result_col_int(int prepareId, int colIdx);
-extern char* cdb_result_col_string(int prepareId, int colIdx);
+
+// cdb_bind_int binds an int as the next available argument for the given
+// prepared statement.
+//
+extern int cdb_bind_int(int prepareId, int bound);
+
+// cdb_bind_string binds a string as the next available argument for the given
+// prepared statement.
+//
+extern int cdb_bind_string(int prepareId, char* bound);
+
+// cdb_execute evaluates the given prepared statement.
+//
+extern int cdb_execute(int prepareId);
+
+// cdb_result_err puts 1 in hasError when the statement has an error. The error
+// message is put in errMessage.
+//
+extern int cdb_result_err(int prepareId, int* hasError, char** errMessage);
+
+// cdb_result_row moves a cursor to the next row. If there is no row
+// cdb_result_row will put 1 into hasRow otherwise 0.
+//
+extern int cdb_result_row(int prepareId, int* hasRow);
+
+// cdb_result_col_int puts the int for the current row at the 0 based column
+// index for the result param.
+//
+extern int cdb_result_col_int(int prepareId, int colIdx, int* result);
+
+// cdb_result_col_string puts the string for the current row at the 0 based
+// column index into the result param.
+//
+extern int cdb_result_col_string(int prepareId, int colIdx, char** result);
 
 #ifdef __cplusplus
 }
