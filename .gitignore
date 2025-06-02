@@ -1,2 +1,4 @@
 *.db
 *.sqlite
+cdb.so
+testc.out
