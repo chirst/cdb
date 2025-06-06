@@ -24,10 +24,11 @@ int main() {
         return 1;
     }
 
-    char* insertSql = "INSERT INTO foo (name) VALUES (?);";
+    char* insertSql = "INSERT INTO foo (id, name) VALUES (?, ?);";
     int insertPrepareId;
     cdb_prepare(&insertPrepareId, filename, insertSql);
     char* insertText = "asdf";
+    cdb_bind_int(insertPrepareId, 1);
     cdb_bind_string(insertPrepareId, insertText);
     cdb_execute(insertPrepareId);
     cdb_result_err(insertPrepareId, &hasErr, &errMessage);

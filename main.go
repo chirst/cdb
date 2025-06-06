@@ -103,7 +103,7 @@ func cdb_bind_int(prepareId C.int, bound C.int) C.int {
 	if !ok {
 		return C.int(1)
 	}
-	p.Args = append(p.Args, (bound))
+	p.Args = append(p.Args, int(bound))
 	return C.int(0)
 }
 
@@ -146,7 +146,8 @@ func cdb_result_err(prepareId C.int, hasError *C.int, errMessage **C.char) C.int
 	}
 	if p.Result.Err != nil {
 		*hasError = C.int(1)
-		*errMessage = C.CString(p.Result.Err.Error())
+		em := p.Result.Err.Error()
+		*errMessage = C.CString(em)
 	}
 	return C.int(0)
 }
