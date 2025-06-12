@@ -1,28 +1,35 @@
 name: Release
 on:
   push:
-    tags:
-      - '*'
+    # tags:
+    #   - '*'
 permissions:
   contents: write
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
-      -
-        name: Checkout
+      - name: Checkout
         uses: actions/checkout@v4
-      -
-        name: Set up Go
+        with:
+          fetch-depth: 0
+      - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
-      -
-        name: Run GoReleaser
+          go-version: '1.24'
+      - name: Set up Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: '0.14.0'
+      - name: Set output
+        id: macos_sdk
+        run: echo "path=$(xcrun --show-sdk-path)" >> $GITHUB_OUTPUT
+      - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
-          version: 'latest'
-          args: release --clean
+          version: 'v2'
+          args: release --clean --verbose --skip=publish,validate
         env:
+          SDK_PATH: ${{ steps.macos_sdk.outputs.path }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

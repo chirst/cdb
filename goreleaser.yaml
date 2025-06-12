@@ -1,0 +1,75 @@
+version: 2
+project_name: goreleaser-zig-cross-compilation
+builds:
+  - id: goreleaser-standard
+    goos:
+    - darwin
+    - linux
+    goarch:
+    - amd64
+    - arm64
+    flags:
+    - -trimpath
+    - -buildmode=default
+    env:
+    - CGO_ENABLED=1
+
+  - id: goreleaser-zig-cross-compilation-linux-macos
+    goos:
+    - darwin
+    goarch:
+    - amd64
+    - arm64
+    ldflags:
+    - -s -w
+    flags:
+    - -trimpath
+    - -buildmode=c-shared
+    env:
+    - CGO_ENABLED=1
+
+  - id: goreleaser-zig-cross-compilation-linux
+    goos:
+    - linux
+    goarch:
+    - amd64
+    - arm64
+    ldflags:
+    - -s -w
+    flags:
+    - -trimpath
+    - -buildmode=c-shared
+    env:
+    - CGO_ENABLED=1
+    - CGO_CFLAGS=-D_GNU_SOURCE
+    - CPATH=""
+    - C_INCLUDE_PATH=""
+    - LIBRARY_PATH=""
+    - >-
+        {{- if eq .Os "linux" }}
+          {{- if eq .Arch "amd64" }}CC=zig c -target x86_64-linux-musl{{- end }}
+          {{- if eq .Arch "arm64"}}CC=zig c -target aarch64-linux-musl{{- end }}
+        {{- end }}
+
+archives:
+  - formats: [ 'tar.gz' ]
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+    - goos: windows
+      formats: [ 'zip' ]
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
