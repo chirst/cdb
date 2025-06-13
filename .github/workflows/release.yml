@@ -1,35 +1,135 @@
 name: Release
 on:
   push:
-    # tags:
-    #   - '*'
+    tags:
+      - '*'
 permissions:
   contents: write
 jobs:
-  release:
+  build-mac:
     runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          fetch-depth: 0
+          go-version: '1.24'
+      - name: Build arm64 shared
+        run: CGO_ENABLED=1 CGO=1 GOOS=darwin GOARCH=arm64 go build -o mac-arm64-cdb.so -buildmode=c-shared main.go
+      - name: Build arm64 default
+        run: CGO_ENABLED=1 CGO=1 GOOS=darwin GOARCH=arm64 go build -o mac-arm64-cdb -buildmode=default main.go
+      - name: Build amd64 shared
+        run: CGO_ENABLED=1 CGO=1 GOOS=darwin GOARCH=amd64 go build -o mac-amd64-cdb.so -buildmode=c-shared main.go
+      - name: Build amd64 default
+        run: CGO_ENABLED=1 CGO=1 GOOS=darwin GOARCH=amd64 go build -o mac-amd64-cdb -buildmode=default main.go
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-arm64-cdb.so
+          path: mac-arm64-cdb.so
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-arm64-cdb
+          path: mac-arm64-cdb
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-amd64-cdb.so
+          path: mac-amd64-cdb.so
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-amd64-cdb
+          path: mac-amd64-cdb
+          if-no-files-found: error
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.24'
       - name: Set up Zig
-        uses: goto-bus-stop/setup-zig@v2
+        uses: mlugg/setup-zig@v2
         with:
-          version: '0.14.0'
-      - name: Set output
-        id: macos_sdk
-        run: echo "path=$(xcrun --show-sdk-path)" >> $GITHUB_OUTPUT
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+          version: 0.14.0
+      - name: Build arm64 shared
+        run: CGO_ENABLED=1 CGO=1 GOOS=linux GOARCH=arm64 CC="zig cc -target aarch64-linux-musl" go build -o linux-arm64-cdb.so -buildmode=c-shared main.go
+      - name: Build arm64 default
+        run: CGO_ENABLED=1 CGO=1 GOOS=linux GOARCH=arm64 CC="zig cc -target aarch64-linux-musl" go build -o linux-arm64-cdb -buildmode=default main.go
+      - name: Build amd64 shared
+        run: CGO_ENABLED=1 CGO=1 GOOS=linux GOARCH=amd64 go build -o linux-amd64-cdb.so -buildmode=c-shared main.go
+      - name: Build amd64 default
+        run: CGO_ENABLED=1 CGO=1 GOOS=linux GOARCH=amd64 go build -o linux-amd64-cdb -buildmode=default main.go
+      - uses: actions/upload-artifact@v4
         with:
-          distribution: goreleaser
-          version: 'v2'
-          args: release --clean --verbose --skip=publish,validate
-        env:
-          SDK_PATH: ${{ steps.macos_sdk.outputs.path }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: linux-arm64-cdb.so
+          path: linux-arm64-cdb.so
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64-cdb
+          path: linux-arm64-cdb
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-amd64-cdb.so
+          path: linux-amd64-cdb.so
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-amd64-cdb
+          path: linux-amd64-cdb
+          if-no-files-found: error
+  release:
+    needs: [build-mac, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Unarchive mac arm64 shared
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-arm64-cdb.so
+      - name: Unarchive mac arm64 default
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-arm64-cdb
+      - name: Unarchive mac amd64 shared
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-amd64-cdb.so
+      - name: Unarchive mac amd64 default
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-amd64-cdb
+      - name: Unarchive linux arm64 shared
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-arm64-cdb.so
+      - name: Unarchive linux arm64 default
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-arm64-cdb
+      - name: Unarchive linux amd64 shared
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-amd64-cdb.so
+      - name: Unarchive linux amd64 default
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-amd64-cdb
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
+        with:
+          files: |
+            mac-arm64-cdb.so
+            mac-arm64-cdb
+            mac-amd64-cdb.so
+            mac-amd64-cdb
+            linux-arm64-cdb.so
+            linux-arm64-cdb
+            linux-amd64-cdb.so
+            linux-amd64-cdb
