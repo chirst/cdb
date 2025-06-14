@@ -131,6 +131,16 @@ extern int cdb_result_col_int(int prepareId, int colIdx, int* result);
 //
 extern int cdb_result_col_string(int prepareId, int colIdx, char** result);
 
+// cdb_result_col_count puts the count of result columns in result for the given
+// prepareId.
+//
+extern int cdb_result_col_count(int prepareId, int* result);
+
+// cdb_result_col_name puts the result column name in the result for the given
+// colIdx and the the given prepareId.
+//
+extern int cdb_result_col_name(int prepareId, int colIdx, char** result);
+
 #ifdef __cplusplus
 }
 #endif
