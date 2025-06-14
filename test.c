@@ -1,5 +1,6 @@
 //go:build ignore
 #include <stdio.h>
+#include <string.h>
 #include "cdb.h"
 
 int main() {
@@ -53,6 +54,24 @@ int main() {
     cdb_result_row(selectPrepareId, &hasRow);
     if (hasRow == 0) {
         printf("expected select result to have row\n");
+        return 1;
+    }
+    int colCount;
+    cdb_result_col_count(selectPrepareId, &colCount);
+    if (colCount != 2) {
+        printf("expected select col count to be 2 but got %d\n", colCount);
+        return 1;
+    }
+    char* idColName;
+    cdb_result_col_name(selectPrepareId, 0, &idColName);
+    if (strcmp(idColName, "id") != 0) {
+        printf("expected select id col name to be id but got %s\n", idColName);
+        return 1;
+    }
+    char* nameColName;
+    cdb_result_col_name(selectPrepareId, 1, &nameColName);
+    if (strcmp(nameColName, "name") != 0) {
+        printf("expected select name col name to be name but got %s\n", nameColName);
         return 1;
     }
     int rowId;

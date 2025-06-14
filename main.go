@@ -201,3 +201,31 @@ func cdb_result_col_string(prepareId C.int, colIdx C.int, result **C.char) C.int
 	*result = C.CString(*r)
 	return C.int(0)
 }
+
+// cdb_result_col_count puts the count of result columns in result for the given
+// prepareId.
+//
+//export cdb_result_col_count
+func cdb_result_col_count(prepareId C.int, result *C.int) C.int {
+	p, ok := _plans[int(prepareId)]
+	if !ok {
+		return C.int(1)
+	}
+	r := len(p.Result.ResultHeader)
+	*result = C.int(r)
+	return C.int(0)
+}
+
+// cdb_result_col_name puts the result column name in the result for the given
+// colIdx and the the given prepareId.
+//
+//export cdb_result_col_name
+func cdb_result_col_name(prepareId C.int, colIdx C.int, result **C.char) C.int {
+	p, ok := _plans[int(prepareId)]
+	if !ok {
+		return C.int(1)
+	}
+	r := p.Result.ResultHeader[colIdx]
+	*result = C.CString(r)
+	return C.int(0)
+}
