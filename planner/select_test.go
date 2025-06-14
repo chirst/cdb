@@ -4,14 +4,14 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/chirst/cdb/coltype"
+	"github.com/chirst/cdb/catalog"
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
 )
 
 type mockSelectCatalog struct {
 	columns              []string
-	columnTypes          []coltype.CT
+	columnTypes          []catalog.CdbType
 	primaryKeyColumnName string
 }
 
@@ -34,14 +34,14 @@ func (m *mockSelectCatalog) GetPrimaryKeyColumn(tableName string) (string, error
 	return m.primaryKeyColumnName, nil
 }
 
-func (m *mockSelectCatalog) GetColumnType(tableName string, columnName string) (coltype.CT, error) {
+func (m *mockSelectCatalog) GetColumnType(tableName string, columnName string) (catalog.CdbType, error) {
 	if len(m.columnTypes) == 0 {
 		if columnName == "id" {
-			return coltype.Int, nil
+			return catalog.CdbType{ID: catalog.CTInt}, nil
 		}
-		return coltype.Str, nil
+		return catalog.CdbType{ID: catalog.CTStr}, nil
 	}
-	return coltype.Unknown, nil
+	return catalog.CdbType{ID: catalog.CTUnknown}, nil
 }
 
 func TestSelectPlan(t *testing.T) {
@@ -133,7 +133,11 @@ func TestSelectPlan(t *testing.T) {
 			},
 			mockCatalogSetup: func(m *mockSelectCatalog) *mockSelectCatalog {
 				m.primaryKeyColumnName = "id"
-				m.columnTypes = []int{coltype.Str, coltype.Int, coltype.Int}
+				m.columnTypes = []catalog.CdbType{
+					{ID: catalog.CTStr},
+					{ID: catalog.CTInt},
+					{ID: catalog.CTInt},
+				}
 				m.columns = []string{"name", "id", "age"}
 				return m
 			},
@@ -172,7 +176,7 @@ func TestSelectPlan(t *testing.T) {
 			},
 			mockCatalogSetup: func(m *mockSelectCatalog) *mockSelectCatalog {
 				m.primaryKeyColumnName = "id"
-				m.columnTypes = []int{coltype.Int}
+				m.columnTypes = []catalog.CdbType{{ID: catalog.CTInt}}
 				m.columns = []string{"id"}
 				return m
 			},
@@ -203,7 +207,10 @@ func TestSelectPlan(t *testing.T) {
 			},
 			mockCatalogSetup: func(m *mockSelectCatalog) *mockSelectCatalog {
 				m.primaryKeyColumnName = "id"
-				m.columnTypes = []int{coltype.Int, coltype.Str}
+				m.columnTypes = []catalog.CdbType{
+					{ID: catalog.CTInt},
+					{ID: catalog.CTStr},
+				}
 				m.columns = []string{"id", "name"}
 				return m
 			},
@@ -235,7 +242,11 @@ func TestSelectPlan(t *testing.T) {
 			},
 			mockCatalogSetup: func(m *mockSelectCatalog) *mockSelectCatalog {
 				m.primaryKeyColumnName = "id"
-				m.columnTypes = []int{coltype.Str, coltype.Int, coltype.Int}
+				m.columnTypes = []catalog.CdbType{
+					{ID: catalog.CTStr},
+					{ID: catalog.CTInt},
+					{ID: catalog.CTInt},
+				}
 				m.columns = []string{"name", "id", "age"}
 				return m
 			},
@@ -273,7 +284,11 @@ func TestSelectPlan(t *testing.T) {
 			},
 			mockCatalogSetup: func(m *mockSelectCatalog) *mockSelectCatalog {
 				m.primaryKeyColumnName = "id"
-				m.columnTypes = []int{coltype.Str, coltype.Int, coltype.Int}
+				m.columnTypes = []catalog.CdbType{
+					{ID: catalog.CTStr},
+					{ID: catalog.CTInt},
+					{ID: catalog.CTInt},
+				}
 				m.columns = []string{"name", "id", "age"}
 				return m
 			},

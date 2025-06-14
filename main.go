@@ -244,6 +244,9 @@ func cdb_result_col_name(prepareId C.int, colIdx C.int, result **C.char) C.int {
 // 2 - INTEGER
 // 3 - TEXT
 //
+// UNKNOWN and VARIABLE are likely impossible types to encounter since they will
+// be resolved at execution time.
+//
 //export cdb_result_col_type
 func cdb_result_col_type(prepareId C.int, colIdx C.int, result *C.int) C.int {
 	p, ok := _plans[int(prepareId)]
@@ -251,8 +254,18 @@ func cdb_result_col_type(prepareId C.int, colIdx C.int, result *C.int) C.int {
 		return C.int(1)
 	}
 	t := p.Result.ResultTypes[colIdx]
-	*result = C.int(t)
+	*result = C.int(t.ID)
 	return C.int(0)
 }
 
-// statement type create, update, delete, select, etc
+// cdb_statement_type is the type of statement e.g. SELECT CREATE INSERT
+//
+//export cdb_statement_type
+func cdb_statement_type(prepareId C.int, result *C.int) C.int {
+	_, ok := _plans[int(prepareId)]
+	if !ok {
+		return C.int(1)
+	}
+	// TODO not implemented
+	return C.int(1)
+}

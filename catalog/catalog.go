@@ -1,19 +1,38 @@
-package kv
+package catalog
 
 import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
 	"slices"
-
-	"github.com/chirst/cdb/coltype"
 )
+
+// CT prefixed types correspond to cdb types and serve as the ID in CdbType. The
+// CT types precedence works off the number of the type. Where a higher number
+// is a higher precedence.
+const (
+	CTUnknown = iota
+	CTInt
+	CTVar
+	CTStr
+)
+
+// CdbType represents a type in cdb.
+type CdbType struct {
+	// ID corresponds to CT prefixed types CTUnknown, CTInt, CTVar, CTStr...
+	ID int
+	// VarPosition is special information for CTVar allowing the type to be
+	// resolved in the virtual machine since a lone variable cannot be resolved
+	// in the planner.
+	VarPosition int
+}
 
 // TODO remove early exits to each function and blend cdb_schema as any other
 // object.
+// TODO need to look at encapsulation.
 
-// catalog holds information about the database schema
-type catalog struct {
+// Catalog holds information about the database schema
+type Catalog struct {
 	schema *schema
 	// version handles concurrency control when the planner prepares statements.
 	// Statements being run by the virtual machine will have their version
@@ -23,33 +42,33 @@ type catalog struct {
 	version string
 }
 
-func newCatalog() *catalog {
-	c := &catalog{
+func NewCatalog() *Catalog {
+	c := &Catalog{
 		schema: &schema{},
 	}
 	c.setNewVersion()
 	return c
 }
 
-func (c *catalog) GetRootPageNumber(tableOrIndexName string) (int, error) {
+func (c *Catalog) GetRootPageNumber(tableOrIndexName string) (int, error) {
 	if tableOrIndexName == "cdb_schema" {
 		return 1, nil
 	}
 	for _, o := range c.schema.objects {
-		if o.name == tableOrIndexName {
-			return o.rootPageNumber, nil
+		if o.Name == tableOrIndexName {
+			return o.RootPageNumber, nil
 		}
 	}
 	return 0, fmt.Errorf("cannot get root of %s", tableOrIndexName)
 }
 
-func (c *catalog) GetColumns(tableName string) ([]string, error) {
+func (c *Catalog) GetColumns(tableName string) ([]string, error) {
 	if tableName == "cdb_schema" {
 		return []string{"id", "type", "name", "table_name", "rootpage", "sql"}, nil
 	}
 	for _, o := range c.schema.objects {
-		if o.name == tableName && o.tableName == tableName {
-			ts := TableSchemaFromString(o.jsonSchema)
+		if o.Name == tableName && o.TableName == tableName {
+			ts := TableSchemaFromString(o.JsonSchema)
 			ret := []string{}
 			for _, c := range ts.Columns {
 				ret = append(ret, c.Name)
@@ -60,13 +79,13 @@ func (c *catalog) GetColumns(tableName string) ([]string, error) {
 	return nil, fmt.Errorf("cannot get columns for table %s", tableName)
 }
 
-func (c *catalog) GetPrimaryKeyColumn(tableName string) (string, error) {
+func (c *Catalog) GetPrimaryKeyColumn(tableName string) (string, error) {
 	if tableName == "cdb_schema" {
 		return "id", nil
 	}
 	for _, o := range c.schema.objects {
-		if o.name == tableName && o.tableName == tableName {
-			ts := TableSchemaFromString(o.jsonSchema)
+		if o.Name == tableName && o.TableName == tableName {
+			ts := TableSchemaFromString(o.JsonSchema)
 			for _, col := range ts.Columns {
 				if col.PrimaryKey {
 					return col.Name, nil
@@ -79,66 +98,66 @@ func (c *catalog) GetPrimaryKeyColumn(tableName string) (string, error) {
 	return "", fmt.Errorf("cannot get pk for table %s", tableName)
 }
 
-func (c *catalog) TableExists(tableName string) bool {
+func (c *Catalog) TableExists(tableName string) bool {
 	if tableName == "cdb_schema" {
 		return true
 	}
-	return slices.ContainsFunc(c.schema.objects, func(o object) bool {
-		return o.objectType == "table" && o.tableName == tableName
+	return slices.ContainsFunc(c.schema.objects, func(o Object) bool {
+		return o.ObjectType == "table" && o.TableName == tableName
 	})
 }
 
-func (c *catalog) GetColumnType(tableName string, columnName string) (coltype.CT, error) {
+func (c *Catalog) GetColumnType(tableName string, columnName string) (CdbType, error) {
 	if tableName == "cdb_schema" {
 		switch columnName {
 		case "id":
-			return coltype.Int, nil
+			return CdbType{ID: CTInt}, nil
 		case "type":
-			return coltype.Str, nil
+			return CdbType{ID: CTStr}, nil
 		case "name":
-			return coltype.Str, nil
+			return CdbType{ID: CTStr}, nil
 		case "table_name":
-			return coltype.Str, nil
+			return CdbType{ID: CTStr}, nil
 		case "rootpage":
-			return coltype.Int, nil
+			return CdbType{ID: CTInt}, nil
 		case "sql":
-			return coltype.Str, nil
+			return CdbType{ID: CTStr}, nil
 		}
-		return coltype.Unknown, fmt.Errorf("no type for table %s col %s", tableName, columnName)
+		return CdbType{ID: CTUnknown}, fmt.Errorf("no type for table %s col %s", tableName, columnName)
 	}
 
 	for _, o := range c.schema.objects {
-		if o.name == tableName && o.tableName == tableName {
-			ts := TableSchemaFromString(o.jsonSchema)
+		if o.Name == tableName && o.TableName == tableName {
+			ts := TableSchemaFromString(o.JsonSchema)
 			for _, col := range ts.Columns {
 				if col.Name == columnName {
 					switch col.ColType {
 					case "INTEGER":
-						return coltype.Int, nil
+						return CdbType{ID: CTInt}, nil
 					case "TEXT":
-						return coltype.Str, nil
+						return CdbType{ID: CTStr}, nil
 					default:
-						return coltype.Unknown, fmt.Errorf("no type for %s", col.ColType)
+						return CdbType{ID: CTUnknown}, fmt.Errorf("no type for %s", col.ColType)
 					}
 				}
 			}
 		}
 	}
-	return coltype.Unknown, fmt.Errorf("no type for table %s col %s", tableName, columnName)
+	return CdbType{ID: CTUnknown}, fmt.Errorf("no type for table %s col %s", tableName, columnName)
 }
 
 // GetVersion returns a unique version identifier that is updated when the
 // catalog is updated.
-func (c *catalog) GetVersion() string {
+func (c *Catalog) GetVersion() string {
 	return c.version
 }
 
-func (c *catalog) setSchema(o []object) {
+func (c *Catalog) SetSchema(o []Object) {
 	c.schema.objects = o
 	c.setNewVersion()
 }
 
-func (c *catalog) setNewVersion() {
+func (c *Catalog) setNewVersion() {
 	chars := "abcdefghijklmnopqrstuvwxyz"
 	v := make([]byte, 16)
 	for i := range v {
@@ -150,20 +169,20 @@ func (c *catalog) setNewVersion() {
 // schema is a cached representation of the database schema
 type schema struct {
 	// objects are a in memory representation of the schema table
-	objects []object
+	objects []Object
 }
 
-type object struct {
-	// objectType is something like table, index, or trigger.
-	objectType string
-	// name is the name of the object
-	name string
-	// tableName is the name of the table this object is associated with
-	tableName string
-	// rootPageNumber is the root page number of the table or index
-	rootPageNumber int
-	// jsonSchema is different for each object. For a table it is tableSchema
-	jsonSchema string
+type Object struct {
+	// ObjectType is something like table, index, or trigger.
+	ObjectType string `json:"objectType"`
+	// Name is the Name of the object
+	Name string `json:"name"`
+	// TableName is the name of the table this object is associated with
+	TableName string `json:"tableName"`
+	// RootPageNumber is the root page number of the table or index
+	RootPageNumber int `json:"rootPageNumber"`
+	// JsonSchema is different for each object. For a table it is tableSchema
+	JsonSchema string `json:"jsonSchema"`
 }
 
 type TableSchema struct {

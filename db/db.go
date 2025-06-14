@@ -7,6 +7,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/chirst/cdb/catalog"
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/kv"
 	"github.com/chirst/cdb/planner"
@@ -24,7 +25,7 @@ type statementPlanner interface {
 
 type dbCatalog interface {
 	GetColumns(string) ([]string, error)
-	GetColumnType(string, string) (int, error)
+	GetColumnType(string, string) (catalog.CdbType, error)
 	GetRootPageNumber(string) (int, error)
 	TableExists(string) bool
 	GetVersion() string

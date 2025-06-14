@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/chirst/cdb/coltype"
+	"github.com/chirst/cdb/catalog"
 	"github.com/chirst/cdb/vm"
 )
 
@@ -44,13 +44,13 @@ func TestExecute(t *testing.T) {
 			t.Fatalf("expected %s got %s", s, c)
 		}
 	}
-	schemaTypeExpectations := []coltype.CT{
-		coltype.Int,
-		coltype.Str,
-		coltype.Str,
-		coltype.Str,
-		coltype.Int,
-		coltype.Str,
+	schemaTypeExpectations := []catalog.CdbType{
+		{ID: catalog.CTInt},
+		{ID: catalog.CTStr},
+		{ID: catalog.CTStr},
+		{ID: catalog.CTStr},
+		{ID: catalog.CTInt},
+		{ID: catalog.CTStr},
 	}
 	for i, ste := range schemaTypeExpectations {
 		if rt := schemaRes.ResultTypes[i]; rt != ste {
@@ -70,11 +70,11 @@ func TestExecute(t *testing.T) {
 			t.Fatalf("expected %s got %s", s, c)
 		}
 	}
-	selectTypeExpectations := []coltype.CT{
-		coltype.Int,
-		coltype.Str,
-		coltype.Str,
-		coltype.Int,
+	selectTypeExpectations := []catalog.CdbType{
+		{ID: catalog.CTInt},
+		{ID: catalog.CTStr},
+		{ID: catalog.CTStr},
+		{ID: catalog.CTInt},
 	}
 	for i, ste := range selectTypeExpectations {
 		if rt := selectPersonRes.ResultTypes[i]; rt != ste {
@@ -112,7 +112,7 @@ func TestBulkInsert(t *testing.T) {
 	if expectedTotal != gotC {
 		t.Fatalf("got count %d want %d", gotC, expectedTotal)
 	}
-	wantCountType := coltype.Int
+	wantCountType := catalog.CdbType{ID: catalog.CTInt}
 	gotCountType := selectCountRes.ResultTypes[0]
 	if wantCountType != gotCountType {
 		t.Fatalf("got type %d want type %d", gotCountType, wantCountType)
@@ -139,7 +139,7 @@ func TestOperators(t *testing.T) {
 		t.Fatalf("want %s but got %s", want, got)
 	}
 	gotType := res.ResultTypes[0]
-	wantType := coltype.Int
+	wantType := catalog.CdbType{ID: catalog.CTInt}
 	if gotType != wantType {
 		t.Fatalf("want type %d but got %d type", wantType, gotType)
 	}

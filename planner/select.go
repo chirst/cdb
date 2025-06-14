@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/chirst/cdb/coltype"
+	"github.com/chirst/cdb/catalog"
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
 )
@@ -13,7 +13,7 @@ import (
 // selectCatalog defines the catalog methods needed by the select planner
 type selectCatalog interface {
 	GetColumns(tableOrIndexName string) ([]string, error)
-	GetColumnType(tableName string, columnName string) (coltype.CT, error)
+	GetColumnType(tableName string, columnName string) (catalog.CdbType, error)
 	GetRootPageNumber(tableOrIndexName string) (int, error)
 	GetVersion() string
 	GetPrimaryKeyColumn(tableName string) (string, error)
@@ -427,7 +427,7 @@ func (p *selectExecutionPlanner) setResultHeader() {
 
 // setResultTypes attempts to precompute the type for each result column expr.
 func (p *selectExecutionPlanner) setResultTypes(exprs []compiler.Expr) error {
-	resolvedTypes := []coltype.CT{}
+	resolvedTypes := []catalog.CdbType{}
 	for _, expr := range exprs {
 		t, err := getExprType(expr)
 		if err != nil {
@@ -441,33 +441,33 @@ func (p *selectExecutionPlanner) setResultTypes(exprs []compiler.Expr) error {
 
 // getExprType resolves the type of the expression. In case a expression is a
 // variable it will need to be resolved later on.
-func getExprType(expr compiler.Expr) (coltype.CT, error) {
+func getExprType(expr compiler.Expr) (catalog.CdbType, error) {
 	switch c := expr.(type) {
 	case *compiler.IntLit:
-		return coltype.Int, nil
+		return catalog.CdbType{ID: catalog.CTInt}, nil
 	case *compiler.StringLit:
-		return coltype.Str, nil
+		return catalog.CdbType{ID: catalog.CTStr}, nil
 	case *compiler.Variable:
-		return coltype.Var, nil
+		return catalog.CdbType{ID: catalog.CTVar, VarPosition: c.Position}, nil
 	case *compiler.FunctionExpr:
-		return coltype.Int, nil
+		return catalog.CdbType{ID: catalog.CTInt}, nil
 	case *compiler.ColumnRef:
 		return c.Type, nil
 	case *compiler.BinaryExpr:
 		left, err := getExprType(c.Left)
 		if err != nil {
-			return coltype.Unknown, err
+			return catalog.CdbType{ID: catalog.CTUnknown}, err
 		}
 		right, err := getExprType(c.Right)
 		if err != nil {
-			return coltype.Unknown, err
+			return catalog.CdbType{ID: catalog.CTUnknown}, err
 		}
-		if left > right {
+		if left.ID > right.ID {
 			return left, nil
 		}
 		return right, nil
 	default:
-		return coltype.Unknown, fmt.Errorf("no handler for expr type %v", expr)
+		return catalog.CdbType{ID: catalog.CTUnknown}, fmt.Errorf("no handler for expr type %v", expr)
 	}
 }
 

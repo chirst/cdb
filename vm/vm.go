@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/chirst/cdb/coltype"
+	"github.com/chirst/cdb/catalog"
 	"github.com/chirst/cdb/kv"
 )
 
@@ -68,7 +68,7 @@ type ExecuteResult struct {
 	// an any type.
 	ResultRows [][]*string
 	// ResultTypes are the types for each result column.
-	ResultTypes []coltype.CT
+	ResultTypes []catalog.CdbType
 	// Duration is the overall execution time
 	Duration time.Duration
 }
@@ -79,7 +79,7 @@ type ExecutionPlan struct {
 	// ResultHeader is the names of columns in the result.
 	ResultHeader []string
 	// ResultTypes are the types for each result column.
-	ResultTypes []coltype.CT
+	ResultTypes []catalog.CdbType
 	// Version is the catalog version used to compile this plan. If the version
 	// is not the same during execution the execution plan will be recompiled.
 	Version string
@@ -103,6 +103,12 @@ func (e *ExecutionPlan) Append(command Command) {
 func (v *vm) Execute(plan *ExecutionPlan, parameters []any) *ExecuteResult {
 	if plan.Explain {
 		return v.explain(plan)
+	}
+	if err := v.resolveVarTypes(plan, parameters); err != nil {
+		return &ExecuteResult{Err: err}
+	}
+	if err := v.errForUnknownType(plan); err != nil {
+		return &ExecuteResult{Err: err}
 	}
 	routine := &routine{
 		registers:        map[int]any{},
@@ -136,6 +142,41 @@ func (v *vm) Execute(plan *ExecutionPlan, parameters []any) *ExecuteResult {
 		ResultHeader: plan.ResultHeader,
 		ResultTypes:  plan.ResultTypes,
 	}
+}
+
+// resolveVarTypes takes unresolved var types in the result types and determines
+// their type from the passed in go type.
+func (v *vm) resolveVarTypes(plan *ExecutionPlan, parameters []any) error {
+	for i := range plan.ResultTypes {
+		if plan.ResultTypes[i].ID == catalog.CTVar {
+			switch parameters[plan.ResultTypes[i].VarPosition].(type) {
+			case int:
+				plan.ResultTypes[i].ID = catalog.CTInt
+			case int16:
+				plan.ResultTypes[i].ID = catalog.CTInt
+			case int32:
+				plan.ResultTypes[i].ID = catalog.CTInt
+			case int64:
+				plan.ResultTypes[i].ID = catalog.CTInt
+			case string:
+				plan.ResultTypes[i].ID = catalog.CTStr
+			default:
+				return fmt.Errorf("unsupported var %v", parameters[i])
+			}
+		}
+	}
+	return nil
+}
+
+// errForUnknownType guarantees the result types will be known or the query
+// will fail before execution.
+func (v *vm) errForUnknownType(plan *ExecutionPlan) error {
+	for i := range plan.ResultTypes {
+		if plan.ResultTypes[i].ID == catalog.CTUnknown {
+			return fmt.Errorf("unknown type at position %d", i)
+		}
+	}
+	return nil
 }
 
 func (v *vm) rollback(r *routine) {

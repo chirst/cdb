@@ -36,7 +36,7 @@ func (c *catalogExprVisitor) VisitColumnRefExpr(e *compiler.ColumnRef) {
 		}
 	}
 
-	t, err := c.catalog.GetColumnType(e.Table, e.Column)
+	t, err := c.catalog.GetColumnType(c.tableName, e.Column)
 	if err != nil {
 		c.err = err
 		return

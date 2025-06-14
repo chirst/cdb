@@ -1,6 +1,6 @@
 package compiler
 
-import "github.com/chirst/cdb/coltype"
+import "github.com/chirst/cdb/catalog"
 
 // ast (Abstract Syntax Tree) defines a data structure representing a SQL
 // program. This data structure is generated from the parser. This data
@@ -108,7 +108,7 @@ type ColumnRef struct {
 	Table  string
 	Column string
 	// Type is the type of the column
-	Type coltype.CT
+	Type catalog.CdbType
 	// isPrimaryKey is filled out by the query planner. The property means the
 	// column will be a key instead of a nth value.
 	IsPrimaryKey bool

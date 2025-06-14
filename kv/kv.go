@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"log"
 
+	"github.com/chirst/cdb/catalog"
 	"github.com/chirst/cdb/pager"
 )
 
@@ -16,7 +17,7 @@ import (
 // writes through b tree indexes.
 type KV struct {
 	pager   *pager.Pager
-	catalog *catalog
+	catalog *catalog.Catalog
 }
 
 // New creates an instance of kv
@@ -25,7 +26,7 @@ func New(useMemory bool, filename string) (*KV, error) {
 	if err != nil {
 		return nil, err
 	}
-	catalog := newCatalog()
+	catalog := catalog.NewCatalog()
 	ret := &KV{
 		pager:   pager,
 		catalog: catalog,
@@ -38,7 +39,7 @@ func New(useMemory bool, filename string) (*KV, error) {
 }
 
 // GetCatalog returns and instance of the system catalog.
-func (kv *KV) GetCatalog() *catalog {
+func (kv *KV) GetCatalog() *catalog.Catalog {
 	return kv.catalog
 }
 
@@ -80,24 +81,24 @@ func (kv *KV) ParseSchema() error {
 	if !exists {
 		return nil
 	}
-	var objects []object
+	var objects []catalog.Object
 	for exists {
 		v := c.GetValue()
 		dv, err := Decode(v)
 		if err != nil {
 			return err
 		}
-		o := &object{
-			objectType:     dv[0].(string),
-			name:           dv[1].(string),
-			tableName:      dv[2].(string),
-			rootPageNumber: dv[3].(int),
-			jsonSchema:     dv[4].(string),
+		o := &catalog.Object{
+			ObjectType:     dv[0].(string),
+			Name:           dv[1].(string),
+			TableName:      dv[2].(string),
+			RootPageNumber: dv[3].(int),
+			JsonSchema:     dv[4].(string),
 		}
 		objects = append(objects, *o)
 		exists = c.GotoNext()
 	}
-	kv.catalog.setSchema(objects)
+	kv.catalog.SetSchema(objects)
 	return nil
 }
 

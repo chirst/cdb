@@ -154,7 +154,14 @@ extern int cdb_result_col_name(int prepareId, int colIdx, char** result);
 // 2 - INTEGER
 // 3 - TEXT
 //
+// UNKNOWN and VARIABLE are likely impossible types to encounter since they will
+// be resolved at execution time.
+//
 extern int cdb_result_col_type(int prepareId, int colIdx, int* result);
+
+// cdb_statement_type is the type of statement e.g. SELECT CREATE INSERT
+//
+extern int cdb_statement_type(int prepareId, int* result);
 
 #ifdef __cplusplus
 }

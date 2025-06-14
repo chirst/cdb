@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/chirst/cdb/catalog"
 	"github.com/chirst/cdb/compiler"
-	"github.com/chirst/cdb/kv"
 	"github.com/chirst/cdb/vm"
 )
 
@@ -42,8 +42,8 @@ func TestCreateWithNoIDColumn(t *testing.T) {
 		},
 	}
 	mc := &mockCreateCatalog{}
-	expectedSchema := &kv.TableSchema{
-		Columns: []kv.TableColumn{
+	expectedSchema := &catalog.TableSchema{
+		Columns: []catalog.TableColumn{
 			{
 				Name:    "first",
 				ColType: "TEXT",
@@ -97,8 +97,8 @@ func TestCreateWithAlternateNamedIDColumn(t *testing.T) {
 		},
 	}
 	mc := &mockCreateCatalog{}
-	expectedSchema := &kv.TableSchema{
-		Columns: []kv.TableColumn{
+	expectedSchema := &catalog.TableSchema{
+		Columns: []catalog.TableColumn{
 			{
 				Name:    "ID",
 				ColType: "INTEGER",
