@@ -1,6 +1,7 @@
 //go:build ignore
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 #include "cdb.h"
 
 int main() {
@@ -11,75 +12,91 @@ int main() {
     char* errMessage;
     char* filename = ":memory:";
     errCode = cdb_new_db(filename);
-    if (errCode != 0) {
-        printf("failed to open db\n");
-        return 1;
-    }
+    assert(errCode == 0);
+
     char* createTableSql = "CREATE TABLE IF NOT EXISTS foo (id INTEGER PRIMARY KEY, name TEXT);";
+    char* createPrepareErr;
     int createPrepareId;
-    cdb_prepare(&createPrepareId, filename, createTableSql);
-    cdb_execute(createPrepareId);
-    cdb_result_err(createPrepareId, &hasErr, &errMessage);
-    if (hasErr != 0) {
-        printf("failed to create table\n");
-        printf("err: %s\n", errMessage);
-        return 1;
-    }
+    errCode = cdb_prepare(&createPrepareId, filename, createTableSql, &createPrepareErr);
+    assert(errCode == 0);
+    errCode = cdb_execute(createPrepareId);
+    assert(errCode == 0);
+    errCode = cdb_result_err(createPrepareId, &hasErr, &errMessage);
+    assert(errCode == 0);
+    assert(hasErr == 0);
 
     char* insertSql = "INSERT INTO foo (id, name) VALUES (?, ?);";
     int insertPrepareId;
-    cdb_prepare(&insertPrepareId, filename, insertSql);
+    char* insertPrepareErr;
+    errCode = cdb_prepare(&insertPrepareId, filename, insertSql, &insertPrepareErr);
+    assert(errCode == 0);
     char* insertText = "asdf";
-    cdb_bind_int(insertPrepareId, 1);
-    cdb_bind_string(insertPrepareId, insertText);
-    cdb_execute(insertPrepareId);
-    cdb_result_err(insertPrepareId, &hasErr, &errMessage);
-    if (hasErr != 0) {
-        printf("failed to insert into table\n");
-        printf("err: %s\n", errMessage);
-        return 1;
-    }
+    errCode = cdb_bind_int(insertPrepareId, 1);
+    assert(errCode == 0);
+    errCode = cdb_bind_string(insertPrepareId, insertText);
+    assert(errCode == 0);
+    errCode = cdb_execute(insertPrepareId);
+    assert(errCode == 0);
+    errCode = cdb_result_err(insertPrepareId, &hasErr, &errMessage);
+    assert(errCode == 0);
+    assert(hasErr == 0);
 
     char* selectSql = "SELECT * FROM foo;";
     int selectPrepareId;
-    cdb_prepare(&selectPrepareId, filename, selectSql);
-    cdb_execute(selectPrepareId);
-    cdb_result_err(selectPrepareId, &hasErr, &errMessage);
-    if (hasErr != 0) {
-        printf("failed to select from table\n");
-        printf("err: %s\n", errMessage);
-        return 1;
-    }
+    char* selectPrepareErr;
+    errCode = cdb_prepare(&selectPrepareId, filename, selectSql, &selectPrepareErr);
+    assert(errCode == 0);
+    errCode = cdb_execute(selectPrepareId);
+    assert(errCode == 0);
+    errCode = cdb_result_err(selectPrepareId, &hasErr, &errMessage);
+    assert(errCode == 0);
+    assert(hasErr == 0);
+    int idResultType;
+    errCode = cdb_result_col_type(selectPrepareId, 0, &idResultType);
+    assert(errCode == 0);
+    assert(idResultType == 1);
+    int nameResultType;
+    errCode = cdb_result_col_type(selectPrepareId, 1, &nameResultType);
+    assert(errCode == 0);
+    assert(nameResultType == 3);
     int hasRow;
-    cdb_result_row(selectPrepareId, &hasRow);
-    if (hasRow == 0) {
-        printf("expected select result to have row\n");
-        return 1;
-    }
+    errCode = cdb_result_row(selectPrepareId, &hasRow);
+    assert(errCode == 0);
+    assert(hasRow != 0);
     int colCount;
-    cdb_result_col_count(selectPrepareId, &colCount);
-    if (colCount != 2) {
-        printf("expected select col count to be 2 but got %d\n", colCount);
-        return 1;
-    }
+    errCode = cdb_result_col_count(selectPrepareId, &colCount);
+    assert(errCode == 0);
+    assert(colCount == 2);
     char* idColName;
-    cdb_result_col_name(selectPrepareId, 0, &idColName);
-    if (strcmp(idColName, "id") != 0) {
-        printf("expected select id col name to be id but got %s\n", idColName);
-        return 1;
-    }
+    errCode = cdb_result_col_name(selectPrepareId, 0, &idColName);
+    assert(errCode == 0);
+    assert(strcmp(idColName, "id") == 0);
     char* nameColName;
-    cdb_result_col_name(selectPrepareId, 1, &nameColName);
-    if (strcmp(nameColName, "name") != 0) {
-        printf("expected select name col name to be name but got %s\n", nameColName);
-        return 1;
-    }
+    errCode = cdb_result_col_name(selectPrepareId, 1, &nameColName);
+    assert(errCode == 0);
+    assert(strcmp(nameColName, "name") == 0);
     int rowId;
-    cdb_result_col_int(selectPrepareId, 0, &rowId);
+    errCode = cdb_result_col_int(selectPrepareId, 0, &rowId);
+    assert(errCode == 0);
     printf("rowId %d\n", rowId);
     char* name;
-    cdb_result_col_string(selectPrepareId, 1, &name);
+    errCode = cdb_result_col_string(selectPrepareId, 1, &name);
+    assert(errCode == 0);
     printf("name %s\n", name);
+
+    char* paramSelectSql = "SELECT ? FROM foo;";
+    int paramSelectPrepareId;
+    char* paramPrepareErr;
+    errCode = cdb_prepare(&paramSelectPrepareId, filename, paramSelectSql, &paramPrepareErr);
+    assert(errCode == 0);
+    errCode = cdb_bind_int(paramSelectPrepareId, 12);
+    assert(errCode == 0);
+    errCode = cdb_execute(paramSelectPrepareId);
+    assert(errCode == 0);
+    int paramSelectType;
+    errCode = cdb_result_col_type(paramSelectPrepareId, 0, &paramSelectType);
+    assert(errCode == 0);
+    assert(paramSelectType == 1);
 
     printf("C tests finished successfully\n");
     return 0;

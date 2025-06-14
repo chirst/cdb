@@ -5,7 +5,12 @@ import (
 	"fmt"
 	"math/rand"
 	"slices"
+
+	"github.com/chirst/cdb/coltype"
 )
+
+// TODO remove early exits to each function and blend cdb_schema as any other
+// object.
 
 // catalog holds information about the database schema
 type catalog struct {
@@ -75,9 +80,51 @@ func (c *catalog) GetPrimaryKeyColumn(tableName string) (string, error) {
 }
 
 func (c *catalog) TableExists(tableName string) bool {
+	if tableName == "cdb_schema" {
+		return true
+	}
 	return slices.ContainsFunc(c.schema.objects, func(o object) bool {
 		return o.objectType == "table" && o.tableName == tableName
 	})
+}
+
+func (c *catalog) GetColumnType(tableName string, columnName string) (coltype.CT, error) {
+	if tableName == "cdb_schema" {
+		switch columnName {
+		case "id":
+			return coltype.Int, nil
+		case "type":
+			return coltype.Str, nil
+		case "name":
+			return coltype.Str, nil
+		case "table_name":
+			return coltype.Str, nil
+		case "rootpage":
+			return coltype.Int, nil
+		case "sql":
+			return coltype.Str, nil
+		}
+		return coltype.Unknown, fmt.Errorf("no type for table %s col %s", tableName, columnName)
+	}
+
+	for _, o := range c.schema.objects {
+		if o.name == tableName && o.tableName == tableName {
+			ts := TableSchemaFromString(o.jsonSchema)
+			for _, col := range ts.Columns {
+				if col.Name == columnName {
+					switch col.ColType {
+					case "INTEGER":
+						return coltype.Int, nil
+					case "TEXT":
+						return coltype.Str, nil
+					default:
+						return coltype.Unknown, fmt.Errorf("no type for %s", col.ColType)
+					}
+				}
+			}
+		}
+	}
+	return coltype.Unknown, fmt.Errorf("no type for table %s col %s", tableName, columnName)
 }
 
 // GetVersion returns a unique version identifier that is updated when the

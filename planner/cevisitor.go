@@ -35,6 +35,13 @@ func (c *catalogExprVisitor) VisitColumnRefExpr(e *compiler.ColumnRef) {
 			idx += 1
 		}
 	}
+
+	t, err := c.catalog.GetColumnType(e.Table, e.Column)
+	if err != nil {
+		c.err = err
+		return
+	}
+	e.Type = t
 }
 
 func (c *catalogExprVisitor) VisitBinaryExpr(e *compiler.BinaryExpr)     {}

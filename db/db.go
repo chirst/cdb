@@ -24,6 +24,7 @@ type statementPlanner interface {
 
 type dbCatalog interface {
 	GetColumns(string) ([]string, error)
+	GetColumnType(string, string) (int, error)
 	GetRootPageNumber(string) (int, error)
 	TableExists(string) bool
 	GetVersion() string

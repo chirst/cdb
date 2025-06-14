@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/chirst/cdb/coltype"
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
 )
@@ -12,6 +13,7 @@ import (
 // selectCatalog defines the catalog methods needed by the select planner
 type selectCatalog interface {
 	GetColumns(tableOrIndexName string) ([]string, error)
+	GetColumnType(tableName string, columnName string) (coltype.CT, error)
 	GetRootPageNumber(tableOrIndexName string) (int, error)
 	GetVersion() string
 	GetPrimaryKeyColumn(tableName string) (string, error)
@@ -171,15 +173,17 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 			}
 			child.scanColumns = append(child.scanColumns, cols...)
 		} else if resultColumn.Expression != nil {
+			child.scanColumns = append(child.scanColumns, resultColumn.Expression)
+		} else {
+			return nil, fmt.Errorf("unhandled result column %#v", resultColumn)
+		}
+		for i := range child.scanColumns {
 			cev := &catalogExprVisitor{}
 			if cev.err != nil {
 				return nil, err
 			}
 			cev.Init(p.catalog, child.tableName)
-			resultColumn.Expression.BreadthWalk(cev)
-			child.scanColumns = append(child.scanColumns, resultColumn.Expression)
-		} else {
-			return nil, fmt.Errorf("unhandled result column %#v", resultColumn)
+			child.scanColumns[i].BreadthWalk(cev)
 		}
 	}
 	projections, err := p.getProjections()
@@ -378,14 +382,31 @@ func (p *selectExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 	p.executionPlan.Append(&vm.InitCmd{P2: 1})
 	switch c := p.queryPlan.child.(type) {
 	case *scanNode:
+		err := p.setResultTypes(c.scanColumns)
+		if err != nil {
+			return nil, err
+		}
 		p.executionPlan.Append(&vm.TransactionCmd{P2: 0})
 		if err := p.buildScan(c); err != nil {
 			return nil, err
 		}
 	case *countNode:
+		err := p.setResultTypes([]compiler.Expr{&compiler.IntLit{}})
+		if err != nil {
+			return nil, err
+		}
 		p.executionPlan.Append(&vm.TransactionCmd{P2: 0})
 		p.buildOptimizedCountScan(c)
 	case *constantNode:
+		// TODO make constant node work off exprs like scan to remove this map
+		cexprs := []compiler.Expr{}
+		for i := range c.resultColumns {
+			cexprs = append(cexprs, c.resultColumns[i].Expression)
+		}
+		err := p.setResultTypes(cexprs)
+		if err != nil {
+			return nil, err
+		}
 		if err := p.buildConstantNode(c); err != nil {
 			return nil, err
 		}
@@ -402,6 +423,52 @@ func (p *selectExecutionPlanner) setResultHeader() {
 		resultHeader = append(resultHeader, p.colName)
 	}
 	p.executionPlan.ResultHeader = resultHeader
+}
+
+// setResultTypes attempts to precompute the type for each result column expr.
+func (p *selectExecutionPlanner) setResultTypes(exprs []compiler.Expr) error {
+	resolvedTypes := []coltype.CT{}
+	for _, expr := range exprs {
+		t, err := getExprType(expr)
+		if err != nil {
+			return err
+		}
+		resolvedTypes = append(resolvedTypes, t)
+	}
+	p.executionPlan.ResultTypes = resolvedTypes
+	return nil
+}
+
+// getExprType resolves the type of the expression. In case a expression is a
+// variable it will need to be resolved later on.
+func getExprType(expr compiler.Expr) (coltype.CT, error) {
+	switch c := expr.(type) {
+	case *compiler.IntLit:
+		return coltype.Int, nil
+	case *compiler.StringLit:
+		return coltype.Str, nil
+	case *compiler.Variable:
+		return coltype.Var, nil
+	case *compiler.FunctionExpr:
+		return coltype.Int, nil
+	case *compiler.ColumnRef:
+		return c.Type, nil
+	case *compiler.BinaryExpr:
+		left, err := getExprType(c.Left)
+		if err != nil {
+			return coltype.Unknown, err
+		}
+		right, err := getExprType(c.Right)
+		if err != nil {
+			return coltype.Unknown, err
+		}
+		if left > right {
+			return left, nil
+		}
+		return right, nil
+	default:
+		return coltype.Unknown, fmt.Errorf("no handler for expr type %v", expr)
+	}
 }
 
 func (p *selectExecutionPlanner) buildScan(n *scanNode) error {

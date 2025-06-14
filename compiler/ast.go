@@ -1,5 +1,7 @@
 package compiler
 
+import "github.com/chirst/cdb/coltype"
+
 // ast (Abstract Syntax Tree) defines a data structure representing a SQL
 // program. This data structure is generated from the parser. This data
 // structure is intended to be compiled into a execution plan.
@@ -105,6 +107,8 @@ func (ue *UnaryExpr) Accept(v ExprVisitor) {
 type ColumnRef struct {
 	Table  string
 	Column string
+	// Type is the type of the column
+	Type coltype.CT
 	// isPrimaryKey is filled out by the query planner. The property means the
 	// column will be a key instead of a nth value.
 	IsPrimaryKey bool

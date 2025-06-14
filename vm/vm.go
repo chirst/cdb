@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/chirst/cdb/coltype"
 	"github.com/chirst/cdb/kv"
 )
 
@@ -66,14 +67,19 @@ type ExecuteResult struct {
 	// string since columns can be a null result. TODO this may be wise to make
 	// an any type.
 	ResultRows [][]*string
+	// ResultTypes are the types for each result column.
+	ResultTypes []coltype.CT
 	// Duration is the overall execution time
 	Duration time.Duration
 }
 
 type ExecutionPlan struct {
-	Explain      bool
-	Commands     []Command
+	Explain  bool
+	Commands []Command
+	// ResultHeader is the names of columns in the result.
 	ResultHeader []string
+	// ResultTypes are the types for each result column.
+	ResultTypes []coltype.CT
 	// Version is the catalog version used to compile this plan. If the version
 	// is not the same during execution the execution plan will be recompiled.
 	Version string
@@ -128,6 +134,7 @@ func (v *vm) Execute(plan *ExecutionPlan, parameters []any) *ExecuteResult {
 	return &ExecuteResult{
 		ResultRows:   *routine.resultRows,
 		ResultHeader: plan.ResultHeader,
+		ResultTypes:  plan.ResultTypes,
 	}
 }
 
