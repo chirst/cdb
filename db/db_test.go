@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/chirst/cdb/catalog"
 	"github.com/chirst/cdb/vm"
 )
 
@@ -43,6 +44,19 @@ func TestExecute(t *testing.T) {
 			t.Fatalf("expected %s got %s", s, c)
 		}
 	}
+	schemaTypeExpectations := []catalog.CdbType{
+		{ID: catalog.CTInt},
+		{ID: catalog.CTStr},
+		{ID: catalog.CTStr},
+		{ID: catalog.CTStr},
+		{ID: catalog.CTInt},
+		{ID: catalog.CTStr},
+	}
+	for i, ste := range schemaTypeExpectations {
+		if rt := schemaRes.ResultTypes[i]; rt != ste {
+			t.Fatalf("expected type %d got %d", ste, rt)
+		}
+	}
 	mustExecute(t, db, "INSERT INTO person (first_name, last_name, age) VALUES ('John', 'Smith', 50)")
 	selectPersonRes := mustExecute(t, db, "SELECT * FROM person")
 	selectPersonExpectations := []string{
@@ -54,6 +68,17 @@ func TestExecute(t *testing.T) {
 	for i, s := range selectPersonExpectations {
 		if c := *selectPersonRes.ResultRows[0][i]; c != s {
 			t.Fatalf("expected %s got %s", s, c)
+		}
+	}
+	selectTypeExpectations := []catalog.CdbType{
+		{ID: catalog.CTInt},
+		{ID: catalog.CTStr},
+		{ID: catalog.CTStr},
+		{ID: catalog.CTInt},
+	}
+	for i, ste := range selectTypeExpectations {
+		if rt := selectPersonRes.ResultTypes[i]; rt != ste {
+			t.Fatalf("expected type %d got %d", ste, rt)
 		}
 	}
 }
@@ -87,6 +112,11 @@ func TestBulkInsert(t *testing.T) {
 	if expectedTotal != gotC {
 		t.Fatalf("got count %d want %d", gotC, expectedTotal)
 	}
+	wantCountType := catalog.CdbType{ID: catalog.CTInt}
+	gotCountType := selectCountRes.ResultTypes[0]
+	if wantCountType != gotCountType {
+		t.Fatalf("got type %d want type %d", gotCountType, wantCountType)
+	}
 }
 
 func TestPrimaryKeyUniqueConstraintViolation(t *testing.T) {
@@ -107,6 +137,11 @@ func TestOperators(t *testing.T) {
 	want := "78080"
 	if got != want {
 		t.Fatalf("want %s but got %s", want, got)
+	}
+	gotType := res.ResultTypes[0]
+	wantType := catalog.CdbType{ID: catalog.CTInt}
+	if gotType != wantType {
+		t.Fatalf("want type %d but got %d type", wantType, gotType)
 	}
 }
 

@@ -91,7 +91,10 @@ extern void cdb_close_db(char* filename);
 // the prepared statement. Note the prepared statement must be cleaned up with
 // cdb_close_statement.
 //
-extern int cdb_prepare(int* prepareId, char* filename, char* sql);
+// If an error is encountered during prepare err code 2 is returned and the
+// error message is written to prepareErr.
+//
+extern int cdb_prepare(int* prepareId, char* filename, char* sql, char** prepareErr);
 
 // cdb_close_statement cleans up a prepared statement.
 //
@@ -140,6 +143,25 @@ extern int cdb_result_col_count(int prepareId, int* result);
 // colIdx and the the given prepareId.
 //
 extern int cdb_result_col_name(int prepareId, int colIdx, char** result);
+
+// cdb_result_col_type puts the type of the result column in result for the
+// given prepareId and colIdx. This function will tell what kind of cdb_result_*
+// function is able to extract the underlying value in the column.
+//
+// The types of result can be:
+// 0 - UNKNOWN
+// 1 - VARIABLE
+// 2 - INTEGER
+// 3 - TEXT
+//
+// UNKNOWN and VARIABLE are likely impossible types to encounter since they will
+// be resolved at execution time.
+//
+extern int cdb_result_col_type(int prepareId, int colIdx, int* result);
+
+// cdb_statement_type is the type of statement e.g. SELECT CREATE INSERT
+//
+extern int cdb_statement_type(int prepareId, int* result);
 
 #ifdef __cplusplus
 }

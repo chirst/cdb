@@ -4,8 +4,8 @@ import (
 	"errors"
 	"slices"
 
+	"github.com/chirst/cdb/catalog"
 	"github.com/chirst/cdb/compiler"
-	"github.com/chirst/cdb/kv"
 	"github.com/chirst/cdb/vm"
 )
 
@@ -161,12 +161,12 @@ func (p *createQueryPlanner) ensurePrimaryKeyCount() error {
 	return nil
 }
 
-func (p *createQueryPlanner) schemaFrom() *kv.TableSchema {
-	schema := kv.TableSchema{
-		Columns: []kv.TableColumn{},
+func (p *createQueryPlanner) schemaFrom() *catalog.TableSchema {
+	schema := catalog.TableSchema{
+		Columns: []catalog.TableColumn{},
 	}
 	for _, cd := range p.stmt.ColDefs {
-		schema.Columns = append(schema.Columns, kv.TableColumn{
+		schema.Columns = append(schema.Columns, catalog.TableColumn{
 			Name:       cd.ColName,
 			ColType:    cd.ColType,
 			PrimaryKey: cd.PrimaryKey,

@@ -57,9 +57,9 @@ jobs:
         with:
           version: 0.14.0
       - name: Build arm64 shared
-        run: CGO_ENABLED=1 CGO=1 GOOS=linux GOARCH=arm64 CC="zig cc -target aarch64-linux-musl" go build -o linux-arm64-cdb.so -buildmode=c-shared main.go
+        run: CGO_ENABLED=1 CGO=1 GOOS=linux GOARCH=arm64 CC="zig cc -target aarch64-linux-gnu" go build -o linux-arm64-cdb.so -buildmode=c-shared main.go
       - name: Build arm64 default
-        run: CGO_ENABLED=1 CGO=1 GOOS=linux GOARCH=arm64 CC="zig cc -target aarch64-linux-musl" go build -o linux-arm64-cdb -buildmode=default main.go
+        run: CGO_ENABLED=1 CGO=1 GOOS=linux GOARCH=arm64 CC="zig cc -target aarch64-linux-gnu" go build -o linux-arm64-cdb -buildmode=default main.go
       - name: Build amd64 shared
         run: CGO_ENABLED=1 CGO=1 GOOS=linux GOARCH=amd64 go build -o linux-amd64-cdb.so -buildmode=c-shared main.go
       - name: Build amd64 default

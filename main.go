@@ -64,8 +64,11 @@ func cdb_close_db(filename *C.char) {
 // the prepared statement. Note the prepared statement must be cleaned up with
 // cdb_close_statement.
 //
+// If an error is encountered during prepare err code 2 is returned and the
+// error message is written to prepareErr.
+//
 //export cdb_prepare
-func cdb_prepare(prepareId *C.int, filename *C.char, sql *C.char) C.int {
+func cdb_prepare(prepareId *C.int, filename *C.char, sql *C.char, prepareErr **C.char) C.int {
 	gfn := C.GoString(filename)
 	gSql := C.GoString(sql)
 	dbi, ok := _databases[gfn]
@@ -74,7 +77,8 @@ func cdb_prepare(prepareId *C.int, filename *C.char, sql *C.char) C.int {
 	}
 	ps, err := dbi.NewPreparedStatement(gSql)
 	if err != nil {
-		return C.int(1)
+		*prepareErr = C.CString(err.Error())
+		return C.int(2)
 	}
 	for i := 1; ; i += 1 {
 		_, ok := _plans[i]
@@ -228,4 +232,40 @@ func cdb_result_col_name(prepareId C.int, colIdx C.int, result **C.char) C.int {
 	r := p.Result.ResultHeader[colIdx]
 	*result = C.CString(r)
 	return C.int(0)
+}
+
+// cdb_result_col_type puts the type of the result column in result for the
+// given prepareId and colIdx. This function will tell what kind of cdb_result_*
+// function is able to extract the underlying value in the column.
+//
+// The types of result can be:
+// 0 - UNKNOWN
+// 1 - VARIABLE
+// 2 - INTEGER
+// 3 - TEXT
+//
+// UNKNOWN and VARIABLE are likely impossible types to encounter since they will
+// be resolved at execution time.
+//
+//export cdb_result_col_type
+func cdb_result_col_type(prepareId C.int, colIdx C.int, result *C.int) C.int {
+	p, ok := _plans[int(prepareId)]
+	if !ok {
+		return C.int(1)
+	}
+	t := p.Result.ResultTypes[colIdx]
+	*result = C.int(t.ID)
+	return C.int(0)
+}
+
+// cdb_statement_type is the type of statement e.g. SELECT CREATE INSERT
+//
+//export cdb_statement_type
+func cdb_statement_type(prepareId C.int, result *C.int) C.int {
+	_, ok := _plans[int(prepareId)]
+	if !ok {
+		return C.int(1)
+	}
+	// TODO not implemented
+	return C.int(1)
 }
