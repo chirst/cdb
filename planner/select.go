@@ -127,7 +127,7 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 	tableName := p.stmt.From.TableName
 	rootPageNumber, err := p.catalog.GetRootPageNumber(tableName)
 	if err != nil {
-		return nil, err
+		return nil, errTableNotExist
 	}
 
 	// Count node is specially supported for now.

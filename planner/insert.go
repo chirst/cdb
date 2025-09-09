@@ -9,12 +9,6 @@ import (
 	"github.com/chirst/cdb/vm"
 )
 
-var (
-	errTableNotExist     = errors.New("table does not exist")
-	errValuesNotMatch    = errors.New("values list did not match columns list")
-	errMissingColumnName = errors.New("missing column")
-)
-
 // pkConstraint is the error message displayed when a primary key constraint is
 // violated.
 const pkConstraint = "pk unique constraint violated"
