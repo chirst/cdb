@@ -1,18 +1,11 @@
 package planner
 
 import (
-	"errors"
 	"slices"
 
 	"github.com/chirst/cdb/catalog"
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
-)
-
-var (
-	errInvalidPKColumnType = errors.New("primary key must be INTEGER type")
-	errTableExists         = errors.New("table exists")
-	errMoreThanOnePK       = errors.New("more than one primary key specified")
 )
 
 // createCatalog defines the catalog methods needed by the create planner

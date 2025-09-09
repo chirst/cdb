@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -22,8 +23,11 @@ func (m *mockSelectCatalog) GetColumns(s string) ([]string, error) {
 	return m.columns, nil
 }
 
-func (*mockSelectCatalog) GetRootPageNumber(s string) (int, error) {
-	return 2, nil
+func (m *mockSelectCatalog) GetRootPageNumber(s string) (int, error) {
+	if s == "foo" {
+		return 2, nil
+	}
+	return 0, errors.New("mock cannot get root")
 }
 
 func (*mockSelectCatalog) GetVersion() string {
@@ -433,5 +437,24 @@ func TestSelectPlan(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestSelectTableDoesNotExist(t *testing.T) {
+	ast := &compiler.SelectStmt{
+		StmtBase: &compiler.StmtBase{},
+		From: &compiler.From{
+			TableName: "does_not_exist",
+		},
+		ResultColumns: []compiler.ResultColumn{
+			{
+				All: true,
+			},
+		},
+	}
+	mockCatalog := &mockSelectCatalog{}
+	_, err := NewSelect(mockCatalog, ast).ExecutionPlan()
+	if expectErr := errTableNotExist; !errors.Is(err, expectErr) {
+		t.Fatalf("expected err: %s but got: %s", expectErr, err)
 	}
 }
