@@ -247,6 +247,23 @@ func TestLexSelect(t *testing.T) {
 				{tkParam, "?"},
 			},
 		},
+		{
+			sql: `
+				-- This is a comment
+				/* This is a comment to the left */ SELECT /*Why would you do this?*/ 1 -- This is a comment to the right
+				-- This is also a comment
+			`,
+			expected: []token{
+				{tkWhitespace, " "},
+				{tkWhitespace, " "},
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkWhitespace, " "},
+				{tkNumeric, "1"},
+				{tkWhitespace, " "},
+				{tkWhitespace, " "},
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.sql, func(t *testing.T) {

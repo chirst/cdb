@@ -42,6 +42,9 @@ const (
 	tkNumeric
 	// tkParam is a placeholder variable such as ?.
 	tkParam
+	// tkComment is either a line or block comment. The value contains the
+	// comment including the leading "--" or leading "/*" and trailing "*/".
+	tkComment
 )
 
 // Keywords where kw is keyword
@@ -155,7 +158,21 @@ func (l *lexer) ToStatements() Statements {
 	if start == len(tokens) {
 		return statements
 	}
-	return append(statements, tokens[start:])
+	statements = append(statements, tokens[start:])
+	lastStmt := statements[len(statements)-1]
+	if isAllWhitespace(lastStmt) {
+		return statements[:len(statements)-1]
+	}
+	return statements
+}
+
+func isAllWhitespace(s Statement) bool {
+	for _, t := range s {
+		if t.tokenType != tkWhitespace {
+			return false
+		}
+	}
+	return true
 }
 
 // IsTerminated returns true when the last Statement in the list of Statements
@@ -185,7 +202,9 @@ func (l *lexer) Lex() []token {
 		if t.tokenType == tkEOF {
 			return ret
 		}
-		ret = append(ret, t)
+		if t.tokenType != tkComment {
+			ret = append(ret, t)
+		}
 	}
 }
 
@@ -195,6 +214,10 @@ func (l *lexer) getToken() token {
 	switch {
 	case l.isWhiteSpace(r):
 		return l.scanWhiteSpace()
+	case l.isLineCommentStart(r):
+		return l.scanLineComment()
+	case l.isBlockCommentStart(r):
+		return l.scanBlockComment()
 	case l.isLetter(r):
 		return l.scanWord()
 	case l.isDigit(r):
@@ -283,6 +306,41 @@ func (*lexer) isWhiteSpace(r rune) bool {
 
 func (*lexer) isLetter(r rune) bool {
 	return unicode.IsLetter(r)
+}
+
+func (l *lexer) isLineCommentStart(r rune) bool {
+	return (r == '-') && l.peek(l.end+1) == '-'
+}
+
+func (l *lexer) scanLineComment() token {
+	l.next()
+	l.next()
+	for {
+		t := l.next()
+		if t == '\n' || l.end == len(l.src) {
+			return token{tokenType: tkComment, value: l.src[l.start:l.end]}
+		}
+	}
+}
+
+func (l *lexer) isBlockCommentStart(r rune) bool {
+	return (r == '/') && l.peek(l.end+1) == '*'
+}
+
+func (l *lexer) scanBlockComment() token {
+	l.next()
+	l.next()
+	for {
+		t := l.next()
+		if t == '*' && l.peek(l.end+1) == '/' {
+			l.next()
+			l.next()
+			return token{tokenType: tkComment, value: l.src[l.start:l.end]}
+		}
+		if l.end == len(l.src) {
+			return token{tokenType: tkComment, value: l.src[l.start:l.end]}
+		}
+	}
 }
 
 func (*lexer) isUnderscore(r rune) bool {
