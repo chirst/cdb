@@ -3,6 +3,7 @@ package compiler
 // lexer creates tokens from a sql string. The tokens are fed into the parser.
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"unicode"
@@ -225,7 +226,9 @@ func (l *lexer) getToken() token {
 	case l.isSeparator(r):
 		return l.scanSeparator()
 	case l.isSingleQuote(r):
-		return l.scanLiteral()
+		return l.scanLiteral('\'')
+	case l.isDoubleQuote(r):
+		return l.scanLiteral('"')
 	case l.isOperator(r):
 		return l.scanOperator()
 	case l.isParam(r):
@@ -281,13 +284,26 @@ func (l *lexer) scanSeparator() token {
 	return token{tokenType: tkSeparator, value: l.src[l.start:l.end]}
 }
 
-func (l *lexer) scanLiteral() token {
+func (l *lexer) scanLiteral(quote rune) token {
 	l.next()
-	for !l.isSingleQuote(l.peek(l.end)) {
+	for {
+		if l.peek(l.end) == quote && l.peek(l.end+1) == quote {
+			l.next()
+			l.next()
+			continue
+		}
+		if l.peek(l.end) == quote {
+			break
+		}
 		l.next()
 	}
 	l.next()
-	return token{tokenType: tkLiteral, value: l.src[l.start:l.end]}
+	v := strings.ReplaceAll(
+		l.src[l.start+1:l.end-1],
+		fmt.Sprintf("%c%c", quote, quote),
+		fmt.Sprintf("%c", quote),
+	)
+	return token{tokenType: tkLiteral, value: v}
 }
 
 func (l *lexer) scanOperator() token {
@@ -357,6 +373,10 @@ func (*lexer) isSeparator(r rune) bool {
 
 func (*lexer) isSingleQuote(r rune) bool {
 	return r == '\''
+}
+
+func (*lexer) isDoubleQuote(r rune) bool {
+	return r == '"'
 }
 
 func (*lexer) isKeyword(w string) bool {

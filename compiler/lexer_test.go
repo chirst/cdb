@@ -264,6 +264,60 @@ func TestLexSelect(t *testing.T) {
 				{tkWhitespace, " "},
 			},
 		},
+		{
+			sql: "SELECT 'they''re';",
+			expected: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkLiteral, "they're"},
+				{tkSeparator, ";"},
+			},
+		},
+		{
+			sql: "SELECT 'they\"re';",
+			expected: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkLiteral, "they\"re"},
+				{tkSeparator, ";"},
+			},
+		},
+		{
+			sql: "SELECT 'they\"\"re';",
+			expected: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkLiteral, "they\"\"re"},
+				{tkSeparator, ";"},
+			},
+		},
+		{
+			sql: "SELECT \"they\"\"re\";",
+			expected: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkLiteral, "they\"re"},
+				{tkSeparator, ";"},
+			},
+		},
+		{
+			sql: "SELECT \"they're\";",
+			expected: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkLiteral, "they're"},
+				{tkSeparator, ";"},
+			},
+		},
+		{
+			sql: "SELECT \"they''re\";",
+			expected: []token{
+				{tkKeyword, "SELECT"},
+				{tkWhitespace, " "},
+				{tkLiteral, "they''re"},
+				{tkSeparator, ";"},
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.sql, func(t *testing.T) {
@@ -373,10 +427,10 @@ func TestLexInsert(t *testing.T) {
 				{tkNumeric, "1"},
 				{tkSeparator, ","},
 				{tkWhitespace, " "},
-				{tkLiteral, "'gud'"},
+				{tkLiteral, "gud"},
 				{tkSeparator, ","},
 				{tkWhitespace, " "},
-				{tkLiteral, "'dude'"},
+				{tkLiteral, "dude"},
 				{tkSeparator, ")"},
 				{tkSeparator, ","},
 				{tkWhitespace, " "},
@@ -384,10 +438,10 @@ func TestLexInsert(t *testing.T) {
 				{tkNumeric, "2"},
 				{tkSeparator, ","},
 				{tkWhitespace, " "},
-				{tkLiteral, "'joe'"},
+				{tkLiteral, "joe"},
 				{tkSeparator, ","},
 				{tkWhitespace, " "},
-				{tkLiteral, "'doe'"},
+				{tkLiteral, "doe"},
 				{tkSeparator, ")"},
 			},
 		},
