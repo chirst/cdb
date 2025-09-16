@@ -365,11 +365,11 @@ func (p *parser) parseValue(stmt *InsertStmt, valueIdx int) (*InsertStmt, error)
 		if v.tokenType != tkNumeric && v.tokenType != tkLiteral && v.tokenType != tkParam {
 			return nil, fmt.Errorf(literalErr, v.value)
 		}
-		if v.tokenType == tkLiteral && v.value[0] == '\'' && v.value[len(v.value)-1] == '\'' {
+		if v.tokenType == tkLiteral {
 			stmt.ColValues[valueIdx] = append(
 				stmt.ColValues[valueIdx],
 				&StringLit{
-					Value: v.value[1 : len(v.value)-1],
+					Value: v.value,
 				},
 			)
 		} else if v.tokenType == tkParam {
