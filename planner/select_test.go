@@ -415,6 +415,26 @@ func TestSelectPlan(t *testing.T) {
 				return m
 			},
 		},
+		{
+			description: "ConstantString",
+			expectedCommands: []vm.Command{
+				&vm.InitCmd{P2: 1},
+				&vm.StringCmd{P1: 1, P4: "foo"},
+				&vm.CopyCmd{P1: 1, P2: 2},
+				&vm.ResultRowCmd{P1: 2, P2: 1},
+				&vm.HaltCmd{},
+			},
+			ast: &compiler.SelectStmt{
+				StmtBase: &compiler.StmtBase{},
+				ResultColumns: []compiler.ResultColumn{
+					{
+						Expression: &compiler.StringLit{
+							Value: "foo",
+						},
+					},
+				},
+			},
+		},
 	}
 	for _, c := range cases {
 		if c.description == "" {

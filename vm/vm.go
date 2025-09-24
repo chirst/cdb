@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -251,6 +252,35 @@ func anyToInt(a any) (int, error) {
 		return ti, nil
 	}
 	return 0, fmt.Errorf("unsupported any to int for variable %#v of type %T", a, a)
+}
+
+// TODO need to consider anyToInt vs anyToInt2
+func anyToInt2(a any) (int, error) {
+	switch t := a.(type) {
+	case int:
+		return t, nil
+	case int64:
+		return int(t), nil
+	case string:
+		s := regexp.MustCompile(`\D`).ReplaceAllString(t, "")
+		if s == "" {
+			return 0, nil
+		}
+		return strconv.Atoi(s)
+	}
+	return 0, fmt.Errorf("unsupported any to int for variable %#v of type %T", a, a)
+}
+
+func anyToStr(a any) string {
+	switch t := a.(type) {
+	case int:
+		return strconv.Itoa(t)
+	case int64:
+		return strconv.Itoa(int(t))
+	case string:
+		return t
+	}
+	return ""
 }
 
 // InitCmd jumps to the instruction at address P2.
@@ -600,11 +630,11 @@ func (c *IntegerCmd) explain(addr int) []*string {
 type AddCmd cmd
 
 func (c *AddCmd) execute(vm *vm, routine *routine) cmdRes {
-	l, err := anyToInt(routine.registers[c.P1])
+	l, err := anyToInt2(routine.registers[c.P1])
 	if err != nil {
 		return cmdRes{err: err}
 	}
-	r, err := anyToInt(routine.registers[c.P2])
+	r, err := anyToInt2(routine.registers[c.P2])
 	if err != nil {
 		return cmdRes{err: err}
 	}
@@ -621,11 +651,11 @@ func (c *AddCmd) explain(addr int) []*string {
 type SubtractCmd cmd
 
 func (c *SubtractCmd) execute(vm *vm, routine *routine) cmdRes {
-	l, err := anyToInt(routine.registers[c.P1])
+	l, err := anyToInt2(routine.registers[c.P1])
 	if err != nil {
 		return cmdRes{err: err}
 	}
-	r, err := anyToInt(routine.registers[c.P2])
+	r, err := anyToInt2(routine.registers[c.P2])
 	if err != nil {
 		return cmdRes{err: err}
 	}
@@ -642,11 +672,11 @@ func (c *SubtractCmd) explain(addr int) []*string {
 type MultiplyCmd cmd
 
 func (c *MultiplyCmd) execute(vm *vm, routine *routine) cmdRes {
-	l, err := anyToInt(routine.registers[c.P1])
+	l, err := anyToInt2(routine.registers[c.P1])
 	if err != nil {
 		return cmdRes{err: err}
 	}
-	r, err := anyToInt(routine.registers[c.P2])
+	r, err := anyToInt2(routine.registers[c.P2])
 	if err != nil {
 		return cmdRes{err: err}
 	}
@@ -664,11 +694,11 @@ func (c *MultiplyCmd) explain(addr int) []*string {
 type DivideCmd cmd
 
 func (c *DivideCmd) execute(vm *vm, routine *routine) cmdRes {
-	l, err := anyToInt(routine.registers[c.P1])
+	l, err := anyToInt2(routine.registers[c.P1])
 	if err != nil {
 		return cmdRes{err: err}
 	}
-	r, err := anyToInt(routine.registers[c.P2])
+	r, err := anyToInt2(routine.registers[c.P2])
 	if err != nil {
 		return cmdRes{err: err}
 	}
@@ -690,11 +720,11 @@ func (c *DivideCmd) explain(addr int) []*string {
 type ExponentCmd cmd
 
 func (c *ExponentCmd) execute(vm *vm, routine *routine) cmdRes {
-	l, err := anyToInt(routine.registers[c.P1])
+	l, err := anyToInt2(routine.registers[c.P1])
 	if err != nil {
 		return cmdRes{err: err}
 	}
-	r, err := anyToInt(routine.registers[c.P2])
+	r, err := anyToInt2(routine.registers[c.P2])
 	if err != nil {
 		return cmdRes{err: err}
 	}
@@ -795,14 +825,8 @@ func (c *NotExistsCmd) explain(addr int) []*string {
 type NotEqualCmd cmd
 
 func (c *NotEqualCmd) execute(vm *vm, routine *routine) cmdRes {
-	v1, err := anyToInt(routine.registers[c.P1])
-	if err != nil {
-		return cmdRes{err: err}
-	}
-	v2, err := anyToInt(routine.registers[c.P3])
-	if err != nil {
-		return cmdRes{err: err}
-	}
+	v1 := anyToStr(routine.registers[c.P1])
+	v2 := anyToStr(routine.registers[c.P3])
 	if v1 != v2 {
 		return cmdRes{nextAddress: c.P2}
 	}
@@ -818,7 +842,7 @@ func (c *NotEqualCmd) explain(addr int) []*string {
 type IfNotCmd cmd
 
 func (c *IfNotCmd) execute(vm *vm, routine *routine) cmdRes {
-	v, err := anyToInt(routine.registers[c.P1])
+	v, err := anyToInt2(routine.registers[c.P1])
 	if err != nil {
 		return cmdRes{err: err}
 	}
@@ -837,15 +861,31 @@ func (c *IfNotCmd) explain(addr int) []*string {
 type GteCmd cmd
 
 func (c *GteCmd) execute(vm *vm, routine *routine) cmdRes {
-	vl, err := anyToInt(routine.registers[c.P1])
+	l := routine.registers[c.P1]
+	r := routine.registers[c.P3]
+	tl, okl := l.(string)
+	tr, okr := r.(string)
+	if okl || okr {
+		if !okl {
+			tl = anyToStr(tl)
+		}
+		if !okr {
+			tr = anyToStr(tr)
+		}
+		if tl >= tr {
+			return cmdRes{nextAddress: c.P2}
+		}
+		return cmdRes{}
+	}
+	vl, err := anyToInt(l)
 	if err != nil {
 		return cmdRes{err: err}
 	}
-	vr, err := anyToInt(routine.registers[c.P3])
+	vr, err := anyToInt(r)
 	if err != nil {
 		return cmdRes{err: err}
 	}
-	if vl <= vr {
+	if vl >= vr {
 		return cmdRes{nextAddress: c.P2}
 	}
 	return cmdRes{}
@@ -860,15 +900,31 @@ func (c *GteCmd) explain(addr int) []*string {
 type LteCmd cmd
 
 func (c *LteCmd) execute(vm *vm, routine *routine) cmdRes {
-	vl, err := anyToInt(routine.registers[c.P1])
+	l := routine.registers[c.P1]
+	r := routine.registers[c.P3]
+	tl, okl := l.(string)
+	tr, okr := r.(string)
+	if okl || okr {
+		if !okl {
+			tl = anyToStr(tl)
+		}
+		if !okr {
+			tr = anyToStr(tr)
+		}
+		if tl <= tr {
+			return cmdRes{nextAddress: c.P2}
+		}
+		return cmdRes{}
+	}
+	vl, err := anyToInt(l)
 	if err != nil {
 		return cmdRes{err: err}
 	}
-	vr, err := anyToInt(routine.registers[c.P3])
+	vr, err := anyToInt(r)
 	if err != nil {
 		return cmdRes{err: err}
 	}
-	if vl >= vr {
+	if vl <= vr {
 		return cmdRes{nextAddress: c.P2}
 	}
 	return cmdRes{}
