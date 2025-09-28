@@ -560,6 +560,7 @@ func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
 			cursorId,
 			openRegister,
 			len(p.executionPlan.Commands),
+			len(p.executionPlan.Commands),
 			crv.constantRegisters,
 			colRegisters,
 			crv.variableRegisters,
@@ -644,6 +645,7 @@ func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) error {
 		err := bpb.Build(
 			0,
 			openRegister,
+			len(p.executionPlan.Commands),
 			len(p.executionPlan.Commands),
 			crv.constantRegisters,
 			map[int]int{},
@@ -826,6 +828,9 @@ type booleanPredicateBuilder struct {
 	jumpAddress int
 	// commands is a list of commands representing the expression.
 	commands []vm.Command
+	// commandOffset is used to calculate the amount of commands already in the
+	// plan.
+	commandOffset int
 	// litRegisters is a mapping of scalar values to the register containing
 	// them. litRegisters should be guaranteed since they have a minimal cost
 	// due to being calculated outside of any scans/loops.
@@ -850,6 +855,7 @@ func (p *booleanPredicateBuilder) Build(
 	cursorId int,
 	openRegister int,
 	jumpAddress int,
+	commandOffset int,
 	litRegisters map[int]int,
 	colRegisters map[int]int,
 	variableRegisters map[int]int,
@@ -860,6 +866,7 @@ func (p *booleanPredicateBuilder) Build(
 	p.cursorId = cursorId
 	p.openRegister = openRegister
 	p.jumpAddress = jumpAddress
+	p.commandOffset = commandOffset
 	p.litRegisters = litRegisters
 	p.colRegisters = colRegisters
 	p.variableRegisters = variableRegisters
@@ -920,8 +927,15 @@ func (p *booleanPredicateBuilder) build(e compiler.Expr, level int) (int, error)
 				)
 				return 0, nil
 			}
-			// TODO should be able to make this work.
-			return 0, errors.New("cannot have a non root '=' expression")
+			p.commands = append(p.commands, &vm.IntegerCmd{P1: 0, P2: r})
+			jumpOverCount := 2
+			jumpAddress := len(p.commands) + jumpOverCount + p.commandOffset
+			p.commands = append(
+				p.commands,
+				&vm.NotEqualCmd{P1: ol, P2: jumpAddress, P3: or},
+			)
+			p.commands = append(p.commands, &vm.IntegerCmd{P1: 1, P2: r})
+			return r, nil
 		case compiler.OpLt:
 			if level == 0 {
 				p.commands = append(
@@ -930,8 +944,15 @@ func (p *booleanPredicateBuilder) build(e compiler.Expr, level int) (int, error)
 				)
 				return 0, nil
 			}
-			// TODO should be able to make this work.
-			return 0, errors.New("cannot have a non root '<' expression")
+			p.commands = append(p.commands, &vm.IntegerCmd{P1: 0, P2: r})
+			jumpOverCount := 2
+			jumpAddress := len(p.commands) + jumpOverCount + p.commandOffset
+			p.commands = append(
+				p.commands,
+				&vm.GteCmd{P1: ol, P2: jumpAddress, P3: or},
+			)
+			p.commands = append(p.commands, &vm.IntegerCmd{P1: 1, P2: r})
+			return r, nil
 		case compiler.OpGt:
 			if level == 0 {
 				p.commands = append(
@@ -940,8 +961,15 @@ func (p *booleanPredicateBuilder) build(e compiler.Expr, level int) (int, error)
 				)
 				return 0, nil
 			}
-			// TODO should be able to make this work.
-			return 0, errors.New("cannot have a non root '>' expression")
+			p.commands = append(p.commands, &vm.IntegerCmd{P1: 0, P2: r})
+			jumpOverCount := 2
+			jumpAddress := len(p.commands) + jumpOverCount + p.commandOffset
+			p.commands = append(
+				p.commands,
+				&vm.LteCmd{P1: ol, P2: jumpAddress, P3: or},
+			)
+			p.commands = append(p.commands, &vm.IntegerCmd{P1: 1, P2: r})
+			return r, nil
 		default:
 			panic("no vm command for operator")
 		}
