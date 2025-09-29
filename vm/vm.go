@@ -233,29 +233,7 @@ func (v *vm) explain(plan *ExecutionPlan) *ExecuteResult {
 	}
 }
 
-// TODO need to consider how values enter and exit the vm. There are many
-// inconsistencies at the moment due to the "any" types used throughout. Will
-// need to consider values being decoded or assigned through commands to
-// registers. This anyToInt likely won't be good enough due to it having no way
-// to handle floats.
 func anyToInt(a any) (int, error) {
-	switch t := a.(type) {
-	case int:
-		return t, nil
-	case int64:
-		return int(t), nil
-	case string:
-		ti, err := strconv.Atoi(t)
-		if err != nil {
-			return 0, err
-		}
-		return ti, nil
-	}
-	return 0, fmt.Errorf("unsupported any to int for variable %#v of type %T", a, a)
-}
-
-// TODO need to consider anyToInt vs anyToInt2
-func anyToInt2(a any) (int, error) {
 	switch t := a.(type) {
 	case int:
 		return t, nil
@@ -630,11 +608,11 @@ func (c *IntegerCmd) explain(addr int) []*string {
 type AddCmd cmd
 
 func (c *AddCmd) execute(vm *vm, routine *routine) cmdRes {
-	l, err := anyToInt2(routine.registers[c.P1])
+	l, err := anyToInt(routine.registers[c.P1])
 	if err != nil {
 		return cmdRes{err: err}
 	}
-	r, err := anyToInt2(routine.registers[c.P2])
+	r, err := anyToInt(routine.registers[c.P2])
 	if err != nil {
 		return cmdRes{err: err}
 	}
@@ -651,11 +629,11 @@ func (c *AddCmd) explain(addr int) []*string {
 type SubtractCmd cmd
 
 func (c *SubtractCmd) execute(vm *vm, routine *routine) cmdRes {
-	l, err := anyToInt2(routine.registers[c.P1])
+	l, err := anyToInt(routine.registers[c.P1])
 	if err != nil {
 		return cmdRes{err: err}
 	}
-	r, err := anyToInt2(routine.registers[c.P2])
+	r, err := anyToInt(routine.registers[c.P2])
 	if err != nil {
 		return cmdRes{err: err}
 	}
@@ -672,11 +650,11 @@ func (c *SubtractCmd) explain(addr int) []*string {
 type MultiplyCmd cmd
 
 func (c *MultiplyCmd) execute(vm *vm, routine *routine) cmdRes {
-	l, err := anyToInt2(routine.registers[c.P1])
+	l, err := anyToInt(routine.registers[c.P1])
 	if err != nil {
 		return cmdRes{err: err}
 	}
-	r, err := anyToInt2(routine.registers[c.P2])
+	r, err := anyToInt(routine.registers[c.P2])
 	if err != nil {
 		return cmdRes{err: err}
 	}
@@ -694,11 +672,11 @@ func (c *MultiplyCmd) explain(addr int) []*string {
 type DivideCmd cmd
 
 func (c *DivideCmd) execute(vm *vm, routine *routine) cmdRes {
-	l, err := anyToInt2(routine.registers[c.P1])
+	l, err := anyToInt(routine.registers[c.P1])
 	if err != nil {
 		return cmdRes{err: err}
 	}
-	r, err := anyToInt2(routine.registers[c.P2])
+	r, err := anyToInt(routine.registers[c.P2])
 	if err != nil {
 		return cmdRes{err: err}
 	}
@@ -720,11 +698,11 @@ func (c *DivideCmd) explain(addr int) []*string {
 type ExponentCmd cmd
 
 func (c *ExponentCmd) execute(vm *vm, routine *routine) cmdRes {
-	l, err := anyToInt2(routine.registers[c.P1])
+	l, err := anyToInt(routine.registers[c.P1])
 	if err != nil {
 		return cmdRes{err: err}
 	}
-	r, err := anyToInt2(routine.registers[c.P2])
+	r, err := anyToInt(routine.registers[c.P2])
 	if err != nil {
 		return cmdRes{err: err}
 	}
@@ -842,7 +820,7 @@ func (c *NotEqualCmd) explain(addr int) []*string {
 type IfNotCmd cmd
 
 func (c *IfNotCmd) execute(vm *vm, routine *routine) cmdRes {
-	v, err := anyToInt2(routine.registers[c.P1])
+	v, err := anyToInt(routine.registers[c.P1])
 	if err != nil {
 		return cmdRes{err: err}
 	}
