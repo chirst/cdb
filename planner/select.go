@@ -231,6 +231,11 @@ func foldExpr(e compiler.Expr) (compiler.Expr, error) {
 	if err != nil {
 		return nil, err
 	}
+	// TODO need to support strings as well. Should probably share logic with vm
+	// somehow.
+	// TODO need to consider commutative operators such as + i.e. 4 + age + 5 vs
+	// 4 + 5 + age where the former isn't folded due to the column, but could
+	// be.
 	le, lok := be.Left.(*compiler.IntLit)
 	re, rok := be.Right.(*compiler.IntLit)
 	if !lok || !rok {
@@ -250,6 +255,21 @@ func foldExpr(e compiler.Expr) (compiler.Expr, error) {
 		return &compiler.IntLit{Value: le.Value * re.Value}, nil
 	case compiler.OpSub:
 		return &compiler.IntLit{Value: le.Value - re.Value}, nil
+	case compiler.OpEq:
+		if le.Value == re.Value {
+			return &compiler.IntLit{Value: 1}, nil
+		}
+		return &compiler.IntLit{Value: 0}, nil
+	case compiler.OpGt:
+		if le.Value > re.Value {
+			return &compiler.IntLit{Value: 1}, nil
+		}
+		return &compiler.IntLit{Value: 0}, nil
+	case compiler.OpLt:
+		if le.Value < re.Value {
+			return &compiler.IntLit{Value: 1}, nil
+		}
+		return &compiler.IntLit{Value: 0}, nil
 	default:
 		return nil, fmt.Errorf("folding not implemented for %s", be.Operator)
 	}
@@ -513,9 +533,11 @@ func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
 		exprBuilder := &resultColumnCommandBuilder{}
 		exprBuilder.Build(
 			cursorId,
+			len(p.executionPlan.Commands),
 			startScanRegister+endScanRegisterOffset,
 			crv.constantRegisters,
 			crv.variableRegisters,
+			crv.stringRegisters,
 			startScanRegister+i,
 			c,
 		)
@@ -541,9 +563,11 @@ func (p *selectExecutionPlanner) buildScan(n *scanNode) error {
 			cursorId,
 			openRegister,
 			len(p.executionPlan.Commands),
+			len(p.executionPlan.Commands),
 			crv.constantRegisters,
 			colRegisters,
 			crv.variableRegisters,
+			crv.stringRegisters,
 			pkRegister,
 			n.scanPredicate,
 		)
@@ -605,9 +629,11 @@ func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) error {
 		exprBuilder := &resultColumnCommandBuilder{}
 		exprBuilder.Build(
 			1,
+			len(p.executionPlan.Commands),
 			reservedRegisterStart+reservedRegisterOffset,
 			crv.constantRegisters,
 			crv.variableRegisters,
+			crv.stringRegisters,
 			reservedRegisterStart+i,
 			rc.Expression,
 		)
@@ -623,9 +649,11 @@ func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) error {
 			0,
 			openRegister,
 			len(p.executionPlan.Commands),
+			len(p.executionPlan.Commands),
 			crv.constantRegisters,
 			map[int]int{},
 			crv.variableRegisters,
+			crv.stringRegisters,
 			0,
 			n.predicate,
 		)
@@ -651,6 +679,9 @@ type resultColumnCommandBuilder struct {
 	outputRegister int
 	// commands are the commands to evaluate the expression.
 	commands []vm.Command
+	// commandOffset is the amount of commands prior to calling this routine.
+	// Useful for calculating jump instructions.
+	commandOffset int
 	// litRegisters is a mapping of scalar values to registers containing them.
 	litRegisters map[int]int
 	// colRegisters is a mapping of column indexes to registers containing the
@@ -659,6 +690,8 @@ type resultColumnCommandBuilder struct {
 	colRegisters map[int]int
 	// variableRegisters is a mapping of variable indices to registers.
 	variableRegisters map[int]int
+	// stringRegisters is a mapping of strings to registers
+	stringRegisters map[string]int
 	// pkRegister is 0 value unless a register has been filled as part of Build.
 	// This is for subsequent routines to reuse the result of the command.
 	pkRegister int
@@ -666,17 +699,21 @@ type resultColumnCommandBuilder struct {
 
 func (e *resultColumnCommandBuilder) Build(
 	cursorId int,
+	commandOffset int,
 	openRegister int,
 	litRegisters map[int]int,
 	variableRegisters map[int]int,
+	stringRegisters map[string]int,
 	outputRegister int,
 	root compiler.Expr,
 ) int {
 	e.cursorId = cursorId
+	e.commandOffset = commandOffset
 	e.openRegister = openRegister
 	e.litRegisters = litRegisters
 	e.colRegisters = make(map[int]int)
 	e.variableRegisters = variableRegisters
+	e.stringRegisters = stringRegisters
 	e.outputRegister = outputRegister
 	return e.build(root, 0)
 }
@@ -698,9 +735,33 @@ func (e *resultColumnCommandBuilder) build(root compiler.Expr, level int) int {
 			e.commands = append(e.commands, &vm.ExponentCmd{P1: ol, P2: or, P3: r})
 		case compiler.OpSub:
 			e.commands = append(e.commands, &vm.SubtractCmd{P1: ol, P2: or, P3: r})
-		// TODO handle OpEq
-		// TODO handle OpLt
-		// TODO handle OpGt
+		case compiler.OpEq:
+			e.commands = append(e.commands, &vm.IntegerCmd{P1: 0, P2: r})
+			jumpOverCount := 2
+			jumpAddress := len(e.commands) + jumpOverCount + e.commandOffset
+			e.commands = append(
+				e.commands,
+				&vm.NotEqualCmd{P1: ol, P2: jumpAddress, P3: or},
+			)
+			e.commands = append(e.commands, &vm.IntegerCmd{P1: 1, P2: r})
+		case compiler.OpLt:
+			e.commands = append(e.commands, &vm.IntegerCmd{P1: 0, P2: r})
+			jumpOverCount := 2
+			jumpAddress := len(e.commands) + jumpOverCount + e.commandOffset
+			e.commands = append(
+				e.commands,
+				&vm.GteCmd{P1: ol, P2: jumpAddress, P3: or},
+			)
+			e.commands = append(e.commands, &vm.IntegerCmd{P1: 1, P2: r})
+		case compiler.OpGt:
+			e.commands = append(e.commands, &vm.IntegerCmd{P1: 0, P2: r})
+			jumpOverCount := 2
+			jumpAddress := len(e.commands) + jumpOverCount + e.commandOffset
+			e.commands = append(
+				e.commands,
+				&vm.LteCmd{P1: ol, P2: jumpAddress, P3: or},
+			)
+			e.commands = append(e.commands, &vm.IntegerCmd{P1: 1, P2: r})
 		default:
 			panic("no vm command for operator")
 		}
@@ -726,6 +787,14 @@ func (e *resultColumnCommandBuilder) build(root compiler.Expr, level int) int {
 			)
 		}
 		return e.litRegisters[n.Value]
+	case *compiler.StringLit:
+		if level == 0 {
+			e.commands = append(
+				e.commands,
+				&vm.CopyCmd{P1: e.stringRegisters[n.Value], P2: e.outputRegister},
+			)
+		}
+		return e.stringRegisters[n.Value]
 	case *compiler.Variable:
 		if level == 0 {
 			e.commands = append(
@@ -759,6 +828,9 @@ type booleanPredicateBuilder struct {
 	jumpAddress int
 	// commands is a list of commands representing the expression.
 	commands []vm.Command
+	// commandOffset is used to calculate the amount of commands already in the
+	// plan.
+	commandOffset int
 	// litRegisters is a mapping of scalar values to the register containing
 	// them. litRegisters should be guaranteed since they have a minimal cost
 	// due to being calculated outside of any scans/loops.
@@ -770,6 +842,8 @@ type booleanPredicateBuilder struct {
 	colRegisters map[int]int
 	// variableRegisters is a mapping of variable indices to registers.
 	variableRegisters map[int]int
+	// stringRegisters is a mapping of strings to registers
+	stringRegisters map[string]int
 	// pkRegister is unset when 0. Otherwise, pkRegister is the register
 	// containing the table row id. pkRegister may not be guaranteed depending
 	// on the projection in which case the register should be calculated as part
@@ -781,18 +855,22 @@ func (p *booleanPredicateBuilder) Build(
 	cursorId int,
 	openRegister int,
 	jumpAddress int,
+	commandOffset int,
 	litRegisters map[int]int,
 	colRegisters map[int]int,
 	variableRegisters map[int]int,
+	stringRegisters map[string]int,
 	pkRegister int,
 	e compiler.Expr,
 ) error {
 	p.cursorId = cursorId
 	p.openRegister = openRegister
 	p.jumpAddress = jumpAddress
+	p.commandOffset = commandOffset
 	p.litRegisters = litRegisters
 	p.colRegisters = colRegisters
 	p.variableRegisters = variableRegisters
+	p.stringRegisters = stringRegisters
 	p.pkRegister = pkRegister
 	_, err := p.build(e, 0)
 	return err
@@ -849,28 +927,49 @@ func (p *booleanPredicateBuilder) build(e compiler.Expr, level int) (int, error)
 				)
 				return 0, nil
 			}
-			// TODO should be able to make this work.
-			return 0, errors.New("cannot have a non root '=' expression")
+			p.commands = append(p.commands, &vm.IntegerCmd{P1: 0, P2: r})
+			jumpOverCount := 2
+			jumpAddress := len(p.commands) + jumpOverCount + p.commandOffset
+			p.commands = append(
+				p.commands,
+				&vm.NotEqualCmd{P1: ol, P2: jumpAddress, P3: or},
+			)
+			p.commands = append(p.commands, &vm.IntegerCmd{P1: 1, P2: r})
+			return r, nil
 		case compiler.OpLt:
 			if level == 0 {
 				p.commands = append(
 					p.commands,
-					&vm.LteCmd{P1: ol, P2: p.getJumpAddress(), P3: or},
+					&vm.LteCmd{P1: or, P2: p.getJumpAddress(), P3: ol},
 				)
 				return 0, nil
 			}
-			// TODO should be able to make this work.
-			return 0, errors.New("cannot have a non root '<' expression")
+			p.commands = append(p.commands, &vm.IntegerCmd{P1: 0, P2: r})
+			jumpOverCount := 2
+			jumpAddress := len(p.commands) + jumpOverCount + p.commandOffset
+			p.commands = append(
+				p.commands,
+				&vm.GteCmd{P1: ol, P2: jumpAddress, P3: or},
+			)
+			p.commands = append(p.commands, &vm.IntegerCmd{P1: 1, P2: r})
+			return r, nil
 		case compiler.OpGt:
 			if level == 0 {
 				p.commands = append(
 					p.commands,
-					&vm.GteCmd{P1: ol, P2: p.getJumpAddress(), P3: or},
+					&vm.GteCmd{P1: or, P2: p.getJumpAddress(), P3: ol},
 				)
 				return 0, nil
 			}
-			// TODO should be able to make this work.
-			return 0, errors.New("cannot have a non root '>' expression")
+			p.commands = append(p.commands, &vm.IntegerCmd{P1: 0, P2: r})
+			jumpOverCount := 2
+			jumpAddress := len(p.commands) + jumpOverCount + p.commandOffset
+			p.commands = append(
+				p.commands,
+				&vm.LteCmd{P1: ol, P2: jumpAddress, P3: or},
+			)
+			p.commands = append(p.commands, &vm.IntegerCmd{P1: 1, P2: r})
+			return r, nil
 		default:
 			panic("no vm command for operator")
 		}
@@ -886,6 +985,12 @@ func (p *booleanPredicateBuilder) build(e compiler.Expr, level int) (int, error)
 			p.commands = append(p.commands, &vm.IfNotCmd{P1: litReg, P2: p.getJumpAddress()})
 		}
 		return litReg, nil
+	case *compiler.StringLit:
+		strReg := p.stringRegisters[ce.Value]
+		if level == 0 {
+			p.commands = append(p.commands, &vm.IfNotCmd{P1: strReg, P2: p.getJumpAddress()})
+		}
+		return strReg, nil
 	case *compiler.Variable:
 		varReg := p.variableRegisters[ce.Position]
 		if level == 0 {
