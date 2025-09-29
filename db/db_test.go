@@ -186,3 +186,176 @@ func TestSelectRangeWithWhere(t *testing.T) {
 		t.Fatalf("want %s but got %s", want, got)
 	}
 }
+
+func TestResultColumnExprs(t *testing.T) {
+	type rcCase struct {
+		statement string
+		want      string
+	}
+	rcCases := []rcCase{
+		{
+			statement: "SELECT val + 2 FROM test",
+			want:      "24",
+		},
+		{
+			statement: "SELECT 3 + val + 2 FROM test",
+			want:      "27",
+		},
+		{
+			statement: "SELECT val > 2 FROM test",
+			want:      "1",
+		},
+		{
+			statement: "SELECT 3 > val > 2 FROM test",
+			want:      "0",
+		},
+		{
+			statement: "SELECT val < 2 FROM test",
+			want:      "0",
+		},
+		{
+			statement: "SELECT 3 < val < 2 FROM test",
+			want:      "1",
+		},
+		{
+			statement: "SELECT val = 2 FROM test",
+			want:      "0",
+		},
+		{
+			statement: "SELECT 3 = val = 2 FROM test",
+			want:      "0",
+		},
+		{
+			statement: "SELECT val - 2 FROM test",
+			want:      "20",
+		},
+		{
+			statement: "SELECT 3 - val - 2 FROM test",
+			want:      "-21",
+		},
+		{
+			statement: "SELECT val ^ 2 FROM test",
+			want:      "484",
+		},
+		{
+			statement: "SELECT val ^ 2 ^ 2 FROM test",
+			want:      "234256",
+		},
+		{
+			statement: "SELECT val * 2 FROM test",
+			want:      "44",
+		},
+		{
+			statement: "SELECT 2 * val * 2 FROM test",
+			want:      "88",
+		},
+		{
+			statement: "SELECT val / 2 FROM test",
+			want:      "11",
+		},
+		{
+			statement: "SELECT 44 / val / 2 FROM test",
+			want:      "1",
+		},
+	}
+	db := mustCreateDB(t)
+	mustExecute(t, db, "CREATE TABLE test (id INTEGER PRIMARY KEY, val INTEGER)")
+	mustExecute(t, db, "INSERT INTO test (val) VALUES (22)")
+	for _, rcc := range rcCases {
+		t.Run(rcc.statement, func(t *testing.T) {
+			res := mustExecute(t, db, rcc.statement)
+			expectedRowCount := 1
+			if rowCount := len(res.ResultRows); rowCount != expectedRowCount {
+				t.Fatalf("want %d row but got %d", expectedRowCount, rowCount)
+			}
+			got := *res.ResultRows[0][0]
+			if got != rcc.want {
+				t.Fatalf("want %s but got %s", rcc.want, got)
+			}
+		})
+	}
+}
+
+func TestPredicateExprs(t *testing.T) {
+	type pCase struct {
+		statement        string
+		expectedRowCount int
+	}
+	pCases := []pCase{
+		{
+			statement:        "SELECT 1 FROM test WHERE val + 1",
+			expectedRowCount: 1,
+		},
+		{
+			statement:        "SELECT 1 FROM test WHERE 3 + val + 1",
+			expectedRowCount: 1,
+		},
+		{
+			statement:        "SELECT 1 FROM test WHERE val / 2",
+			expectedRowCount: 1,
+		},
+		{
+			statement:        "SELECT 1 FROM test WHERE 44 / val / 2",
+			expectedRowCount: 1,
+		},
+		{
+			statement:        "SELECT 1 FROM test WHERE val * 2",
+			expectedRowCount: 1,
+		},
+		{
+			statement:        "SELECT 1 FROM test WHERE 2 * val * 2",
+			expectedRowCount: 1,
+		},
+		{
+			statement:        "SELECT 1 FROM test WHERE val ^ 2",
+			expectedRowCount: 1,
+		},
+		{
+			statement:        "SELECT 1 FROM test WHERE val ^ 2 ^ 2",
+			expectedRowCount: 1,
+		},
+		{
+			statement:        "SELECT 1 FROM test WHERE val - 2",
+			expectedRowCount: 1,
+		},
+		{
+			statement:        "SELECT 1 FROM test WHERE 2 - val - 2",
+			expectedRowCount: 1,
+		},
+		{
+			statement:        "SELECT 1 FROM test WHERE val > 2",
+			expectedRowCount: 1,
+		},
+		{
+			statement:        "SELECT 1 FROM test WHERE 2 > val > 2",
+			expectedRowCount: 0,
+		},
+		{
+			statement:        "SELECT 1 FROM test WHERE val < 2",
+			expectedRowCount: 0,
+		},
+		{
+			statement:        "SELECT 1 FROM test WHERE 2 < val < 2",
+			expectedRowCount: 1,
+		},
+		{
+			statement:        "SELECT 1 FROM test WHERE val = 2",
+			expectedRowCount: 0,
+		},
+		{
+			statement:        "SELECT 1 FROM test WHERE 3 = val = 2",
+			expectedRowCount: 0,
+		},
+	}
+	db := mustCreateDB(t)
+	mustExecute(t, db, "CREATE TABLE test (id INTEGER PRIMARY KEY, val INTEGER)")
+	mustExecute(t, db, "INSERT INTO test (val) VALUES (22)")
+	for _, pc := range pCases {
+		t.Run(pc.statement, func(t *testing.T) {
+			res := mustExecute(t, db, pc.statement)
+			if rowCount := len(res.ResultRows); rowCount != pc.expectedRowCount {
+				t.Fatalf("want %d row but got %d", pc.expectedRowCount, rowCount)
+			}
+		})
+	}
+}

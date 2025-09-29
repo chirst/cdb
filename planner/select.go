@@ -233,6 +233,9 @@ func foldExpr(e compiler.Expr) (compiler.Expr, error) {
 	}
 	// TODO need to support strings as well. Should probably share logic with vm
 	// somehow.
+	// TODO need to consider commutative operators such as + i.e. 4 + age + 5 vs
+	// 4 + 5 + age where the former isn't folded due to the column, but could
+	// be.
 	le, lok := be.Left.(*compiler.IntLit)
 	re, rok := be.Right.(*compiler.IntLit)
 	if !lok || !rok {
@@ -740,7 +743,6 @@ func (e *resultColumnCommandBuilder) build(root compiler.Expr, level int) int {
 				e.commands,
 				&vm.NotEqualCmd{P1: ol, P2: jumpAddress, P3: or},
 			)
-			r = e.getNextRegister(level)
 			e.commands = append(e.commands, &vm.IntegerCmd{P1: 1, P2: r})
 		case compiler.OpLt:
 			e.commands = append(e.commands, &vm.IntegerCmd{P1: 0, P2: r})
@@ -750,7 +752,6 @@ func (e *resultColumnCommandBuilder) build(root compiler.Expr, level int) int {
 				e.commands,
 				&vm.GteCmd{P1: ol, P2: jumpAddress, P3: or},
 			)
-			r = e.getNextRegister(level)
 			e.commands = append(e.commands, &vm.IntegerCmd{P1: 1, P2: r})
 		case compiler.OpGt:
 			e.commands = append(e.commands, &vm.IntegerCmd{P1: 0, P2: r})
@@ -760,7 +761,6 @@ func (e *resultColumnCommandBuilder) build(root compiler.Expr, level int) int {
 				e.commands,
 				&vm.LteCmd{P1: ol, P2: jumpAddress, P3: or},
 			)
-			r = e.getNextRegister(level)
 			e.commands = append(e.commands, &vm.IntegerCmd{P1: 1, P2: r})
 		default:
 			panic("no vm command for operator")
