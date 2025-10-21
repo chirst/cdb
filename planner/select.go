@@ -109,8 +109,12 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 
 	// Constant query has no "from".
 	if p.stmt.From == nil || p.stmt.From.TableName == "" {
+		constExprs := []compiler.Expr{}
+		for i := range p.stmt.ResultColumns {
+			constExprs = append(constExprs, p.stmt.ResultColumns[i].Expression)
+		}
 		child := &constantNode{
-			resultColumns: p.stmt.ResultColumns,
+			resultColumns: constExprs,
 			predicate:     p.stmt.Where,
 		}
 		projections, err := p.getProjections()
@@ -418,12 +422,7 @@ func (p *selectExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 		p.executionPlan.Append(&vm.TransactionCmd{P2: 0})
 		p.buildOptimizedCountScan(c)
 	case *constantNode:
-		// TODO make constant node work off exprs like scan to remove this map
-		cexprs := []compiler.Expr{}
-		for i := range c.resultColumns {
-			cexprs = append(cexprs, c.resultColumns[i].Expression)
-		}
-		err := p.setResultTypes(cexprs)
+		err := p.setResultTypes(c.resultColumns)
 		if err != nil {
 			return nil, err
 		}
@@ -611,7 +610,7 @@ func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) error {
 	crv := &constantRegisterVisitor{}
 	crv.Init(beginningRegister)
 	for _, c := range n.resultColumns {
-		c.Expression.BreadthWalk(crv)
+		c.BreadthWalk(crv)
 	}
 	if n.predicate != nil {
 		n.predicate.BreadthWalk(crv)
@@ -635,7 +634,7 @@ func (p *selectExecutionPlanner) buildConstantNode(n *constantNode) error {
 			crv.variableRegisters,
 			crv.stringRegisters,
 			reservedRegisterStart+i,
-			rc.Expression,
+			rc,
 		)
 		for _, tc := range exprBuilder.commands {
 			p.executionPlan.Append(tc)

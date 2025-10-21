@@ -42,7 +42,7 @@ type scanColumn = compiler.Expr
 // constantNode is used in select statements where there is no table.
 type constantNode struct {
 	// resultColumns are the result columns containing expressions.
-	resultColumns []compiler.ResultColumn
+	resultColumns []compiler.Expr
 	// predicate filters the result depending on the result of the expression.
 	predicate compiler.Expr
 }
