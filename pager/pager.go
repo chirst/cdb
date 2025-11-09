@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"slices"
 	"sort"
-	"sync"
 
 	"github.com/chirst/cdb/pager/cache"
 )
@@ -106,16 +105,6 @@ type Pager struct {
 	store storage
 	// currentMaxPage is a counter that holds the last allocated page number.
 	currentMaxPage int
-	// fileLock enables read and writes to be in isolation. The RWMutex allows
-	// either many readers or only one writer. RWMutex also prevents writer
-	// starvation by only allowing readers to acquire a lock if there is no
-	// pending writer.
-	//
-	// TODO the fileLock lives in the database process, so it is only resilient
-	// to writers in the same process. If two instances of the database are
-	// sharing a file there are no guarantees. This could probably be solved
-	// with some sort of lock that is put on the file itself.
-	fileLock sync.RWMutex
 	// isWriting is a helper flag that is true when a writer has acquired a
 	// lock. This enables functions distributing pages to the kv layer to mark
 	// the pages as dirty so the pages can be flushed to disk before the write
@@ -146,7 +135,6 @@ func New(useMemory bool, filename string) (*Pager, error) {
 	p := &Pager{
 		store:          s,
 		currentMaxPage: allocateFreePageCounter(s),
-		fileLock:       sync.RWMutex{},
 		dirtyPages:     []*Page{},
 		pageCache:      cache.NewLRU(pageCacheSize),
 	}
@@ -175,22 +163,26 @@ func (p *Pager) writeFreePageCounter() {
 
 // BeginRead starts a read transaction. Other readers will be able to access the
 // database file.
-func (p *Pager) BeginRead() {
-	p.fileLock.RLock()
+func (p *Pager) BeginRead() error {
+	return p.store.GetLock().RLock()
 }
 
 // BeginRead ends a read transaction.
 func (p *Pager) EndRead() {
-	p.fileLock.RUnlock()
+	p.store.GetLock().RUnlock()
 }
 
 // BeginWrite starts a write transaction. If there are active readers this will
 // go into a pending state. When there is a pending writer no new readers will
 // be able to acquire a lock. Once all of the readers have finished this will
 // acquire exclusive access to the database file.
-func (p *Pager) BeginWrite() {
-	p.fileLock.Lock()
+func (p *Pager) BeginWrite() error {
+	err := p.store.GetLock().Lock()
+	if err != nil {
+		return err
+	}
 	p.isWriting = true
+	return nil
 }
 
 // EndWrite creates a copy of the database called a journal. EndWrite proceeds
@@ -212,10 +204,11 @@ func (p *Pager) EndWrite() error {
 	p.dirtyPages = []*Page{}
 	p.writeFreePageCounter()
 	if err := p.store.DeleteJournal(); err != nil {
+		// TODO what can be done to gracefully handle a journal deletion failure
 		return err
 	}
 	p.isWriting = false
-	p.fileLock.Unlock()
+	p.store.GetLock().Unlock()
 	return nil
 }
 
@@ -228,7 +221,7 @@ func (p *Pager) RollbackWrite() {
 	p.dirtyPages = []*Page{}
 	allocateFreePageCounter(p.store)
 	p.isWriting = false
-	p.fileLock.Unlock()
+	p.store.GetLock().Unlock()
 }
 
 // GetPage returns an allocated page. GetPage will return cached pages. GetPage

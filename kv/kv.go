@@ -50,8 +50,8 @@ func (kv *KV) NewBTree() int {
 }
 
 // BeginReadTransaction begins a read transaction.
-func (kv *KV) BeginReadTransaction() {
-	kv.pager.BeginRead()
+func (kv *KV) BeginReadTransaction() error {
+	return kv.pager.BeginRead()
 }
 
 // EndReadTransaction ends a read transaction.
@@ -60,8 +60,8 @@ func (kv *KV) EndReadTransaction() {
 }
 
 // BeginWriteTransaction begins a write transaction.
-func (kv *KV) BeginWriteTransaction() {
-	kv.pager.BeginWrite()
+func (kv *KV) BeginWriteTransaction() error {
+	return kv.pager.BeginWrite()
 }
 
 // RollbackWrite rolls back and ends a write transaction.
