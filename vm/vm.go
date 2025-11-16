@@ -321,7 +321,9 @@ type TransactionCmd cmd
 func (c *TransactionCmd) execute(vm *vm, routine *routine) cmdRes {
 	if c.P2 == 0 {
 		routine.readTransaction = true
-		vm.kv.BeginReadTransaction()
+		if err := vm.kv.BeginReadTransaction(); err != nil {
+			return cmdRes{err: err}
+		}
 		if routine.schemaVersion != vm.kv.GetCatalog().GetVersion() {
 			return cmdRes{err: ErrVersionChanged}
 		}
@@ -329,7 +331,9 @@ func (c *TransactionCmd) execute(vm *vm, routine *routine) cmdRes {
 	}
 	if c.P2 == 1 {
 		routine.writeTransaction = true
-		vm.kv.BeginWriteTransaction()
+		if err := vm.kv.BeginWriteTransaction(); err != nil {
+			return cmdRes{err: err}
+		}
 		if routine.schemaVersion != vm.kv.GetCatalog().GetVersion() {
 			return cmdRes{err: ErrVersionChanged}
 		}

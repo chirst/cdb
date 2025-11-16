@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 )
 
 type storage interface {
@@ -14,15 +15,20 @@ type storage interface {
 	io.WriterAt
 	CreateJournal() error
 	DeleteJournal() error
+	GetLock() lock
 }
 
 type memoryStorage struct {
-	buf []byte
+	buf  []byte
+	lock lock
 }
 
 func newMemoryStorage() storage {
 	return &memoryStorage{
 		buf: make([]byte, pageSize),
+		lock: &memoryLock{
+			l: &sync.RWMutex{},
+		},
 	}
 }
 
@@ -52,10 +58,15 @@ func (mf *memoryStorage) DeleteJournal() error {
 	return nil
 }
 
+func (ms *memoryStorage) GetLock() lock {
+	return ms.lock
+}
+
 type fileStorage struct {
 	file        *os.File
 	journalName string
 	dbFileName  string
+	lock        lock
 }
 
 func newFileStorage(filename string) (storage, error) {
@@ -72,6 +83,7 @@ func newFileStorage(filename string) (storage, error) {
 			file:        fl,
 			dbFileName:  dName,
 			journalName: jName,
+			lock:        newPlatformLock(fl.Fd()),
 		}, nil
 	}
 	// if journal file has an error
@@ -92,6 +104,7 @@ func newFileStorage(filename string) (storage, error) {
 		file:        fl,
 		dbFileName:  dName,
 		journalName: jName,
+		lock:        newPlatformLock(fl.Fd()),
 	}, nil
 }
 
@@ -134,4 +147,8 @@ func (s *fileStorage) DeleteJournal() error {
 		return fmt.Errorf("error deleting journal %w", err)
 	}
 	return nil
+}
+
+func (s *fileStorage) GetLock() lock {
+	return s.lock
 }
