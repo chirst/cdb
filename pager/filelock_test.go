@@ -55,7 +55,9 @@ func TestMultipleExclusive(t *testing.T) {
 // processes of the database maintain exclusive access to the database file.
 func TestCrossProcess(t *testing.T) {
 	cmd1 := exec.Command("go", "test", "-run", "^TestCrossProcessSub$", "github.com/chirst/cdb/pager")
+	cmd1.Env = append(os.Environ(), "TEST_CROSS_PROCESS_SUB=1")
 	cmd2 := exec.Command("go", "test", "-run", "^TestCrossProcessSub$", "github.com/chirst/cdb/pager")
+	cmd2.Env = append(os.Environ(), "TEST_CROSS_PROCESS_SUB=1")
 	start := time.Now()
 	err := cmd1.Start()
 	if err != nil {
@@ -77,14 +79,15 @@ func TestCrossProcess(t *testing.T) {
 	if elapsed < (time.Second * 6) {
 		t.Fatalf("expected at least 6 seconds but got %f seconds", elapsed.Seconds())
 	}
+	if err := os.Remove("filelock_test.db"); err != nil {
+		t.Fatal("failed to clean up filelock_test.db file")
+	}
 }
 
-// TestCrossProcessSub is a hacky way to test the file locking works for two
-// processes of the database. This test alone is useless, it is just a simple
-// way to run a function in a new process. See TestCrossProcess for the actual
-// test. TODO perhaps there is a better way to achieve this with something like
-// fork?
 func TestCrossProcessSub(t *testing.T) {
+	if os.Getenv("TEST_CROSS_PROCESS_SUB") == "" {
+		t.Skip("skipping helper test")
+	}
 	fl, err := os.OpenFile("filelock_test.db", os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		t.Fatalf("error opening db file: %s", err)

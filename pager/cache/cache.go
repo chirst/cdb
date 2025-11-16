@@ -10,16 +10,21 @@ type lruPageCache struct {
 	// list.
 	evictList []int
 	maxSize   int
+	// version maintains the "version" of the cache. When the version is
+	// incremented it invalidates the cache. When the version is checked and it
+	// is the same it means the cache is still valid.
+	version int
 }
 
 // NewLRU creates a LRU (least recently used) cache. This cache takes a maxSize
 // which determines how many items can be cached. When the maximum size of the
 // cache is exceeded, the least recently used item will be evicted.
-func NewLRU(maxSize int) *lruPageCache {
+func NewLRU(maxSize, version int) *lruPageCache {
 	return &lruPageCache{
 		cache:     map[int][]byte{},
 		evictList: []int{},
 		maxSize:   maxSize,
+		version:   version,
 	}
 }
 
@@ -56,6 +61,23 @@ func (c *lruPageCache) Remove(key int) {
 		i := slices.Index(c.evictList, key)
 		c.evictList = slices.Delete(c.evictList, i, i+1)
 	}
+}
+
+// Validate clears the cache if the candidateVersion doesn't match the cache
+// version. Otherwise the cache is left intact.
+func (c *lruPageCache) Validate(candidateVersion int) {
+	if candidateVersion == c.version {
+		return
+	}
+	c.cache = map[int][]byte{}
+	c.evictList = []int{}
+}
+
+// SetVersion sets the cache version. This can be updated after a write
+// eliminating the need to purge the cache for the writer process. Since the
+// writing process clears dirty pages.
+func (c *lruPageCache) SetVersion(newVersion int) {
+	c.version = newVersion
 }
 
 func (c *lruPageCache) prioritize(key int) {
