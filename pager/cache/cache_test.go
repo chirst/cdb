@@ -3,7 +3,7 @@ package cache
 import "testing"
 
 func TestCache(t *testing.T) {
-	c := NewLRU(5)
+	c := NewLRU(5, 0)
 	c.Add(5, []byte{5})
 	c.Add(8, []byte{8})
 	c.Add(12, []byte{12})
@@ -34,5 +34,22 @@ func TestCache(t *testing.T) {
 	}
 	if _, ok := c.cache[241]; !ok {
 		t.Fatal("expected cache[241] to be ok")
+	}
+}
+
+func TestVersion(t *testing.T) {
+	v1 := 0
+	v2 := 1
+	c := NewLRU(5, v1)
+	c.Add(1, []byte{1})
+	_, hit := c.Get(1)
+	if !hit {
+		t.Fatal("expected hit to be true")
+	}
+	c.SetVersion(v2)
+	c.Validate(v1)
+	_, hit = c.Get(1)
+	if hit {
+		t.Fatal("expected hit to be false")
 	}
 }

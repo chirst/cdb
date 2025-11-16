@@ -46,8 +46,15 @@ const (
 	// freePageCounterSize is a uint32 and must match the size of the page
 	// pointer size.
 	freePageCounterSize = 4
-	// rootPageStart marks the end of the file header.
-	rootPageStart = 4
+	// fileChangeCounterOffset is the offset of the file change counter.
+	fileChangeCounterOffset = 4
+	// fileChangeCounterSize is a uint32 since the counter needs to be
+	// reasonably big to guarantee uniqueness.
+	fileChangeCounterSize = 4
+	// rootPageStart marks the end of the file header. Unused space is reserved
+	// for future header additions since changing the size of the header breaks
+	// existing files.
+	rootPageStart = 100
 )
 
 // Page constants
@@ -91,9 +98,11 @@ const (
 
 // pageCache defines the page caching interface.
 type pageCache interface {
-	Get(pageNumber int) ([]byte, bool)
-	Add(key int, value []byte)
-	Remove(key int)
+	Get(int) ([]byte, bool)
+	Add(int, []byte)
+	Remove(int)
+	Validate(int)
+	SetVersion(int)
 }
 
 // Pager is an abstraction of the database file. Pager handles efficiently
@@ -136,7 +145,7 @@ func New(useMemory bool, filename string) (*Pager, error) {
 		store:          s,
 		currentMaxPage: allocateFreePageCounter(s),
 		dirtyPages:     []*Page{},
-		pageCache:      cache.NewLRU(pageCacheSize),
+		pageCache:      cache.NewLRU(pageCacheSize, readFileChangeCounter(s)),
 	}
 	return p, nil
 }
@@ -161,13 +170,45 @@ func (p *Pager) writeFreePageCounter() {
 	p.store.WriteAt(fb, freePageCounterOffset)
 }
 
+// readFileChangeCounter reads the current file change version. The counter is
+// incremented by 1 each time the database file changes. This means the counter
+// can be used to invalidate the page cache to prevent dirty reads caused by
+// other processes changing the database file.
+func readFileChangeCounter(s storage) int {
+	b := make([]byte, fileChangeCounterSize)
+	s.ReadAt(b, fileChangeCounterOffset)
+	return int(binary.LittleEndian.Uint32(b))
+}
+
+// incrementFileChangeCounter increments the change counter by 1. When the
+// change counter reaches the maximum uint32 the number is truncated and starts
+// back over at 0. The possibility of getting the same number from this counter
+// is not likely to ever happen, but it is funny to think about.
+func (p *Pager) incrementFileChangeCounter() {
+	currentCount := readFileChangeCounter(p.store)
+	newCount := uint32(currentCount + 1)
+	b := make([]byte, fileChangeCounterSize)
+	binary.LittleEndian.PutUint32(b, newCount)
+	p.store.WriteAt(b, fileChangeCounterOffset)
+	// Because incrementFileChangeCounter is called within the write process
+	// that invalidates dirty pages from the cache it can be assumed the cache
+	// version can be updated. This allows any cached pages surviving the write
+	// to continue to be cached.
+	p.pageCache.SetVersion(int(newCount))
+}
+
 // BeginRead starts a read transaction. Other readers will be able to access the
 // database file.
 func (p *Pager) BeginRead() error {
-	return p.store.GetLock().RLock()
+	err := p.store.GetLock().RLock()
+	if err != nil {
+		return err
+	}
+	p.pageCache.Validate(readFileChangeCounter(p.store))
+	return nil
 }
 
-// BeginRead ends a read transaction.
+// EndRead ends a read transaction.
 func (p *Pager) EndRead() {
 	p.store.GetLock().RUnlock()
 }
@@ -181,6 +222,7 @@ func (p *Pager) BeginWrite() error {
 	if err != nil {
 		return err
 	}
+	p.pageCache.Validate(readFileChangeCounter(p.store))
 	p.isWriting = true
 	return nil
 }
@@ -203,6 +245,7 @@ func (p *Pager) EndWrite() error {
 	}
 	p.dirtyPages = []*Page{}
 	p.writeFreePageCounter()
+	p.incrementFileChangeCounter()
 	if err := p.store.DeleteJournal(); err != nil {
 		// TODO what can be done to gracefully handle a journal deletion failure
 		return err
