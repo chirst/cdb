@@ -7,7 +7,9 @@ package kv
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"log"
+	"slices"
 
 	"github.com/chirst/cdb/catalog"
 	"github.com/chirst/cdb/pager"
@@ -102,29 +104,33 @@ func (kv *KV) ParseSchema() error {
 	return nil
 }
 
-// TODO possibly split the cursor into read and write cursors
+// nextBehavior is the state of GotoNext in relation to DeleteCurrent
+type nextBehavior int
+
+const (
+	// When GotoNext is unaffected by DeleteCurrent.
+	nextBehaviorNormal nextBehavior = 0
+	// When GotoNext should return true as if it moved to the next tuple.
+	nextBehaviorNext nextBehavior = 1
+	// When GotoNext should return false as if it ran out of tuple to move to.
+	nextBehaviorEmpty nextBehavior = 2
+)
+
 // Cursor is an abstraction that can seek and scan ranges of a btree.
 type Cursor struct {
 	// rootPageNumber is the object this cursor operates on
 	rootPageNumber int
-	// currentPageEntries is the cached entries for this cursor
-	currentPageEntries []pager.PageTuple
-	// currentTupleIndex is the current tuple being pointed to
-	currentTupleIndex int
-	// currentLeftPage is the smaller page next to the cursor's current page.
-	currentLeftPage int
-	// currentRightPage is the page greater than the cursor's current page.
-	currentRightPage int
-	// currentPageEntriesCount is the cached count of entries on the current
-	// page.
-	currentPageEntriesCount int
-	// pager is the cursors pager. This may be the core database pager or an
-	// ephemeral pager.
-	// TODO ephemeral pager
+	// currentTupleKey is the current tuple being pointed to
+	currentTupleKey []byte
+	// currentPage is the current page the cursor is pointing to
+	currentPage *pager.Page
+	// pager is the cursors pager
 	pager *pager.Pager
+	// nextBehavior is the state of GotoNext behavior for the cursor
+	nextBehavior nextBehavior
 }
 
-// NewCursor creates a cursor the given object's rootPageNumber.
+// NewCursor creates a cursor with the given object's rootPageNumber.
 func (kv *KV) NewCursor(rootPageNumber int) *Cursor {
 	if rootPageNumber == 0 {
 		panic("root page cannot be 0")
@@ -133,6 +139,18 @@ func (kv *KV) NewCursor(rootPageNumber int) *Cursor {
 		rootPageNumber: rootPageNumber,
 		pager:          kv.pager,
 	}
+}
+
+// getCurrentEntriesIndex gets the index of the currentKey within the pages
+// current entries. Note a special value of -1 is returned in the rare case
+// the current key doesn't exist.
+func (c *Cursor) getCurrentEntriesIndex() int {
+	return slices.IndexFunc(
+		c.currentPage.GetEntries(),
+		func(t pager.PageTuple) bool {
+			return bytes.Equal(t.Key, c.currentTupleKey)
+		},
+	)
 }
 
 // GotoFirstRecord moves the cursor to the first tuple in ascending order. It
@@ -167,55 +185,110 @@ func (c *Cursor) GotoLastRecord() bool {
 		candidatePage = c.pager.GetPage(int(descendingPageNum32))
 	}
 	c.moveToPage(candidatePage)
-	c.currentTupleIndex = len(c.currentPageEntries) - 1
+	entries := c.currentPage.GetEntries()
+	c.currentTupleKey = entries[len(entries)-1].Key
 	return true
 }
 
 // GetKey returns the key of the current tuple.
 func (c *Cursor) GetKey() []byte {
-	return c.currentPageEntries[c.currentTupleIndex].Key
+	return c.currentTupleKey
 }
 
-// GetValue returns the values
+// GetValue returns the value of the current pointed to tuple
 func (c *Cursor) GetValue() []byte {
-	return c.currentPageEntries[c.currentTupleIndex].Value
+	v, _ := c.currentPage.GetValue(c.currentTupleKey)
+	return v
+}
+
+// DeleteCurrent deletes the current tuple the cursor is pointing to. This
+// leaves the cursor pointing at the next tuple in which case calling GotoNext
+// will be a no-op. If the next tuple is the end of the table GotoNext will also
+// be aware of this. This is all to facilitate execution plans which delete in a
+// loop.
+func (c *Cursor) DeleteCurrent() {
+	newEntries := []pager.PageTuple{}
+	var nextKey []byte
+	foundNextKey := false
+	// Gather entries besides the deleted current from the current page. Also,
+	// find the next highest key.
+	for _, e := range c.currentPage.GetEntries() {
+		comparison := bytes.Compare(e.Key, c.currentTupleKey)
+		if comparison != 0 { // a != b
+			newEntries = append(newEntries, e)
+		}
+		if comparison == 1 && !foundNextKey { // a > b
+			foundNextKey = true
+			nextKey = e.Key
+		}
+	}
+	// Set the current page entries minus the deleted entry.
+	newPage := c.pager.GetPage(c.currentPage.GetNumber())
+	newPage.SetEntries(newEntries)
+	// Determine what the next key is and setup flag for GotoNext.
+	if !foundNextKey {
+		hasRight, rightPageNumber := c.currentPage.GetRightPageNumber()
+		if hasRight {
+			c.nextBehavior = nextBehaviorNext
+			c.moveToPage(c.pager.GetPage(rightPageNumber))
+		} else {
+			c.nextBehavior = nextBehaviorEmpty
+		}
+	} else {
+		c.nextBehavior = nextBehaviorNext
+		c.currentTupleKey = nextKey
+	}
 }
 
 // GotoNext moves the cursor to the next tuple in ascending order. If there is
 // no next tuple this function will return false otherwise it will return true.
+//
+// GotoNext may have special behavior if a DeleteCurrent has been previously
+// invoked. GotoNext will essentially be a noop that makes the illusion it did
+// the job that was already done by DeleteCurrent.
 func (c *Cursor) GotoNext() bool {
-	if c.currentTupleIndex+1 <= len(c.currentPageEntries)-1 {
-		c.currentTupleIndex += 1
+	switch c.nextBehavior {
+	case nextBehaviorEmpty:
+		c.nextBehavior = nextBehaviorNormal
+		return false
+	case nextBehaviorNext:
+		c.nextBehavior = nextBehaviorNormal
 		return true
-	}
-	if c.currentRightPage != 0 {
-		candidatePage := c.pager.GetPage(c.currentRightPage)
-		if len(candidatePage.GetEntries()) == 0 {
-			return false
+	case nextBehaviorNormal:
+		currentIndex := c.getCurrentEntriesIndex()
+		if currentIndex+1 <= len(c.currentPage.GetEntries())-1 {
+			c.currentTupleKey = c.currentPage.GetEntries()[currentIndex+1].Key
+			return true
 		}
-		c.moveToPage(candidatePage)
-		return true
+		if hasRight, rpn := c.currentPage.GetRightPageNumber(); hasRight {
+			candidatePage := c.pager.GetPage(rpn)
+			if len(candidatePage.GetEntries()) == 0 {
+				return false
+			}
+			c.moveToPage(candidatePage)
+			return true
+		}
+		return false
+	default:
+		panic(fmt.Sprintf("unexpected next behavior %d", c.nextBehavior))
 	}
-	return false
 }
 
-// GotoNextPage advances the cursor to the next page and returns true. If there
+// gotoNextPage advances the cursor to the next page and returns true. If there
 // is no next page it will not advance and will return false
-func (c *Cursor) GotoNextPage() bool {
-	if c.currentRightPage == 0 {
+func (c *Cursor) gotoNextPage() bool {
+	hasRight, rightPageNumber := c.currentPage.GetRightPageNumber()
+	if !hasRight {
 		return false
 	}
-	np := c.pager.GetPage(c.currentRightPage)
+	np := c.pager.GetPage(rightPageNumber)
 	c.moveToPage(np)
 	return true
 }
 
 func (c *Cursor) moveToPage(p *pager.Page) {
-	c.currentPageEntries = p.GetEntries()
-	c.currentTupleIndex = 0
-	_, c.currentLeftPage = p.GetLeftPageNumber()
-	_, c.currentRightPage = p.GetRightPageNumber()
-	c.currentPageEntriesCount = p.GetRecordCount()
+	c.currentTupleKey = p.GetEntries()[0].Key
+	c.currentPage = p
 }
 
 // Count returns the count of the current b trees leaf node entries.
@@ -228,9 +301,9 @@ func (c *Cursor) Count() int {
 	if !hasValues {
 		return sum
 	}
-	sum += c.currentPageEntriesCount
-	for c.GotoNextPage() {
-		sum += c.currentPageEntriesCount
+	sum += len(c.currentPage.GetEntries())
+	for c.gotoNextPage() {
+		sum += len(c.currentPage.GetEntries())
 	}
 	return sum
 }

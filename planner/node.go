@@ -105,3 +105,6 @@ type insertNode struct {
 	// dimensional i.e. VALUES (v1, v2), (v3, v4) is [[v1, v2], [v3, v4]].
 	colValues [][]compiler.Expr
 }
+
+// updateNode represents an update operation
+type updateNode struct{}

@@ -567,6 +567,23 @@ func (c *InsertCmd) explain(addr int) []*string {
 	return formatExplain(addr, "Insert", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
 
+// DeleteCmd deletes the row that cursor P1 is pointing to. The cursor state
+// will be left in the "next" position meaning a call to Next will safely
+// execute. However, not calling next may have consequences since the cursor has
+// advanced to either an undefined position (in the case the cursor has reached
+// the end) or the next tuple.
+type DeleteCmd cmd
+
+func (c *DeleteCmd) execute(vm *vm, routine *routine) cmdRes {
+	routine.cursors[c.P1].DeleteCurrent()
+	return cmdRes{}
+}
+
+func (c *DeleteCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Delete row cursor %d is pointing to", c.P1)
+	return formatExplain(addr, "Delete", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
 // ParseSchemaCmd refreshes the catalog
 type ParseSchemaCmd cmd
 

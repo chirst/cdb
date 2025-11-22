@@ -61,6 +61,11 @@ type InsertStmt struct {
 	ColValues [][]Expr
 }
 
+type UpdateStmt struct {
+	*StmtBase
+	TableName string
+}
+
 type ExprVisitor interface {
 	VisitBinaryExpr(*BinaryExpr)
 	VisitUnaryExpr(*UnaryExpr)

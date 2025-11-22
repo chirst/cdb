@@ -70,6 +70,8 @@ const (
 	kwIf      = "IF"
 	kwNot     = "NOT"
 	kwExists  = "EXISTS"
+	kwUpdate  = "UPDATE"
+	kwSet     = "SET"
 )
 
 // keywords is a list of all keywords.
@@ -94,6 +96,8 @@ var keywords = []string{
 	kwIf,
 	kwNot,
 	kwExists,
+	kwUpdate,
+	kwSet,
 }
 
 // Operators where op is operator.

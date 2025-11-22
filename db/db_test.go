@@ -359,3 +359,14 @@ func TestPredicateExprs(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateStatement(t *testing.T) {
+	db := mustCreateDB(t)
+	mustExecute(t, db, "CREATE TABLE foo (id INTEGER PRIMARY KEY, a INTEGER, b INTEGER);")
+	mustExecute(t, db, "INSERT INTO foo (a, b) VALUES (1,2), (3,4), (5,6);")
+	mustExecute(t, db, "UPDATE foo SET b = 1;")
+	res := mustExecute(t, db, "SELECT b FROM foo WHERE b = 1;")
+	if len(res.ResultRows) != 3 {
+		t.Fatalf("expected all 3 rows to be 1")
+	}
+}

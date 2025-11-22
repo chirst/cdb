@@ -66,6 +66,8 @@ func (p *parser) parseStmt() (Stmt, error) {
 		return p.parseCreate(sb)
 	case kwInsert:
 		return p.parseInsert(sb)
+	case kwUpdate:
+		return p.parseUpdate(sb)
 	}
 	return nil, fmt.Errorf(tokenErr, t.value)
 }
@@ -395,6 +397,16 @@ func (p *parser) parseValue(stmt *InsertStmt, valueIdx int) (*InsertStmt, error)
 			return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 		}
 	}
+	return stmt, nil
+}
+
+func (p *parser) parseUpdate(sb *StmtBase) (*UpdateStmt, error) {
+	stmt := &UpdateStmt{StmtBase: sb}
+	tableName := p.nextNonSpace()
+	if tableName.tokenType != tkIdentifier {
+		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
+	}
+	stmt.TableName = tableName.value
 	return stmt, nil
 }
 

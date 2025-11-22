@@ -460,6 +460,54 @@ func TestParseInsert(t *testing.T) {
 	}
 }
 
+type updateTestCase struct {
+	tokens   []token
+	expected Stmt
+}
+
+func TestParseUpdate(t *testing.T) {
+	cases := []updateTestCase{
+		{
+			tokens: []token{
+				{tkKeyword, "UPDATE"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+				{tkWhitespace, " "},
+				{tkKeyword, "SET"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "age"},
+				{tkWhitespace, " "},
+				{tkOperator, "="},
+				{tkWhitespace, " "},
+				{tkNumeric, "30"},
+				{tkWhitespace, " "},
+				{tkKeyword, "WHERE"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "id"},
+				{tkWhitespace, " "},
+				{tkOperator, "="},
+				{tkWhitespace, " "},
+				{tkNumeric, "1"},
+			},
+			expected: &UpdateStmt{
+				StmtBase: &StmtBase{
+					Explain: false,
+				},
+				TableName: "foo",
+			},
+		},
+	}
+	for _, c := range cases {
+		ret, err := NewParser(c.tokens).Parse()
+		if err != nil {
+			t.Errorf("expected no err got err %s", err)
+		}
+		if !reflect.DeepEqual(ret, c.expected) {
+			t.Errorf("expected %#v got %#v", c.expected, ret)
+		}
+	}
+}
+
 type resultColumnTestCase struct {
 	name   string
 	tokens []token
