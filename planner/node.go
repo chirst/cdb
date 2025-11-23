@@ -107,4 +107,7 @@ type insertNode struct {
 }
 
 // updateNode represents an update operation
-type updateNode struct{}
+type updateNode struct {
+	// rootPage is the rootPage of the table the update is performed on.
+	rootPage int
+}
