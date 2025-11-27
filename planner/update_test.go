@@ -19,13 +19,36 @@ func (*mockUpdateCatalog) GetRootPageNumber(tableName string) (int, error) {
 	if tableName == "foo" {
 		return 2, nil
 	}
-	return -1, errors.New("err root page")
+	return -1, errors.New("err mock catalog root page")
+}
+
+func (*mockUpdateCatalog) GetColumns(tableName string) ([]string, error) {
+	if tableName == "foo" {
+		return []string{
+			"id",
+			"age",
+			"lucky_number",
+		}, nil
+	}
+	return nil, errors.New("err mock catalog columns")
+}
+
+func (*mockUpdateCatalog) GetPrimaryKeyColumn(tableName string) (string, error) {
+	if tableName == "foo" {
+		return "id", nil
+	}
+	return "", errors.New("err mock catalog pk")
 }
 
 func TestUpdate(t *testing.T) {
 	ast := &compiler.UpdateStmt{
 		StmtBase:  &compiler.StmtBase{},
 		TableName: "foo",
+		SetList: map[string]compiler.Expr{
+			"lucky_number": &compiler.IntLit{
+				Value: 1,
+			},
+		},
 	}
 	expectedCommands := []vm.Command{
 		&vm.InitCmd{P2: 1},

@@ -401,12 +401,38 @@ func (p *parser) parseValue(stmt *InsertStmt, valueIdx int) (*InsertStmt, error)
 }
 
 func (p *parser) parseUpdate(sb *StmtBase) (*UpdateStmt, error) {
-	stmt := &UpdateStmt{StmtBase: sb}
+	stmt := &UpdateStmt{
+		StmtBase: sb,
+		SetList:  make(map[string]Expr),
+	}
 	tableName := p.nextNonSpace()
 	if tableName.tokenType != tkIdentifier {
 		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
 	stmt.TableName = tableName.value
+	set := p.nextNonSpace()
+	for {
+		if set.value != kwSet {
+			return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
+		}
+		colName := p.nextNonSpace()
+		if colName.tokenType != tkIdentifier {
+			return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
+		}
+		eqSign := p.nextNonSpace()
+		if eqSign.value != OpEq {
+			return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
+		}
+		exp, err := p.parseExpression(0)
+		if err != nil {
+			return nil, err
+		}
+		stmt.SetList[colName.value] = exp
+		if p.peekNextNonSpace().value != "," {
+			break
+		}
+		p.nextNonSpace()
+	}
 	return stmt, nil
 }
 

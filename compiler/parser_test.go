@@ -494,6 +494,41 @@ func TestParseUpdate(t *testing.T) {
 					Explain: false,
 				},
 				TableName: "foo",
+				SetList: map[string]Expr{
+					"age": &IntLit{Value: 30},
+				},
+			},
+		},
+		{
+			tokens: []token{
+				{tkKeyword, "UPDATE"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+				{tkWhitespace, " "},
+				{tkKeyword, "SET"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "age"},
+				{tkWhitespace, " "},
+				{tkOperator, "="},
+				{tkWhitespace, " "},
+				{tkNumeric, "30"},
+				{tkSeparator, ","},
+				{tkWhitespace, " "},
+				{tkIdentifier, "name"},
+				{tkWhitespace, " "},
+				{tkOperator, "="},
+				{tkWhitespace, " "},
+				{tkLiteral, "gud name"},
+			},
+			expected: &UpdateStmt{
+				StmtBase: &StmtBase{
+					Explain: false,
+				},
+				TableName: "foo",
+				SetList: map[string]Expr{
+					"age":  &IntLit{Value: 30},
+					"name": &StringLit{Value: "gud name"},
+				},
 			},
 		},
 	}

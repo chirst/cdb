@@ -9,4 +9,5 @@ var (
 	errTableNotExist       = errors.New("table does not exist")
 	errValuesNotMatch      = errors.New("values list did not match columns list")
 	errMissingColumnName   = errors.New("missing column")
+	errSetColumnNotExist   = errors.New("set column not part of table")
 )

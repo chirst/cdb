@@ -64,6 +64,9 @@ type InsertStmt struct {
 type UpdateStmt struct {
 	*StmtBase
 	TableName string
+	// SetList is a mapping of column names to the expressions the column should
+	// be updated to.
+	SetList map[string]Expr
 }
 
 type ExprVisitor interface {
