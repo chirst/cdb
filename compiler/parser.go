@@ -440,7 +440,7 @@ func (p *parser) parseUpdate(sb *StmtBase) (*UpdateStmt, error) {
 			return nil, err
 		}
 		stmt.Predicate = whereExp
-	} else if where.tokenType != tkEOF {
+	} else if where.tokenType != tkEOF && where.value != ";" {
 		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
 	return stmt, nil
