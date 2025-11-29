@@ -433,6 +433,16 @@ func (p *parser) parseUpdate(sb *StmtBase) (*UpdateStmt, error) {
 		}
 		p.nextNonSpace()
 	}
+	where := p.nextNonSpace()
+	if where.value == kwWhere {
+		whereExp, err := p.parseExpression(0)
+		if err != nil {
+			return nil, err
+		}
+		stmt.Predicate = whereExp
+	} else if where.tokenType != tkEOF {
+		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
+	}
 	return stmt, nil
 }
 

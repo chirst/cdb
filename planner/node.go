@@ -116,4 +116,6 @@ type updateNode struct {
 	// simply be a columnRef. Note the ordering is important of these
 	// expressions because they have to make the record.
 	recordExprs []compiler.Expr
+	// predicate is the where clause or nil
+	predicate compiler.Expr
 }

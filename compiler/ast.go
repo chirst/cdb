@@ -67,6 +67,8 @@ type UpdateStmt struct {
 	// SetList is a mapping of column names to the expressions the column should
 	// be updated to.
 	SetList map[string]Expr
+	// Predicate is the where clause. It may be nil when there is no where.
+	Predicate Expr
 }
 
 type ExprVisitor interface {

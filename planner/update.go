@@ -90,6 +90,10 @@ func (p *updateQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 		return nil, err
 	}
 
+	if err := p.includeUpdate(); err != nil {
+		return nil, err
+	}
+
 	return &QueryPlan{
 		ExplainQueryPlan: p.stmt.ExplainQueryPlan,
 		root:             updateNode,
@@ -178,6 +182,37 @@ func (p *updateQueryPlanner) errIfSetExprNotSupported() error {
 	return nil
 }
 
+func (p *updateQueryPlanner) includeUpdate() error {
+	if p.stmt.Predicate == nil {
+		return nil
+	}
+	p.queryPlan.predicate = p.stmt.Predicate
+	t, ok := p.queryPlan.predicate.(*compiler.BinaryExpr)
+	supportErr := errors.New("only pk update supported in where clause")
+	if !ok {
+		return supportErr
+	}
+	l, ok := t.Left.(*compiler.ColumnRef)
+	if !ok {
+		return supportErr
+	}
+	pkColName, err := p.catalog.GetPrimaryKeyColumn(p.stmt.TableName)
+	if err != nil {
+		return err
+	}
+	if l.Column != pkColName {
+		return supportErr
+	}
+	_, ok = t.Right.(*compiler.IntLit)
+	if !ok {
+		return supportErr
+	}
+	if t.Operator != compiler.OpEq {
+		return supportErr
+	}
+	return nil
+}
+
 // Execution plan is a byte code routine based off a high level query plan.
 func (p *updatePlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
 	if p.queryPlanner.queryPlan == nil {
@@ -204,6 +239,25 @@ func (p *updateExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 
 	// Loop
 	loopStartAddress := len(p.executionPlan.Commands)
+
+	// If needed, include jump for if.
+	var notEqCmd *vm.NotEqualCmd
+	if p.queryPlan.predicate != nil {
+		p.executionPlan.Append(&vm.RowIdCmd{P1: cursorId, P2: freeRegisterCounter})
+		freeRegisterCounter += 1
+		// No ok checks because done in logical plan.
+		pe := p.queryPlan.predicate.(*compiler.BinaryExpr)
+		r := pe.Right.(*compiler.IntLit)
+		p.executionPlan.Append(&vm.IntegerCmd{P1: r.Value, P2: freeRegisterCounter})
+		freeRegisterCounter += 1
+		notEqCmd = &vm.NotEqualCmd{
+			P1: freeRegisterCounter - 2,
+			P2: -1, // deferred
+			P3: freeRegisterCounter - 1,
+		}
+		p.executionPlan.Append(notEqCmd)
+	}
+
 	// take each item in the set list and build to make a record
 	loopStartRegister := freeRegisterCounter
 	var pkRegister int
@@ -250,6 +304,9 @@ func (p *updateExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 		P3: pkRegister,
 	})
 	p.executionPlan.Append(&vm.NextCmd{P1: cursorId, P2: loopStartAddress})
+	if notEqCmd != nil {
+		notEqCmd.P2 = len(p.executionPlan.Commands) - 1
+	}
 
 	// End
 	p.executionPlan.Append(&vm.HaltCmd{})
