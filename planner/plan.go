@@ -153,6 +153,10 @@ func (i *insertNode) print() string {
 	return "insert"
 }
 
+func (u *updateNode) print() string {
+	return "update"
+}
+
 func (p *projectNode) children() []logicalNode {
 	return []logicalNode{p.child}
 }
@@ -178,5 +182,9 @@ func (c *createNode) children() []logicalNode {
 }
 
 func (i *insertNode) children() []logicalNode {
+	return []logicalNode{}
+}
+
+func (u *updateNode) children() []logicalNode {
 	return []logicalNode{}
 }

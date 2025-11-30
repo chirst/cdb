@@ -66,6 +66,8 @@ func (p *parser) parseStmt() (Stmt, error) {
 		return p.parseCreate(sb)
 	case kwInsert:
 		return p.parseInsert(sb)
+	case kwUpdate:
+		return p.parseUpdate(sb)
 	}
 	return nil, fmt.Errorf(tokenErr, t.value)
 }
@@ -394,6 +396,52 @@ func (p *parser) parseValue(stmt *InsertStmt, valueIdx int) (*InsertStmt, error)
 			}
 			return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 		}
+	}
+	return stmt, nil
+}
+
+func (p *parser) parseUpdate(sb *StmtBase) (*UpdateStmt, error) {
+	stmt := &UpdateStmt{
+		StmtBase: sb,
+		SetList:  make(map[string]Expr),
+	}
+	tableName := p.nextNonSpace()
+	if tableName.tokenType != tkIdentifier {
+		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
+	}
+	stmt.TableName = tableName.value
+	set := p.nextNonSpace()
+	for {
+		if set.value != kwSet {
+			return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
+		}
+		colName := p.nextNonSpace()
+		if colName.tokenType != tkIdentifier {
+			return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
+		}
+		eqSign := p.nextNonSpace()
+		if eqSign.value != OpEq {
+			return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
+		}
+		exp, err := p.parseExpression(0)
+		if err != nil {
+			return nil, err
+		}
+		stmt.SetList[colName.value] = exp
+		if p.peekNextNonSpace().value != "," {
+			break
+		}
+		p.nextNonSpace()
+	}
+	where := p.nextNonSpace()
+	if where.value == kwWhere {
+		whereExp, err := p.parseExpression(0)
+		if err != nil {
+			return nil, err
+		}
+		stmt.Predicate = whereExp
+	} else if where.tokenType != tkEOF && where.value != ";" {
+		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
 	}
 	return stmt, nil
 }

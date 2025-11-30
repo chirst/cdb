@@ -121,6 +121,8 @@ type Pager struct {
 	isWriting bool
 	// dirtyPages is a list of pages that need to be flushed to disk in order
 	// for a write to be considered complete.
+	// TODO dirtyPages will eventually stack up. Need to have a mechanism to
+	// flush them once they reach a certain limit.
 	dirtyPages []*Page
 	// pageCache caches frequently used pages to reduce expensive reads from
 	// the filesystem.
@@ -240,7 +242,7 @@ func (p *Pager) EndWrite() error {
 		return err
 	}
 	for _, fp := range p.dirtyPages {
-		p.WritePage(fp)
+		p.writePage(fp)
 		p.pageCache.Remove(fp.GetNumber())
 	}
 	p.dirtyPages = []*Page{}
@@ -296,8 +298,8 @@ func (p *Pager) GetPage(pageNumber int) *Page {
 	return ap
 }
 
-// Write page writes the page to storage.
-func (p *Pager) WritePage(page *Page) error {
+// writePage writes the page to storage.
+func (p *Pager) writePage(page *Page) error {
 	// Page number subtracted by one since 0 is reserved as a pointer to nothing
 	pn := page.GetNumber() - 1
 	pns := pn * pageSize

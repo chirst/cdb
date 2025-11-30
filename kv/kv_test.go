@@ -6,6 +6,14 @@ import (
 	"testing"
 )
 
+func mustNewKv() *KV {
+	kv, err := New(true, "")
+	if err != nil {
+		log.Fatal(err)
+	}
+	return kv
+}
+
 func mustNewCursor(root int) (*KV, *Cursor) {
 	kv, err := New(true, "")
 	if err != nil {
@@ -125,4 +133,130 @@ func TestBulkInsertAndGet(t *testing.T) {
 	if rrvi != rightProbe {
 		t.Fatalf("want right to be %d got %d", rightProbe, rrv)
 	}
+}
+
+func TestUpdateLoop(t *testing.T) {
+	kv := mustNewKv()
+
+	// Seed values 1, 2, 3.
+	c := kv.NewCursor(2)
+	kv.BeginWriteTransaction()
+	for i := range 3 {
+		k, err := EncodeKey(i + 1)
+		if err != nil {
+			t.Fatalf("failed encoding key %s", err)
+		}
+		v, err := Encode([]any{i + 1})
+		if err != nil {
+			t.Fatalf("failed encoding value %s", err)
+		}
+		c.Set(k, v)
+	}
+	kv.EndWriteTransaction()
+
+	// Increment values by one with the cursor.
+	c = kv.NewCursor(2)
+	kv.BeginWriteTransaction()
+	c.GotoFirstRecord()
+	for i := range 3 {
+		k, err := EncodeKey(i + 1)
+		if err != nil {
+			t.Fatalf("failed encoding key %s", err)
+		}
+		v, err := Encode([]any{i + 2})
+		if err != nil {
+			t.Fatalf("failed encoding value %s", err)
+		}
+		c.DeleteCurrent()
+		c.Set(k, v)
+		c.GotoNext()
+	}
+	kv.EndWriteTransaction()
+
+	// Check values
+	c = kv.NewCursor(2)
+	kv.BeginReadTransaction()
+	c.GotoFirstRecord()
+	for i := range 3 {
+		v, err := Decode(c.GetValue())
+		if err != nil {
+			t.Fatalf("failed to decode value %s", err)
+		}
+		vi, ok := v[0].(int)
+		if !ok {
+			t.Fatal("vi is not int")
+		}
+		if vi != i+2 {
+			t.Fatalf("vi should be %d but got %d", i+2, vi)
+		}
+		c.GotoNext()
+	}
+	kv.EndReadTransaction()
+}
+
+func TestUpdateLoopWithIf(t *testing.T) {
+	kv := mustNewKv()
+
+	// Seed values 1, 2, 3.
+	c := kv.NewCursor(2)
+	kv.BeginWriteTransaction()
+	for i := range 3 {
+		k, err := EncodeKey(i + 1)
+		if err != nil {
+			t.Fatalf("failed encoding key %s", err)
+		}
+		v, err := Encode([]any{i + 1})
+		if err != nil {
+			t.Fatalf("failed encoding value %s", err)
+		}
+		c.Set(k, v)
+	}
+	kv.EndWriteTransaction()
+
+	// Increment values by one except for second value with the cursor.
+	c = kv.NewCursor(2)
+	kv.BeginWriteTransaction()
+	c.GotoFirstRecord()
+	for i := range 3 {
+		k, err := EncodeKey(i + 1)
+		if err != nil {
+			t.Fatalf("failed encoding key %s", err)
+		}
+		v, err := Encode([]any{i + 2})
+		if err != nil {
+			t.Fatalf("failed encoding value %s", err)
+		}
+		if i != 2 {
+			c.DeleteCurrent()
+			c.Set(k, v)
+		}
+		c.GotoNext()
+	}
+	kv.EndWriteTransaction()
+
+	// Check values
+	c = kv.NewCursor(2)
+	kv.BeginReadTransaction()
+	c.GotoFirstRecord()
+	for i := range 3 {
+		v, err := Decode(c.GetValue())
+		if err != nil {
+			t.Fatalf("failed to decode value %s", err)
+		}
+		vi, ok := v[0].(int)
+		if !ok {
+			t.Fatal("vi is not int")
+		}
+		if i == 2 {
+			if vi != i+1 {
+				t.Fatalf("vi should be %d but got %d", i+1, vi)
+			}
+		} else {
+			if vi != i+2 {
+				t.Fatalf("vi should be %d but got %d", i+2, vi)
+			}
+		}
+		c.GotoNext()
+	}
+	kv.EndReadTransaction()
 }

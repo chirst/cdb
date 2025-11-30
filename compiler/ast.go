@@ -61,6 +61,16 @@ type InsertStmt struct {
 	ColValues [][]Expr
 }
 
+type UpdateStmt struct {
+	*StmtBase
+	TableName string
+	// SetList is a mapping of column names to the expressions the column should
+	// be updated to.
+	SetList map[string]Expr
+	// Predicate is the where clause. It may be nil when there is no where.
+	Predicate Expr
+}
+
 type ExprVisitor interface {
 	VisitBinaryExpr(*BinaryExpr)
 	VisitUnaryExpr(*UnaryExpr)

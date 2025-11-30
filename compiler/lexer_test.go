@@ -456,6 +456,43 @@ func TestLexInsert(t *testing.T) {
 	}
 }
 
+func TestLexUpdate(t *testing.T) {
+	cases := []tc{
+		{
+			sql: "UPDATE foo SET age = 30 WHERE id = 1",
+			expected: []token{
+				{tkKeyword, "UPDATE"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+				{tkWhitespace, " "},
+				{tkKeyword, "SET"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "age"},
+				{tkWhitespace, " "},
+				{tkOperator, "="},
+				{tkWhitespace, " "},
+				{tkNumeric, "30"},
+				{tkWhitespace, " "},
+				{tkKeyword, "WHERE"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "id"},
+				{tkWhitespace, " "},
+				{tkOperator, "="},
+				{tkWhitespace, " "},
+				{tkNumeric, "1"},
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.sql, func(t *testing.T) {
+			ret := NewLexer(c.sql).Lex()
+			if !reflect.DeepEqual(ret, c.expected) {
+				t.Errorf("expected %#v got %#v", c.expected, ret)
+			}
+		})
+	}
+}
+
 func TestToStatements(t *testing.T) {
 	type testCase struct {
 		src         string
