@@ -472,6 +472,20 @@ func (c *NextCmd) explain(addr int) []*string {
 	return formatExplain(addr, "Next", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
 
+// GotoCmd jumps to address P2
+type GotoCmd cmd
+
+func (c *GotoCmd) execute(vm *vm, routine *routine) cmdRes {
+	return cmdRes{
+		nextAddress: c.P2,
+	}
+}
+
+func (c *GotoCmd) explain(addr int) []*string {
+	comment := fmt.Sprintf("Goto to addr[%d]", c.P2)
+	return formatExplain(addr, "Goto", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
 // MakeRecordCmd makes a byte array record for registers P1 through P1+P2-1 and
 // stores the record in register P3.
 type MakeRecordCmd cmd
