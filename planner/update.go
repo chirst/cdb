@@ -2,6 +2,7 @@ package planner
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 
 	"github.com/chirst/cdb/compiler"
@@ -312,4 +313,232 @@ func (p *updateExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 	p.executionPlan.Append(&vm.HaltCmd{})
 	rewindCmd.P2 = len(p.executionPlan.Commands) - 1
 	return p.executionPlan, nil
+}
+
+// CREATE TABLE table (? INTEGER PRIMARY KEY, ? INTEGER, ? TEXT)
+//
+// - create
+
+// SELECT * FROM table
+// WHERE ? = ?
+//
+// - project
+//   - filter
+//     - scan
+
+// SELECT constant
+// WHERE ? = ?
+//
+// - project
+//	 - filter
+// 	   - constant
+
+// SELECT COUNT(*) FROM table
+//
+// - count (similar to scan and breaks rule and no project)
+
+// INSERT INTO table (?, ?) VALUES (?, ?)
+//
+// - insert
+//   - constant?
+
+// UPDATE TABLE table
+// SET ? = ?
+// WHERE ? = ?
+//
+// - update
+//   - filter
+//     - scan
+
+func generateUpdate() {
+	logicalPlan := &planV2{
+		commands:        []vm.Command{},
+		constInts:       make(map[int]int),
+		constStrings:    make(map[string]int),
+		freeRegister:    1,
+		transactionType: 2,
+		cursorId:        1,
+	}
+	un := &updateNodeV2{
+		plan: logicalPlan,
+	}
+	fn := &filterNodeV2{
+		plan: logicalPlan,
+	}
+	fn.parent = un
+	un.child = fn
+	sn := &scanNodeV2{
+		plan: logicalPlan,
+	}
+	sn.parent = fn
+	fn.child = sn
+	logicalPlan.root = un
+	logicalPlan.compile()
+	for i := range logicalPlan.commands {
+		fmt.Printf("%d %#v\n", i+1, logicalPlan.commands[i])
+	}
+}
+
+type planV2 struct {
+	root            nodeV2
+	commands        []vm.Command
+	constInts       map[int]int    // int to register
+	constStrings    map[string]int // string to register
+	freeRegister    int
+	transactionType int // 0 none, 1 read, 2 write
+	cursorId        int
+}
+
+// declareConstInt gets or sets a register with the const value and returns the
+// register. It is guaranteed the value will be in the register for the duration
+// of the plan.
+func (p *planV2) declareConstInt(i int) int {
+	_, ok := p.constInts[i]
+	if !ok {
+		p.constInts[i] = p.freeRegister
+		p.freeRegister += 1
+	}
+	return p.constInts[i]
+}
+
+// declareConstString gets or sets a register with the const value and returns
+// the register. It is guaranteed the value will be in the register for the
+// duration of the plan.
+func (p *planV2) declareConstString(s string) int {
+	_, ok := p.constStrings[s]
+	if !ok {
+		p.constStrings[s] = p.freeRegister
+		p.freeRegister += 1
+	}
+	return p.constStrings[s]
+}
+
+func (p *planV2) compile() {
+	initCmd := &vm.InitCmd{}
+	p.commands = append(p.commands, initCmd)
+	p.root.produce()
+	p.commands = append(p.commands, &vm.HaltCmd{})
+	initCmd.P2 = len(p.commands) + 1
+	p.pushTransaction()
+	p.pushConstants()
+	p.commands = append(p.commands, &vm.GotoCmd{P1: 2})
+}
+
+func (p *planV2) pushTransaction() {
+	switch p.transactionType {
+	case 0:
+		return
+	case 1:
+		p.commands = append(p.commands, &vm.TransactionCmd{P2: 1})
+	case 2:
+		p.commands = append(p.commands, &vm.TransactionCmd{P2: 2})
+	default:
+		panic("unexpected transaction type")
+	}
+}
+
+func (p *planV2) pushConstants() {
+	for v := range p.constInts {
+		p.commands = append(p.commands, &vm.IntegerCmd{P1: v, P2: p.constInts[v]})
+	}
+	for v := range p.constStrings {
+		p.commands = append(p.commands, &vm.StringCmd{P1: p.constStrings[v], P4: v})
+	}
+}
+
+type nodeV2 interface {
+	produce()
+	consume()
+}
+
+type updateNodeV2 struct {
+	child nodeV2
+	plan  *planV2
+}
+
+func (u *updateNodeV2) produce() {
+	u.child.produce()
+}
+
+func (u *updateNodeV2) consume() {
+	startRecordRegister := u.plan.freeRegister
+	u.plan.commands = append(u.plan.commands, &vm.RowIdCmd{
+		P1: u.plan.cursorId,
+		P2: u.plan.freeRegister,
+	})
+	rowIdRegister := u.plan.freeRegister
+	u.plan.freeRegister += 1
+	u.plan.commands = append(u.plan.commands, &vm.CopyCmd{
+		P1: u.plan.declareConstInt(1),
+		P2: u.plan.freeRegister,
+	})
+	u.plan.freeRegister += 1
+	u.plan.commands = append(u.plan.commands, &vm.ColumnCmd{
+		P1: u.plan.cursorId,
+		P2: 0,
+		P3: u.plan.freeRegister,
+	})
+	endRecordRegister := u.plan.freeRegister
+	u.plan.freeRegister += 1
+	u.plan.commands = append(u.plan.commands, &vm.MakeRecordCmd{
+		P1: startRecordRegister,
+		P2: endRecordRegister,
+		P3: u.plan.freeRegister,
+	})
+	recordRegister := u.plan.freeRegister
+	u.plan.freeRegister += 1
+	u.plan.commands = append(u.plan.commands, &vm.DeleteCmd{
+		P1: u.plan.cursorId,
+	})
+	u.plan.commands = append(u.plan.commands, &vm.InsertCmd{
+		P1: u.plan.cursorId,
+		P2: recordRegister,
+		P3: rowIdRegister,
+	})
+}
+
+type filterNodeV2 struct {
+	child  nodeV2
+	parent nodeV2
+	plan   *planV2
+}
+
+func (f *filterNodeV2) produce() {
+	f.child.produce()
+}
+
+func (f *filterNodeV2) consume() {
+	f.plan.commands = append(f.plan.commands, &vm.ColumnCmd{
+		P1: f.plan.cursorId,
+		P2: 1,
+		P3: f.plan.freeRegister,
+	})
+	notEqualCmd := &vm.NotEqualCmd{
+		P1: f.plan.freeRegister,
+		P3: f.plan.declareConstInt(1),
+	}
+	f.plan.commands = append(f.plan.commands, notEqualCmd)
+	f.parent.consume()
+	notEqualCmd.P2 = len(f.plan.commands) + 1
+}
+
+type scanNodeV2 struct {
+	parent nodeV2
+	plan   *planV2
+}
+
+func (s *scanNodeV2) produce() {
+	s.consume()
+}
+
+func (s *scanNodeV2) consume() {
+	rewindCmd := &vm.RewindCmd{P1: s.plan.cursorId}
+	s.plan.commands = append(s.plan.commands, rewindCmd)
+	loopBeginAddress := len(s.plan.commands) + 1
+	s.parent.consume()
+	s.plan.commands = append(s.plan.commands, &vm.NextCmd{
+		P1: s.plan.cursorId,
+		P2: loopBeginAddress,
+	})
+	rewindCmd.P2 = len(s.plan.commands) + 1
 }

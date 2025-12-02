@@ -123,3 +123,7 @@ func TestUpdateWithWhere(t *testing.T) {
 		}
 	}
 }
+
+func TestFoo(t *testing.T) {
+	generateUpdate()
+}
