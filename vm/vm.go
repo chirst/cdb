@@ -45,6 +45,11 @@ type Command interface {
 	explain(addr int) []*string
 }
 
+// JumpCommand is a command capable of jumping
+type JumpCommand interface {
+	SetJumpAddress(address int)
+}
+
 type cmdRes struct {
 	doHalt      bool
 	nextAddress int
@@ -851,6 +856,10 @@ func (c *NotEqualCmd) explain(addr int) []*string {
 	return formatExplain(addr, "NotEqual", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
 
+func (c *NotEqualCmd) SetJumpAddress(address int) {
+	c.P2 = address
+}
+
 // IfNotCmd jumps to P2 if P1 is false otherwise fall through.
 type IfNotCmd cmd
 
@@ -868,6 +877,10 @@ func (c *IfNotCmd) execute(vm *vm, routine *routine) cmdRes {
 func (c *IfNotCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Jump to address %d if register[%d] is false", c.P2, c.P1)
 	return formatExplain(addr, "IfNot", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
+func (c *IfNotCmd) SetJumpAddress(address int) {
+	c.P2 = address
 }
 
 // GteCmd if P1 is greater than or equal to P3 jump to P2
@@ -909,6 +922,10 @@ func (c *GteCmd) explain(addr int) []*string {
 	return formatExplain(addr, "Gte", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
 
+func (c *GteCmd) SetJumpAddress(address int) {
+	c.P2 = address
+}
+
 // LteCmd if P1 is less than or equal to P3 jump to P2
 type LteCmd cmd
 
@@ -946,6 +963,10 @@ func (c *LteCmd) execute(vm *vm, routine *routine) cmdRes {
 func (c *LteCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Jump to address %d if register[%d] >= register[%d]", c.P2, c.P1, c.P3)
 	return formatExplain(addr, "Lte", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
+func (c *LteCmd) SetJumpAddress(address int) {
+	c.P2 = address
 }
 
 // VariableCmd substitutes variable number P1 into register P2. Where P1 is a
