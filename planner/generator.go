@@ -46,39 +46,15 @@ type planV2 struct {
 	rootPageNumber int
 }
 
-func generateUpdate() {
-	logicalPlan := &planV2{
+func newPlan(transactionType transactionType, rootPageNumber int) *planV2 {
+	return &planV2{
 		commands:        []vm.Command{},
 		constInts:       make(map[int]int),
 		constStrings:    make(map[string]int),
 		freeRegister:    1,
-		transactionType: transactionTypeWrite,
+		transactionType: transactionType,
 		cursorId:        1,
-	}
-	un := &updateNodeV2{
-		plan: logicalPlan,
-		updateExprs: []compiler.Expr{
-			&compiler.ColumnRef{
-				IsPrimaryKey: false,
-				ColIdx:       0,
-			},
-		},
-	}
-	fn := &filterNodeV2{
-		plan:      logicalPlan,
-		predicate: &compiler.IntLit{Value: 277},
-	}
-	fn.parent = un
-	un.child = fn
-	sn := &scanNodeV2{
-		plan: logicalPlan,
-	}
-	sn.parent = fn
-	fn.child = sn
-	logicalPlan.root = un
-	logicalPlan.compile()
-	for i := range logicalPlan.commands {
-		fmt.Printf("%d %#v\n", i+1, logicalPlan.commands[i])
+		rootPageNumber:  rootPageNumber,
 	}
 }
 
@@ -152,10 +128,10 @@ func (p *planV2) compile() {
 	p.commands = append(p.commands, initCmd)
 	p.root.produce()
 	p.commands = append(p.commands, &vm.HaltCmd{})
-	initCmd.P2 = len(p.commands) + 1
+	initCmd.P2 = len(p.commands)
 	p.pushTransaction()
 	p.pushConstants()
-	p.commands = append(p.commands, &vm.GotoCmd{P1: 2})
+	p.commands = append(p.commands, &vm.GotoCmd{P2: 1})
 }
 
 func (p *planV2) pushTransaction() {
@@ -165,7 +141,7 @@ func (p *planV2) pushTransaction() {
 	case transactionTypeRead:
 		p.commands = append(
 			p.commands,
-			&vm.TransactionCmd{P2: int(p.transactionType)},
+			&vm.TransactionCmd{P2: 0},
 		)
 		p.commands = append(
 			p.commands,
@@ -174,7 +150,7 @@ func (p *planV2) pushTransaction() {
 	case transactionTypeWrite:
 		p.commands = append(
 			p.commands,
-			&vm.TransactionCmd{P2: int(p.transactionType)},
+			&vm.TransactionCmd{P2: 1},
 		)
 		p.commands = append(
 			p.commands,
@@ -235,16 +211,15 @@ func (u *updateNodeV2) consume() {
 	// will be used in makeRecord.
 	startRecordRegister := u.plan.freeRegister
 	u.plan.freeRegister += len(u.updateExprs)
-	endRecordRegister := u.plan.freeRegister
-	for _, e := range u.updateExprs {
-		generateExpressionTo(u.plan, e, startRecordRegister)
-		startRecordRegister += 1
+	recordRegisterCount := len(u.updateExprs)
+	for i, e := range u.updateExprs {
+		generateExpressionTo(u.plan, e, startRecordRegister+i)
 	}
 
 	// Make the record for inserting
 	u.plan.commands = append(u.plan.commands, &vm.MakeRecordCmd{
 		P1: startRecordRegister,
-		P2: endRecordRegister,
+		P2: recordRegisterCount,
 		P3: u.plan.freeRegister,
 	})
 	recordRegister := u.plan.freeRegister
@@ -273,13 +248,9 @@ func (f *filterNodeV2) produce() {
 }
 
 func (f *filterNodeV2) consume() {
-	if f.predicate == nil {
-		f.parent.consume()
-		return
-	}
 	jumpCommand := generatePredicate(f.plan, f.predicate)
 	f.parent.consume()
-	jumpCommand.SetJumpAddress(len(f.plan.commands) + 1)
+	jumpCommand.SetJumpAddress(len(f.plan.commands))
 }
 
 type scanNodeV2 struct {
@@ -294,13 +265,13 @@ func (s *scanNodeV2) produce() {
 func (s *scanNodeV2) consume() {
 	rewindCmd := &vm.RewindCmd{P1: s.plan.cursorId}
 	s.plan.commands = append(s.plan.commands, rewindCmd)
-	loopBeginAddress := len(s.plan.commands) + 1
+	loopBeginAddress := len(s.plan.commands)
 	s.parent.consume()
 	s.plan.commands = append(s.plan.commands, &vm.NextCmd{
 		P1: s.plan.cursorId,
 		P2: loopBeginAddress,
 	})
-	rewindCmd.P2 = len(s.plan.commands) + 1
+	rewindCmd.P2 = len(s.plan.commands)
 }
 
 type projectNodeV2 struct {

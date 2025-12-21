@@ -2,9 +2,11 @@ package planner
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 
+	"github.com/chirst/cdb/catalog"
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
 )
@@ -40,6 +42,32 @@ func (*mockUpdateCatalog) GetPrimaryKeyColumn(tableName string) (string, error) 
 	return "", errors.New("err mock catalog pk")
 }
 
+func (mockUpdateCatalog) GetColumnType(tableName string, columnName string) (catalog.CdbType, error) {
+	return catalog.CdbType{ID: catalog.CTInt}, nil
+}
+
+func assertCommandsMatch(t *testing.T, gotCommands, expectedCommands []vm.Command) {
+	didMatch := true
+	errOutput := "\n"
+	for i, c := range expectedCommands {
+		green := "\033[32m"
+		red := "\033[31m"
+		resetColor := "\033[0m"
+		color := green
+		if !reflect.DeepEqual(c, gotCommands[i]) {
+			didMatch = false
+			color = red
+		}
+		errOutput += fmt.Sprintf(
+			"%s%3d got  %#v%s\n    want %#v\n\n",
+			color, i, gotCommands[i], resetColor, c,
+		)
+	}
+	if !didMatch {
+		t.Error(errOutput)
+	}
+}
+
 func TestUpdate(t *testing.T) {
 	ast := &compiler.UpdateStmt{
 		StmtBase:  &compiler.StmtBase{},
@@ -51,29 +79,27 @@ func TestUpdate(t *testing.T) {
 		},
 	}
 	expectedCommands := []vm.Command{
-		&vm.InitCmd{P2: 1},
-		&vm.TransactionCmd{P2: 1},
-		&vm.OpenWriteCmd{P1: 1, P2: 2},
-		&vm.RewindCmd{P1: 1, P2: 11},
+		&vm.InitCmd{P2: 10},
+		&vm.RewindCmd{P1: 1, P2: 9},
 		&vm.RowIdCmd{P1: 1, P2: 1},
 		&vm.ColumnCmd{P1: 1, P2: 0, P3: 2},
-		&vm.IntegerCmd{P1: 1, P2: 3},
-		&vm.MakeRecordCmd{P1: 2, P2: 2, P3: 4},
+		&vm.CopyCmd{P1: 4, P2: 3},
+		&vm.MakeRecordCmd{P1: 2, P2: 2, P3: 5},
 		&vm.DeleteCmd{P1: 1},
-		&vm.InsertCmd{P1: 1, P2: 4, P3: 1},
-		&vm.NextCmd{P1: 1, P2: 4},
+		&vm.InsertCmd{P1: 1, P2: 5, P3: 1},
+		&vm.NextCmd{P1: 1, P2: 2},
 		&vm.HaltCmd{},
+		&vm.TransactionCmd{P2: 1},
+		&vm.OpenWriteCmd{P1: 1, P2: 2},
+		&vm.IntegerCmd{P1: 1, P2: 4},
+		&vm.GotoCmd{P2: 1},
 	}
 	mockCatalog := &mockUpdateCatalog{}
 	plan, err := NewUpdate(mockCatalog, ast).ExecutionPlan()
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
-	for i, c := range expectedCommands {
-		if !reflect.DeepEqual(c, plan.Commands[i]) {
-			t.Errorf("got %#v want %#v", plan.Commands[i], c)
-		}
-	}
+	assertCommandsMatch(t, plan.Commands, expectedCommands)
 }
 
 func TestUpdateWithWhere(t *testing.T) {
@@ -87,7 +113,8 @@ func TestUpdateWithWhere(t *testing.T) {
 		},
 		Predicate: &compiler.BinaryExpr{
 			Left: &compiler.ColumnRef{
-				Column: "id",
+				Column:       "id",
+				IsPrimaryKey: true,
 			},
 			Operator: compiler.OpEq,
 			Right: &compiler.IntLit{
@@ -96,35 +123,27 @@ func TestUpdateWithWhere(t *testing.T) {
 		},
 	}
 	expectedCommands := []vm.Command{
-		&vm.InitCmd{P2: 1},
+		&vm.InitCmd{P2: 12},
+		&vm.RewindCmd{P1: 1, P2: 11},
+		&vm.RowIdCmd{P1: 1, P2: 1},
+		&vm.NotEqualCmd{P1: 1, P2: 10, P3: 2},
+		&vm.RowIdCmd{P1: 1, P2: 4},
+		&vm.ColumnCmd{P1: 1, P2: 0, P3: 5},
+		&vm.CopyCmd{P1: 2, P2: 6},
+		&vm.MakeRecordCmd{P1: 5, P2: 2, P3: 7},
+		&vm.DeleteCmd{P1: 1},
+		&vm.InsertCmd{P1: 1, P2: 7, P3: 4},
+		&vm.NextCmd{P1: 1, P2: 2},
+		&vm.HaltCmd{},
 		&vm.TransactionCmd{P2: 1},
 		&vm.OpenWriteCmd{P1: 1, P2: 2},
-		&vm.RewindCmd{P1: 1, P2: 14},
-		&vm.RowIdCmd{P1: 1, P2: 1},
 		&vm.IntegerCmd{P1: 1, P2: 2},
-		&vm.NotEqualCmd{P1: 1, P2: 13, P3: 2},
-		&vm.RowIdCmd{P1: 1, P2: 3},
-		&vm.ColumnCmd{P1: 1, P2: 0, P3: 4},
-		&vm.IntegerCmd{P1: 1, P2: 5},
-		&vm.MakeRecordCmd{P1: 4, P2: 2, P3: 6},
-		&vm.DeleteCmd{P1: 1},
-		&vm.InsertCmd{P1: 1, P2: 6, P3: 3},
-		&vm.NextCmd{P1: 1, P2: 4},
-		&vm.HaltCmd{},
+		&vm.GotoCmd{P2: 1},
 	}
 	mockCatalog := &mockUpdateCatalog{}
 	plan, err := NewUpdate(mockCatalog, ast).ExecutionPlan()
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
-	for i, c := range expectedCommands {
-		if !reflect.DeepEqual(c, plan.Commands[i]) {
-			t.Errorf("got %#v want %#v", plan.Commands[i], c)
-		}
-	}
-}
-
-func TestFoo(t *testing.T) {
-	generateUpdate()
-	// generateSelect()
+	assertCommandsMatch(t, plan.Commands, expectedCommands)
 }

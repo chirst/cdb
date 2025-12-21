@@ -20,8 +20,6 @@ func generatePredicate(plan *planV2, expression compiler.Expr) vm.JumpCommand {
 // expression.
 type predicateGenerator struct {
 	plan *planV2
-	// openRegister is the next available register
-	openRegister int
 	// commandOffset is used to calculate the amount of commands already in the
 	// plan.
 	commandOffset int
@@ -203,7 +201,7 @@ func (p *predicateGenerator) valueRegisterFor(ce *compiler.ColumnRef) int {
 }
 
 func (p *predicateGenerator) getNextRegister() int {
-	r := p.openRegister
-	p.openRegister += 1
+	r := p.plan.freeRegister
+	p.plan.freeRegister += 1
 	return r
 }

@@ -153,7 +153,7 @@ func (i *insertNode) print() string {
 	return "insert"
 }
 
-func (u *updateNode) print() string {
+func (u *updateNodeV2) print() string {
 	return "update"
 }
 
@@ -185,6 +185,6 @@ func (i *insertNode) children() []logicalNode {
 	return []logicalNode{}
 }
 
-func (u *updateNode) children() []logicalNode {
+func (u *updateNodeV2) children() []logicalNode {
 	return []logicalNode{}
 }

@@ -105,17 +105,3 @@ type insertNode struct {
 	// dimensional i.e. VALUES (v1, v2), (v3, v4) is [[v1, v2], [v3, v4]].
 	colValues [][]compiler.Expr
 }
-
-// updateNode represents an update operation
-type updateNode struct {
-	// rootPage is the rootPage of the table the update is performed on.
-	rootPage int
-	// recordExprs is a list of expressions that can be evaluated to make the
-	// desired record. If a column is in the update set list that column will be
-	// some sort of expression. If a column is not in the set list it will
-	// simply be a columnRef. Note the ordering is important of these
-	// expressions because they have to make the record.
-	recordExprs []compiler.Expr
-	// predicate is the where clause or nil
-	predicate compiler.Expr
-}
