@@ -2,6 +2,7 @@ package planner
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
@@ -162,14 +163,49 @@ func (p *planV2) pushTransaction() {
 }
 
 func (p *planV2) pushConstants() {
-	for v := range p.constInts {
-		p.commands = append(p.commands, &vm.IntegerCmd{P1: v, P2: p.constInts[v]})
+	// these constants are pushed ordered since maps are unordered making it
+	// difficult to assert that a sequence of instructions appears.
+	p.pushConstantInts()
+	p.pushConstantStrings()
+	p.pushConstantVars()
+}
+
+func (p *planV2) pushConstantInts() {
+	temp := []*vm.IntegerCmd{}
+	for k := range p.constInts {
+		temp = append(temp, &vm.IntegerCmd{P1: k, P2: p.constInts[k]})
 	}
+	slices.SortFunc(temp, func(a, b *vm.IntegerCmd) int {
+		return a.P2 - b.P2
+	})
+	for i := range temp {
+		p.commands = append(p.commands, temp[i])
+	}
+}
+
+func (p *planV2) pushConstantStrings() {
+	temp := []*vm.StringCmd{}
 	for v := range p.constStrings {
 		p.commands = append(p.commands, &vm.StringCmd{P1: p.constStrings[v], P4: v})
 	}
+	slices.SortFunc(temp, func(a, b *vm.StringCmd) int {
+		return a.P2 - b.P2
+	})
+	for i := range temp {
+		p.commands = append(p.commands, temp[i])
+	}
+}
+
+func (p *planV2) pushConstantVars() {
+	temp := []*vm.VariableCmd{}
 	for v := range p.constVars {
 		p.commands = append(p.commands, &vm.VariableCmd{P1: p.constVars[v], P2: v})
+	}
+	slices.SortFunc(temp, func(a, b *vm.VariableCmd) int {
+		return a.P2 - b.P2
+	})
+	for i := range temp {
+		p.commands = append(p.commands, temp[i])
 	}
 }
 
@@ -274,9 +310,16 @@ func (s *scanNodeV2) consume() {
 	rewindCmd.P2 = len(s.plan.commands)
 }
 
+type projectionV2 struct {
+	expr compiler.Expr
+	// alias is the alias of the projection or no alias for the zero value.
+	alias string
+}
+
 type projectNodeV2 struct {
-	child nodeV2
-	plan  *planV2
+	child       nodeV2
+	plan        *planV2
+	projections []projectionV2
 }
 
 func (p *projectNodeV2) produce() {
@@ -285,20 +328,14 @@ func (p *projectNodeV2) produce() {
 
 func (p *projectNodeV2) consume() {
 	startRegister := p.plan.freeRegister
-	p.plan.commands = append(p.plan.commands, &vm.RowIdCmd{
-		P1: p.plan.cursorId,
-		P2: p.plan.freeRegister,
-	})
-	p.plan.freeRegister += 1
-	p.plan.commands = append(p.plan.commands, &vm.ColumnCmd{
-		P1: p.plan.cursorId,
-		P2: 0,
-		P3: p.plan.freeRegister,
-	})
-	p.plan.freeRegister += 1
+	reservedRegisters := len(p.projections)
+	p.plan.freeRegister += reservedRegisters
+	for i, projection := range p.projections {
+		generateExpressionTo(p.plan, projection.expr, startRegister+i)
+	}
 	p.plan.commands = append(p.plan.commands, &vm.ResultRowCmd{
 		P1: startRegister,
-		P2: p.plan.freeRegister - startRegister,
+		P2: reservedRegisters,
 	})
 }
 
@@ -313,4 +350,18 @@ func (c *constantNodeV2) produce() {
 
 func (c *constantNodeV2) consume() {
 	c.parent.consume()
+}
+
+type countNodeV2 struct {
+	plan *planV2
+}
+
+func (c *countNodeV2) produce() {
+	c.consume()
+}
+
+func (c *countNodeV2) consume() {
+	c.plan.commands = append(c.plan.commands, &vm.OpenReadCmd{P1: 1, P2: 2})
+	c.plan.commands = append(c.plan.commands, &vm.CountCmd{P1: 1, P2: 1})
+	c.plan.commands = append(c.plan.commands, &vm.ResultRowCmd{P1: 1, P2: 1})
 }

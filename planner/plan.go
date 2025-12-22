@@ -113,6 +113,14 @@ func (p *projectNode) print() string {
 	return "project" + list
 }
 
+func (p *projectNodeV2) print() string {
+	return "project"
+}
+
+func (p *projectNodeV2) children() []logicalNode {
+	return []logicalNode{}
+}
+
 func (p *projection) print() string {
 	if p.isCount {
 		return "count(*)"

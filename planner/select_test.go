@@ -2,7 +2,6 @@ package planner
 
 import (
 	"errors"
-	"reflect"
 	"testing"
 
 	"github.com/chirst/cdb/catalog"
@@ -59,15 +58,16 @@ func TestSelectPlan(t *testing.T) {
 		{
 			description: "StarWithPrimaryKey",
 			expectedCommands: []vm.Command{
-				&vm.InitCmd{P2: 1},
-				&vm.TransactionCmd{P1: 0},
-				&vm.OpenReadCmd{P1: 1, P2: 2},
-				&vm.RewindCmd{P1: 1, P2: 8},
+				&vm.InitCmd{P2: 7},
+				&vm.RewindCmd{P1: 1, P2: 6},
 				&vm.RowIdCmd{P1: 1, P2: 1},
 				&vm.ColumnCmd{P1: 1, P2: 0, P3: 2},
 				&vm.ResultRowCmd{P1: 1, P2: 2},
-				&vm.NextCmd{P1: 1, P2: 4},
+				&vm.NextCmd{P1: 1, P2: 2},
 				&vm.HaltCmd{},
+				&vm.TransactionCmd{P1: 0},
+				&vm.OpenReadCmd{P1: 1, P2: 2},
+				&vm.GotoCmd{P2: 1},
 			},
 			ast: &compiler.SelectStmt{
 				StmtBase: &compiler.StmtBase{},
@@ -88,15 +88,16 @@ func TestSelectPlan(t *testing.T) {
 		{
 			description: "StarWithoutPrimaryKey",
 			expectedCommands: []vm.Command{
-				&vm.InitCmd{P2: 1},
-				&vm.TransactionCmd{P1: 0},
-				&vm.OpenReadCmd{P1: 1, P2: 2},
-				&vm.RewindCmd{P1: 1, P2: 8},
+				&vm.InitCmd{P2: 7},
+				&vm.RewindCmd{P1: 1, P2: 6},
 				&vm.ColumnCmd{P1: 1, P2: 0, P3: 1},
 				&vm.ColumnCmd{P1: 1, P2: 1, P3: 2},
 				&vm.ResultRowCmd{P1: 1, P2: 2},
-				&vm.NextCmd{P1: 1, P2: 4},
+				&vm.NextCmd{P1: 1, P2: 2},
 				&vm.HaltCmd{},
+				&vm.TransactionCmd{P1: 0},
+				&vm.OpenReadCmd{P1: 1, P2: 2},
+				&vm.GotoCmd{P2: 1},
 			},
 			ast: &compiler.SelectStmt{
 				StmtBase: &compiler.StmtBase{},
@@ -124,16 +125,17 @@ func TestSelectPlan(t *testing.T) {
 				},
 			},
 			expectedCommands: []vm.Command{
-				&vm.InitCmd{P2: 1},
-				&vm.TransactionCmd{P1: 0},
-				&vm.OpenReadCmd{P1: 1, P2: 2},
-				&vm.RewindCmd{P1: 1, P2: 9},
+				&vm.InitCmd{P2: 8},
+				&vm.RewindCmd{P1: 1, P2: 7},
 				&vm.ColumnCmd{P1: 1, P2: 0, P3: 1},
 				&vm.RowIdCmd{P1: 1, P2: 2},
 				&vm.ColumnCmd{P1: 1, P2: 1, P3: 3},
 				&vm.ResultRowCmd{P1: 1, P2: 3},
-				&vm.NextCmd{P1: 1, P2: 4},
+				&vm.NextCmd{P1: 1, P2: 2},
 				&vm.HaltCmd{},
+				&vm.TransactionCmd{P1: 0},
+				&vm.OpenReadCmd{P1: 1, P2: 2},
+				&vm.GotoCmd{P2: 1},
 			},
 			mockCatalogSetup: func(m *mockSelectCatalog) *mockSelectCatalog {
 				m.primaryKeyColumnName = "id"
@@ -167,16 +169,17 @@ func TestSelectPlan(t *testing.T) {
 				},
 			},
 			expectedCommands: []vm.Command{
-				&vm.InitCmd{P2: 1},
-				&vm.TransactionCmd{P1: 0},
-				&vm.IntegerCmd{P1: 10, P2: 1},
-				&vm.OpenReadCmd{P1: 1, P2: 2},
-				&vm.RewindCmd{P1: 1, P2: 9},
-				&vm.RowIdCmd{P1: 1, P2: 3},
-				&vm.AddCmd{P1: 3, P2: 1, P3: 2},
-				&vm.ResultRowCmd{P1: 2, P2: 1},
-				&vm.NextCmd{P1: 1, P2: 5},
+				&vm.InitCmd{P2: 7},
+				&vm.RewindCmd{P1: 1, P2: 6},
+				&vm.RowIdCmd{P1: 1, P2: 2},
+				&vm.AddCmd{P1: 2, P2: 3, P3: 1},
+				&vm.ResultRowCmd{P1: 1, P2: 1},
+				&vm.NextCmd{P1: 1, P2: 2},
 				&vm.HaltCmd{},
+				&vm.TransactionCmd{P1: 0},
+				&vm.OpenReadCmd{P1: 1, P2: 2},
+				&vm.IntegerCmd{P1: 10, P2: 3},
+				&vm.GotoCmd{P2: 1},
 			},
 			mockCatalogSetup: func(m *mockSelectCatalog) *mockSelectCatalog {
 				m.primaryKeyColumnName = "id"
@@ -188,15 +191,16 @@ func TestSelectPlan(t *testing.T) {
 		{
 			description: "AllTable",
 			expectedCommands: []vm.Command{
-				&vm.InitCmd{P2: 1},
-				&vm.TransactionCmd{P1: 0},
-				&vm.OpenReadCmd{P1: 1, P2: 2},
-				&vm.RewindCmd{P1: 1, P2: 8},
+				&vm.InitCmd{P2: 7},
+				&vm.RewindCmd{P1: 1, P2: 6},
 				&vm.RowIdCmd{P1: 1, P2: 1},
 				&vm.ColumnCmd{P1: 1, P2: 0, P3: 2},
 				&vm.ResultRowCmd{P1: 1, P2: 2},
-				&vm.NextCmd{P1: 1, P2: 4},
+				&vm.NextCmd{P1: 1, P2: 2},
 				&vm.HaltCmd{},
+				&vm.TransactionCmd{P1: 0},
+				&vm.OpenReadCmd{P1: 1, P2: 2},
+				&vm.GotoCmd{P2: 1},
 			},
 			ast: &compiler.SelectStmt{
 				StmtBase: &compiler.StmtBase{},
@@ -222,14 +226,15 @@ func TestSelectPlan(t *testing.T) {
 		{
 			description: "SpecificColumnPrimaryKeyMiddleOrdinal",
 			expectedCommands: []vm.Command{
-				&vm.InitCmd{P2: 1},
-				&vm.TransactionCmd{P1: 0},
-				&vm.OpenReadCmd{P1: 1, P2: 2},
-				&vm.RewindCmd{P1: 1, P2: 7},
+				&vm.InitCmd{P2: 6},
+				&vm.RewindCmd{P1: 1, P2: 5},
 				&vm.RowIdCmd{P1: 1, P2: 1},
 				&vm.ResultRowCmd{P1: 1, P2: 1},
-				&vm.NextCmd{P1: 1, P2: 4},
+				&vm.NextCmd{P1: 1, P2: 2},
 				&vm.HaltCmd{},
+				&vm.TransactionCmd{P1: 0},
+				&vm.OpenReadCmd{P1: 1, P2: 2},
+				&vm.GotoCmd{P2: 1},
 			},
 			ast: &compiler.SelectStmt{
 				StmtBase: &compiler.StmtBase{},
@@ -258,15 +263,16 @@ func TestSelectPlan(t *testing.T) {
 		{
 			description: "SpecificColumns",
 			expectedCommands: []vm.Command{
-				&vm.InitCmd{P2: 1},
-				&vm.TransactionCmd{P1: 0},
-				&vm.OpenReadCmd{P1: 1, P2: 2},
-				&vm.RewindCmd{P1: 1, P2: 8},
+				&vm.InitCmd{P2: 7},
+				&vm.RewindCmd{P1: 1, P2: 6},
 				&vm.RowIdCmd{P1: 1, P2: 1},
 				&vm.ColumnCmd{P1: 1, P2: 1, P3: 2},
 				&vm.ResultRowCmd{P1: 1, P2: 2},
-				&vm.NextCmd{P1: 1, P2: 4},
+				&vm.NextCmd{P1: 1, P2: 2},
 				&vm.HaltCmd{},
+				&vm.TransactionCmd{P1: 0},
+				&vm.OpenReadCmd{P1: 1, P2: 2},
+				&vm.GotoCmd{P2: 1},
 			},
 			ast: &compiler.SelectStmt{
 				StmtBase: &compiler.StmtBase{},
@@ -322,19 +328,20 @@ func TestSelectPlan(t *testing.T) {
 		{
 			description: "Operators",
 			expectedCommands: []vm.Command{
-				&vm.InitCmd{P2: 1},
-				&vm.IntegerCmd{P1: 1, P2: 1},
-				&vm.IntegerCmd{P1: 18, P2: 2},
-				&vm.IntegerCmd{P1: 387420489, P2: 3},
-				&vm.IntegerCmd{P1: 81, P2: 4},
-				&vm.IntegerCmd{P1: 0, P2: 5},
-				&vm.CopyCmd{P1: 1, P2: 6},
-				&vm.CopyCmd{P1: 2, P2: 7},
-				&vm.CopyCmd{P1: 3, P2: 8},
-				&vm.CopyCmd{P1: 4, P2: 9},
-				&vm.CopyCmd{P1: 5, P2: 10},
-				&vm.ResultRowCmd{P1: 6, P2: 5},
+				&vm.InitCmd{P2: 8},
+				&vm.CopyCmd{P1: 6, P2: 1},
+				&vm.CopyCmd{P1: 7, P2: 2},
+				&vm.CopyCmd{P1: 8, P2: 3},
+				&vm.CopyCmd{P1: 9, P2: 4},
+				&vm.CopyCmd{P1: 10, P2: 5},
+				&vm.ResultRowCmd{P1: 1, P2: 5},
 				&vm.HaltCmd{},
+				&vm.IntegerCmd{P1: 1, P2: 6},
+				&vm.IntegerCmd{P1: 18, P2: 7},
+				&vm.IntegerCmd{P1: 387420489, P2: 8},
+				&vm.IntegerCmd{P1: 81, P2: 9},
+				&vm.IntegerCmd{P1: 0, P2: 10},
+				&vm.GotoCmd{P2: 1},
 			},
 			ast: &compiler.SelectStmt{
 				StmtBase: &compiler.StmtBase{},
@@ -381,16 +388,18 @@ func TestSelectPlan(t *testing.T) {
 		{
 			description: "with where clause",
 			expectedCommands: []vm.Command{
-				&vm.InitCmd{P2: 1},
-				&vm.TransactionCmd{P1: 0},
-				&vm.IntegerCmd{P1: 1, P2: 1},
-				&vm.OpenReadCmd{P1: 1, P2: 2},
-				&vm.RewindCmd{P1: 1, P2: 9},
-				&vm.RowIdCmd{P1: 1, P2: 2},
-				&vm.NotEqualCmd{P1: 2, P2: 8, P3: 1},
-				&vm.ResultRowCmd{P1: 2, P2: 1},
-				&vm.NextCmd{P1: 1, P2: 5},
+				&vm.InitCmd{P2: 8},
+				&vm.RewindCmd{P1: 1, P2: 7},
+				&vm.RowIdCmd{P1: 1, P2: 1},
+				&vm.NotEqualCmd{P1: 1, P2: 6, P3: 2},
+				&vm.RowIdCmd{P1: 1, P2: 4},
+				&vm.ResultRowCmd{P1: 4, P2: 1},
+				&vm.NextCmd{P1: 1, P2: 2},
 				&vm.HaltCmd{},
+				&vm.TransactionCmd{P1: 0},
+				&vm.OpenReadCmd{P1: 1, P2: 2},
+				&vm.IntegerCmd{P1: 1, P2: 2},
+				&vm.GotoCmd{P2: 1},
 			},
 			ast: &compiler.SelectStmt{
 				StmtBase: &compiler.StmtBase{},
@@ -418,11 +427,12 @@ func TestSelectPlan(t *testing.T) {
 		{
 			description: "ConstantString",
 			expectedCommands: []vm.Command{
-				&vm.InitCmd{P2: 1},
-				&vm.StringCmd{P1: 1, P4: "foo"},
-				&vm.CopyCmd{P1: 1, P2: 2},
-				&vm.ResultRowCmd{P1: 2, P2: 1},
+				&vm.InitCmd{P2: 4},
+				&vm.CopyCmd{P1: 2, P2: 1},
+				&vm.ResultRowCmd{P1: 1, P2: 1},
 				&vm.HaltCmd{},
+				&vm.StringCmd{P1: 2, P4: "foo"},
+				&vm.GotoCmd{P2: 1},
 			},
 			ast: &compiler.SelectStmt{
 				StmtBase: &compiler.StmtBase{},
@@ -451,11 +461,7 @@ func TestSelectPlan(t *testing.T) {
 			if err != nil {
 				t.Errorf("expected no err got err %s", err)
 			}
-			for i, c := range c.expectedCommands {
-				if !reflect.DeepEqual(c, plan.Commands[i]) {
-					t.Errorf("got %#v want %#v", plan.Commands[i], c)
-				}
-			}
+			assertCommandsMatch(t, plan.Commands, c.expectedCommands)
 		})
 	}
 }
