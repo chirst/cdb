@@ -42,7 +42,7 @@ type selectQueryPlanner struct {
 	stmt *compiler.SelectStmt
 	// queryPlan contains the logical plan being built. The root node must be a
 	// projection.
-	queryPlan *projectNodeV2
+	queryPlan *planV2
 }
 
 // selectExecutionPlanner converts logical nodes in a query plan tree to
@@ -50,7 +50,7 @@ type selectQueryPlanner struct {
 type selectExecutionPlanner struct {
 	// queryPlan contains the logical plan. This node is populated by calling
 	// the QueryPlan method.
-	queryPlan *projectNodeV2
+	queryPlan *planV2
 	// executionPlan contains the execution plan for the vm. This is built by
 	// calling ExecutionPlan.
 	executionPlan *vm.ExecutionPlan
@@ -120,14 +120,36 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 	}
 
 	projections, err := p.getProjections()
+	if err != nil {
+		return nil, err
+	}
 	for i := range projections {
 		cev := &catalogExprVisitor{}
 		cev.Init(p.catalog, tableName)
 		projections[i].expr.BreadthWalk(cev)
 	}
-	if err != nil {
-		return nil, err
+
+	hasFunc := false
+	for i := range projections {
+		_, ok := projections[i].expr.(*compiler.FunctionExpr)
+		if ok {
+			hasFunc = true
+		}
 	}
+	if hasFunc {
+		if len(projections) != 1 {
+			return nil, errors.New("only one projection allowed for COUNT")
+		}
+		if tableName == "" {
+			return nil, errors.New("must have from for COUNT")
+		}
+		plan := newPlan(transactionTypeRead, rootPageNumber)
+		cn := &countNodeV2{plan: plan, projection: projections[0]}
+		p.queryPlan = plan
+		plan.root = cn
+		return newQueryPlan(cn, p.stmt.ExplainQueryPlan), nil
+	}
+
 	tt := transactionTypeRead
 	if tableName == "" {
 		tt = transactionTypeNone
@@ -175,9 +197,9 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 			scanNode.parent = projectNode
 		}
 	}
-	p.queryPlan = projectNode
-	plan.root = p.queryPlan
-	return newQueryPlan(p.queryPlan, p.stmt.ExplainQueryPlan), nil
+	p.queryPlan = plan
+	plan.root = projectNode
+	return newQueryPlan(projectNode, p.stmt.ExplainQueryPlan), nil
 }
 
 func (p *selectQueryPlanner) optimizeResultColumns() error {
@@ -258,54 +280,6 @@ func foldExpr(e compiler.Expr) (compiler.Expr, error) {
 	}
 }
 
-// getCountNode supports the count function under special circumstances.
-func (p *selectQueryPlanner) getCountNode(tableName string, rootPageNumber int) (*countNodeV2, error) {
-	switch e := p.stmt.ResultColumns[0].Expression.(type) {
-	case *compiler.FunctionExpr:
-		if len(p.stmt.ResultColumns) != 1 {
-			return nil, errors.New("count with other result columns not supported")
-		}
-		if e.FnType != compiler.FnCount {
-			return nil, fmt.Errorf("only %s function is supported", e.FnType)
-		}
-		cn := &countNodeV2{
-			plan: p.queryPlan.plan,
-		}
-		return cn, nil
-	}
-	return nil, nil
-}
-
-func (p *selectQueryPlanner) getScanColumns() ([]scanColumn, error) {
-	pkColName, err := p.catalog.GetPrimaryKeyColumn(p.stmt.From.TableName)
-	if err != nil {
-		return nil, err
-	}
-	cols, err := p.catalog.GetColumns(p.stmt.From.TableName)
-	if err != nil {
-		return nil, err
-	}
-	scanColumns := []scanColumn{}
-	idx := 0
-	for _, c := range cols {
-		if c == pkColName {
-			scanColumns = append(scanColumns, &compiler.ColumnRef{
-				Table:        p.stmt.From.TableName,
-				Column:       c,
-				IsPrimaryKey: c == pkColName,
-			})
-		} else {
-			scanColumns = append(scanColumns, &compiler.ColumnRef{
-				Table:  p.stmt.From.TableName,
-				Column: c,
-				ColIdx: idx,
-			})
-			idx += 1
-		}
-	}
-	return scanColumns, nil
-}
-
 func (p *selectQueryPlanner) getProjections() ([]projectionV2, error) {
 	var projections []projectionV2
 	for _, resultColumn := range p.stmt.ResultColumns {
@@ -360,15 +334,26 @@ func (sp *selectPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
 
 func (p *selectExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 	p.setResultHeader()
-	p.queryPlan.plan.compile()
-	p.executionPlan.Commands = p.queryPlan.plan.commands
+	p.queryPlan.compile()
+	p.executionPlan.Commands = p.queryPlan.commands
 	return p.executionPlan, nil
 }
 
 func (p *selectExecutionPlanner) setResultHeader() {
 	resultHeader := []string{}
-	for range p.queryPlan.projections {
-		resultHeader = append(resultHeader, "unknown")
+	switch t := p.queryPlan.root.(type) {
+	case *projectNodeV2:
+		projectExprs := []compiler.Expr{}
+		for _, projection := range t.projections {
+			resultHeader = append(resultHeader, projection.alias)
+			projectExprs = append(projectExprs, projection.expr)
+		}
+		p.setResultTypes(projectExprs)
+	case *countNodeV2:
+		resultHeader = append(resultHeader, t.projection.alias)
+		p.setResultTypes([]compiler.Expr{t.projection.expr})
+	default:
+		panic("unhandled node for result header")
 	}
 	p.executionPlan.ResultHeader = resultHeader
 }

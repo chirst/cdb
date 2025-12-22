@@ -196,3 +196,11 @@ func (i *insertNode) children() []logicalNode {
 func (u *updateNodeV2) children() []logicalNode {
 	return []logicalNode{}
 }
+
+func (p *countNodeV2) print() string {
+	return "count"
+}
+
+func (p *countNodeV2) children() []logicalNode {
+	return []logicalNode{}
+}

@@ -1,7 +1,6 @@
 package planner
 
 import (
-	"fmt"
 	"slices"
 
 	"github.com/chirst/cdb/compiler"
@@ -52,39 +51,11 @@ func newPlan(transactionType transactionType, rootPageNumber int) *planV2 {
 		commands:        []vm.Command{},
 		constInts:       make(map[int]int),
 		constStrings:    make(map[string]int),
+		constVars:       make(map[int]int),
 		freeRegister:    1,
 		transactionType: transactionType,
 		cursorId:        1,
 		rootPageNumber:  rootPageNumber,
-	}
-}
-
-func generateSelect() {
-	logicalPlan := &planV2{
-		commands:        []vm.Command{},
-		constInts:       make(map[int]int),
-		constStrings:    make(map[string]int),
-		freeRegister:    1,
-		transactionType: transactionTypeRead,
-		cursorId:        1,
-	}
-	pn := &projectNodeV2{
-		plan: logicalPlan,
-	}
-	fn := &filterNodeV2{
-		plan: logicalPlan,
-	}
-	fn.parent = pn
-	pn.child = fn
-	sn := &scanNodeV2{
-		plan: logicalPlan,
-	}
-	sn.parent = fn
-	fn.child = sn
-	logicalPlan.root = pn
-	logicalPlan.compile()
-	for i := range logicalPlan.commands {
-		fmt.Printf("%d %#v\n", i+1, logicalPlan.commands[i])
 	}
 }
 
@@ -199,7 +170,7 @@ func (p *planV2) pushConstantStrings() {
 func (p *planV2) pushConstantVars() {
 	temp := []*vm.VariableCmd{}
 	for v := range p.constVars {
-		p.commands = append(p.commands, &vm.VariableCmd{P1: p.constVars[v], P2: v})
+		p.commands = append(p.commands, &vm.VariableCmd{P1: v, P2: p.constVars[v]})
 	}
 	slices.SortFunc(temp, func(a, b *vm.VariableCmd) int {
 		return a.P2 - b.P2
@@ -353,7 +324,8 @@ func (c *constantNodeV2) consume() {
 }
 
 type countNodeV2 struct {
-	plan *planV2
+	plan       *planV2
+	projection projectionV2
 }
 
 func (c *countNodeV2) produce() {
@@ -361,7 +333,15 @@ func (c *countNodeV2) produce() {
 }
 
 func (c *countNodeV2) consume() {
-	c.plan.commands = append(c.plan.commands, &vm.OpenReadCmd{P1: 1, P2: 2})
-	c.plan.commands = append(c.plan.commands, &vm.CountCmd{P1: 1, P2: 1})
-	c.plan.commands = append(c.plan.commands, &vm.ResultRowCmd{P1: 1, P2: 1})
+	c.plan.commands = append(c.plan.commands, &vm.CountCmd{
+		P1: c.plan.cursorId,
+		P2: c.plan.freeRegister,
+	})
+	countRegister := c.plan.freeRegister
+	countResults := 1
+	c.plan.freeRegister += 1
+	c.plan.commands = append(c.plan.commands, &vm.ResultRowCmd{
+		P1: countRegister,
+		P2: countResults,
+	})
 }

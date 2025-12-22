@@ -306,12 +306,13 @@ func TestSelectPlan(t *testing.T) {
 		{
 			description: "JustCountAggregate",
 			expectedCommands: []vm.Command{
-				&vm.InitCmd{P2: 1},
-				&vm.TransactionCmd{P1: 0},
-				&vm.OpenReadCmd{P1: 1, P2: 2},
+				&vm.InitCmd{P2: 4},
 				&vm.CountCmd{P1: 1, P2: 1},
 				&vm.ResultRowCmd{P1: 1, P2: 1},
 				&vm.HaltCmd{},
+				&vm.TransactionCmd{P1: 0},
+				&vm.OpenReadCmd{P1: 1, P2: 2},
+				&vm.GotoCmd{P2: 1},
 			},
 			ast: &compiler.SelectStmt{
 				StmtBase: &compiler.StmtBase{},
