@@ -11,7 +11,6 @@ func generateExpressionTo(plan *planV2, expr compiler.Expr, toRegister int) {
 	rg := &resultExprGenerator{}
 	rg.plan = plan
 	rg.outputRegister = toRegister
-	rg.commandOffset = len(rg.plan.commands)
 	rg.build(expr, 0)
 }
 
@@ -20,9 +19,6 @@ type resultExprGenerator struct {
 	plan *planV2
 	// outputRegister is the target register for the result of the expression.
 	outputRegister int
-	// commandOffset is the amount of commands prior to calling this routine.
-	// Useful for calculating jump instructions.
-	commandOffset int
 }
 
 func (e *resultExprGenerator) build(root compiler.Expr, level int) int {
@@ -45,7 +41,7 @@ func (e *resultExprGenerator) build(root compiler.Expr, level int) int {
 		case compiler.OpEq:
 			e.plan.commands = append(e.plan.commands, &vm.IntegerCmd{P1: 0, P2: r})
 			jumpOverCount := 2
-			jumpAddress := len(e.plan.commands) + jumpOverCount + e.commandOffset
+			jumpAddress := len(e.plan.commands) + jumpOverCount
 			e.plan.commands = append(
 				e.plan.commands,
 				&vm.NotEqualCmd{P1: ol, P2: jumpAddress, P3: or},
@@ -54,7 +50,7 @@ func (e *resultExprGenerator) build(root compiler.Expr, level int) int {
 		case compiler.OpLt:
 			e.plan.commands = append(e.plan.commands, &vm.IntegerCmd{P1: 0, P2: r})
 			jumpOverCount := 2
-			jumpAddress := len(e.plan.commands) + jumpOverCount + e.commandOffset
+			jumpAddress := len(e.plan.commands) + jumpOverCount
 			e.plan.commands = append(
 				e.plan.commands,
 				&vm.GteCmd{P1: ol, P2: jumpAddress, P3: or},
@@ -63,7 +59,7 @@ func (e *resultExprGenerator) build(root compiler.Expr, level int) int {
 		case compiler.OpGt:
 			e.plan.commands = append(e.plan.commands, &vm.IntegerCmd{P1: 0, P2: r})
 			jumpOverCount := 2
-			jumpAddress := len(e.plan.commands) + jumpOverCount + e.commandOffset
+			jumpAddress := len(e.plan.commands) + jumpOverCount
 			e.plan.commands = append(
 				e.plan.commands,
 				&vm.LteCmd{P1: ol, P2: jumpAddress, P3: or},

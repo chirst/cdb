@@ -101,18 +101,6 @@ func (p *QueryPlan) connectSiblings() string {
 	return strings.Join(planMatrix, "\n")
 }
 
-func (p *projectNode) print() string {
-	list := "("
-	for i, proj := range p.projections {
-		list += proj.print()
-		if i+1 < len(p.projections) {
-			list += ", "
-		}
-	}
-	list += ")"
-	return "project" + list
-}
-
 func (p *projectNodeV2) print() string {
 	return "project"
 }
@@ -121,32 +109,19 @@ func (p *projectNodeV2) children() []logicalNode {
 	return []logicalNode{}
 }
 
-func (p *projection) print() string {
-	if p.isCount {
-		return "count(*)"
-	}
-	if p.colName == "" {
-		return "<anonymous>"
-	}
-	return p.colName
+func (s *scanNodeV2) print() string {
+	return fmt.Sprintf("scan table")
 }
 
-func (s *scanNode) print() string {
-	if s.scanPredicate != nil {
-		return fmt.Sprintf("scan table %s with predicate", s.tableName)
-	}
-	return fmt.Sprintf("scan table %s", s.tableName)
-}
-
-func (c *constantNode) print() string {
+func (c *constantNodeV2) print() string {
 	return "constant data source"
 }
 
-func (c *countNode) print() string {
-	return fmt.Sprintf("count table %s", c.tableName)
+func (c *countNodeV2) print() string {
+	return fmt.Sprintf("count table")
 }
 
-func (j *joinNode) print() string {
+func (j *joinNodeV2) print() string {
 	return fmt.Sprint(j.operation)
 }
 
@@ -165,23 +140,19 @@ func (u *updateNodeV2) print() string {
 	return "update"
 }
 
-func (p *projectNode) children() []logicalNode {
-	return []logicalNode{p.child}
-}
-
-func (s *scanNode) children() []logicalNode {
+func (s *scanNodeV2) children() []logicalNode {
 	return []logicalNode{}
 }
 
-func (c *constantNode) children() []logicalNode {
+func (c *constantNodeV2) children() []logicalNode {
 	return []logicalNode{}
 }
 
-func (c *countNode) children() []logicalNode {
+func (c *countNodeV2) children() []logicalNode {
 	return []logicalNode{}
 }
 
-func (j *joinNode) children() []logicalNode {
+func (j *joinNodeV2) children() []logicalNode {
 	return []logicalNode{j.left, j.right}
 }
 
@@ -194,13 +165,5 @@ func (i *insertNode) children() []logicalNode {
 }
 
 func (u *updateNodeV2) children() []logicalNode {
-	return []logicalNode{}
-}
-
-func (p *countNodeV2) print() string {
-	return "count"
-}
-
-func (p *countNodeV2) children() []logicalNode {
 	return []logicalNode{}
 }

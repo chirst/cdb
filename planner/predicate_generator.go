@@ -11,7 +11,6 @@ import (
 func generatePredicate(plan *planV2, expression compiler.Expr) vm.JumpCommand {
 	pg := &predicateGenerator{}
 	pg.plan = plan
-	pg.commandOffset = len(pg.plan.commands)
 	pg.build(expression, 0)
 	return pg.jumpCommand
 }
@@ -20,9 +19,6 @@ func generatePredicate(plan *planV2, expression compiler.Expr) vm.JumpCommand {
 // expression.
 type predicateGenerator struct {
 	plan *planV2
-	// commandOffset is used to calculate the amount of commands already in the
-	// plan.
-	commandOffset int
 	// jumpCommand is the command used to make the jump. The command can be
 	// accessed to defer setting the jump address.
 	jumpCommand vm.JumpCommand
@@ -105,7 +101,7 @@ func (p *predicateGenerator) build(e compiler.Expr, level int) (int, error) {
 			}
 			p.plan.commands = append(p.plan.commands, &vm.IntegerCmd{P1: 0, P2: r})
 			jumpOverCount := 2
-			jumpAddress := len(p.plan.commands) + jumpOverCount + p.commandOffset
+			jumpAddress := len(p.plan.commands) + jumpOverCount
 			p.plan.commands = append(
 				p.plan.commands,
 				&vm.NotEqualCmd{P1: ol, P2: jumpAddress, P3: or},
@@ -121,7 +117,7 @@ func (p *predicateGenerator) build(e compiler.Expr, level int) (int, error) {
 			}
 			p.plan.commands = append(p.plan.commands, &vm.IntegerCmd{P1: 0, P2: r})
 			jumpOverCount := 2
-			jumpAddress := len(p.plan.commands) + jumpOverCount + p.commandOffset
+			jumpAddress := len(p.plan.commands) + jumpOverCount
 			p.plan.commands = append(
 				p.plan.commands,
 				&vm.GteCmd{P1: ol, P2: jumpAddress, P3: or},
@@ -137,7 +133,7 @@ func (p *predicateGenerator) build(e compiler.Expr, level int) (int, error) {
 			}
 			p.plan.commands = append(p.plan.commands, &vm.IntegerCmd{P1: 0, P2: r})
 			jumpOverCount := 2
-			jumpAddress := len(p.plan.commands) + jumpOverCount + p.commandOffset
+			jumpAddress := len(p.plan.commands) + jumpOverCount
 			p.plan.commands = append(
 				p.plan.commands,
 				&vm.LteCmd{P1: ol, P2: jumpAddress, P3: or},

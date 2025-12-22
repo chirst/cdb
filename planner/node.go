@@ -10,54 +10,8 @@ type logicalNode interface {
 	print() string
 }
 
-// projectNode defines what columns should be projected.
-type projectNode struct {
-	projections []projection
-	child       logicalNode
-}
-
-// projection is part of the sum of projections in a project node.
-type projection struct {
-	// isCount signifies the projection is the count function.
-	isCount bool
-	// colName is the name of the column to be projected.
-	colName string
-}
-
-// scanNode represents a full scan on a table
-type scanNode struct {
-	// tableName is the name of the table to be scanned
-	tableName string
-	// rootPage is the valid page number corresponding to the table
-	rootPage int
-	// scanColumns contains information about how the scan will project columns
-	scanColumns []scanColumn
-	// scanPredicate is an expression evaluated as a boolean. This behaves as a
-	// filter in the scan.
-	scanPredicate compiler.Expr
-}
-
-type scanColumn = compiler.Expr
-
-// constantNode is used in select statements where there is no table.
-type constantNode struct {
-	// resultColumns are the result columns containing expressions.
-	resultColumns []compiler.Expr
-	// predicate filters the result depending on the result of the expression.
-	predicate compiler.Expr
-}
-
-// countNode represents a special optimization when a table needs a full count
-// with no filtering or other projections.
-type countNode struct {
-	// tableName is the name of the table to be scanned
-	tableName string
-	// rootPage is the valid page number corresponding to the table
-	rootPage int
-}
-
 // TODO joinNode is unused, but remains as a prototype binary operation node.
-type joinNode struct {
+type joinNodeV2 struct {
 	// left is the left subtree of the join.
 	left logicalNode
 	// right is the right subtree of the join.
