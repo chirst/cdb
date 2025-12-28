@@ -21,19 +21,8 @@ type updateCatalog interface {
 // updatePanner houses the query planner and execution planner for a update
 // statement.
 type updatePlanner struct {
-	queryPlanner     *updateQueryPlanner
-	executionPlanner *updateExecutionPlanner
-}
-
-// updateQueryPlanner generates a queryPlan for the given update statement.
-type updateQueryPlanner struct {
-	catalog   updateCatalog
-	stmt      *compiler.UpdateStmt
-	queryPlan *updateNode
-}
-
-// updateExecutionPlanner generates a byte code routine for the given queryPlan.
-type updateExecutionPlanner struct {
+	catalog       updateCatalog
+	stmt          *compiler.UpdateStmt
 	queryPlan     *updateNode
 	executionPlan *vm.ExecutionPlan
 }
@@ -41,31 +30,17 @@ type updateExecutionPlanner struct {
 // NewUpdate create a update planner.
 func NewUpdate(catalog updateCatalog, stmt *compiler.UpdateStmt) *updatePlanner {
 	return &updatePlanner{
-		queryPlanner: &updateQueryPlanner{
-			catalog: catalog,
-			stmt:    stmt,
-		},
-		executionPlanner: &updateExecutionPlanner{
-			executionPlan: vm.NewExecutionPlan(
-				catalog.GetVersion(),
-				stmt.Explain,
-			),
-		},
+		catalog: catalog,
+		stmt:    stmt,
+		executionPlan: vm.NewExecutionPlan(
+			catalog.GetVersion(),
+			stmt.Explain,
+		),
 	}
 }
 
 // QueryPlan sets up a high level plan to be passed to ExecutionPlan.
 func (p *updatePlanner) QueryPlan() (*QueryPlan, error) {
-	qp, err := p.queryPlanner.getQueryPlan()
-	if err != nil {
-		return nil, err
-	}
-	p.executionPlanner.queryPlan = p.queryPlanner.queryPlan
-	return qp, err
-}
-
-// getQueryPlan returns a updateNode with a high level plan.
-func (p *updateQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 	rootPage, err := p.catalog.GetRootPageNumber(p.stmt.TableName)
 	if err != nil {
 		return nil, errTableNotExist
@@ -118,7 +93,7 @@ func (p *updateQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 
 // errIfPrimaryKeySet checks the primary key isn't being updated because it
 // could cause an infinite loop if not handled properly.
-func (p *updateQueryPlanner) errIfPrimaryKeySet() error {
+func (p *updatePlanner) errIfPrimaryKeySet() error {
 	pkColumnName, err := p.catalog.GetPrimaryKeyColumn(p.stmt.TableName)
 	if err != nil {
 		return err
@@ -131,7 +106,7 @@ func (p *updateQueryPlanner) errIfPrimaryKeySet() error {
 
 // errIfSetNotOnDestinationTable checks the set list has column names that are
 // part of the table being updated.
-func (p *updateQueryPlanner) errIfSetNotOnDestinationTable() error {
+func (p *updatePlanner) errIfSetNotOnDestinationTable() error {
 	schemaColumns, err := p.catalog.GetColumns(p.stmt.TableName)
 	if err != nil {
 		return err
@@ -146,7 +121,7 @@ func (p *updateQueryPlanner) errIfSetNotOnDestinationTable() error {
 
 // setQueryPlanRecordExpressions populates the query plan with appropriate
 // expressions for setting up to make a record.
-func (p *updateQueryPlanner) setQueryPlanRecordExpressions() error {
+func (p *updatePlanner) setQueryPlanRecordExpressions() error {
 	schemaColumns, err := p.catalog.GetColumns(p.stmt.TableName)
 	if err != nil {
 		return err
@@ -190,13 +165,13 @@ func (p *updateQueryPlanner) setQueryPlanRecordExpressions() error {
 
 // Execution plan is a byte code routine based off a high level query plan.
 func (p *updatePlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
-	if p.queryPlanner.queryPlan == nil {
+	if p.queryPlan == nil {
 		_, err := p.QueryPlan()
 		if err != nil {
 			return nil, err
 		}
 	}
-	p.queryPlanner.queryPlan.plan.compile()
-	p.executionPlanner.executionPlan.Commands = p.queryPlanner.queryPlan.plan.commands
-	return p.executionPlanner.executionPlan, nil
+	p.queryPlan.plan.compile()
+	p.executionPlan.Commands = p.queryPlan.plan.commands
+	return p.executionPlan, nil
 }
