@@ -20,36 +20,13 @@ type selectCatalog interface {
 }
 
 // selectPlanner is capable of generating a logical query plan and a physical
-// execution plan for a select statement. The planners within are separated by
-// their responsibility.
+// execution plan for a select statement.
 type selectPlanner struct {
-	// queryPlanner is responsible for transforming the AST to a logical query
-	// plan tree. This tree is made up of nodes that map closely to a relational
-	// algebra tree. The query planner also performs binding and validation.
-	queryPlanner *selectQueryPlanner
-	// executionPlanner transforms the logical query tree to a bytecode routine,
-	// built to be ran by the virtual machine.
-	executionPlanner *selectExecutionPlanner
-}
-
-// selectQueryPlanner converts an AST to a logical query plan. Along the way it
-// also validates the AST makes sense with the catalog (a process known as
-// binding).
-type selectQueryPlanner struct {
-	// catalog contains the schema
+	// catalog contains the schema.
 	catalog selectCatalog
-	// stmt contains the AST
+	// stmt contains the AST.
 	stmt *compiler.SelectStmt
-	// queryPlan contains the logical plan being built. The root node must be a
-	// projection.
-	queryPlan *QueryPlan
-}
-
-// selectExecutionPlanner converts logical nodes in a query plan tree to
-// bytecode that can be run by the vm.
-type selectExecutionPlanner struct {
-	// queryPlan contains the logical plan. This node is populated by calling
-	// the QueryPlan method.
+	// queryPlan contains the plan being built.
 	queryPlan *QueryPlan
 	// executionPlan contains the execution plan for the vm. This is built by
 	// calling ExecutionPlan.
@@ -59,49 +36,41 @@ type selectExecutionPlanner struct {
 // NewSelect returns an instance of a select planner for the given AST.
 func NewSelect(catalog selectCatalog, stmt *compiler.SelectStmt) *selectPlanner {
 	return &selectPlanner{
-		queryPlanner: &selectQueryPlanner{
-			catalog: catalog,
-			stmt:    stmt,
-		},
-		executionPlanner: &selectExecutionPlanner{
-			executionPlan: vm.NewExecutionPlan(
-				catalog.GetVersion(),
-				stmt.Explain,
-			),
-		},
+		catalog: catalog,
+		stmt:    stmt,
+		executionPlan: vm.NewExecutionPlan(
+			catalog.GetVersion(),
+			stmt.Explain,
+		),
 	}
 }
 
 // QueryPlan generates the query plan tree for the planner.
 func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
-	qp, err := p.queryPlanner.getQueryPlan()
+	qp, err := p.getQueryPlan()
 	if err != nil {
 		return nil, err
 	}
-	p.executionPlanner.queryPlan = p.queryPlanner.queryPlan
 	return qp, err
 }
 
-// getQueryPlan performs several passes on the AST to compute a more manageable
-// tree structure of logical operators who closely resemble relational algebra
-// operators.
-//
-// Firstly, getQueryPlan performs simplification to translate the projection
-// portion of the select statement to uniform expressions. This means a "*",
-// "table.*", or "alias.*" would simply be translated to ColumnRef expressions.
-// From here the query is easier to work on as it is one consistent structure.
-//
-// From here, more simplification is performed. Folding computes constant
-// expressions to reduce the complexity of the expression tree. This saves
-// instructions ran during a scan. An example of this folding could be the
-// binary expression 1 + 1 becoming a constant expression 2. Or a function UPPER
-// on a string literal "foo" being simplified to just the string literal "FOO".
-//
-// Analysis steps are also performed. Such as assigning catalog information to
-// ColumnRef expressions. This means associating table names with root page
-// numbers, column names with their indices within a tuple, and column names
-// with their constraints and available indexes.
-func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
+// ExecutionPlan returns the bytecode execution plan for the planner. Calling
+// QueryPlan is not a prerequisite to this method as it will be called by
+// ExecutionPlan if needed.
+func (sp *selectPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
+	if sp.queryPlan == nil {
+		_, err := sp.QueryPlan()
+		if err != nil {
+			return nil, err
+		}
+	}
+	sp.setResultHeader()
+	sp.queryPlan.compile()
+	sp.executionPlan.Commands = sp.queryPlan.commands
+	return sp.executionPlan, nil
+}
+
+func (p *selectPlanner) getQueryPlan() (*QueryPlan, error) {
 	err := p.optimizeResultColumns()
 	if err != nil {
 		return nil, err
@@ -205,7 +174,7 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 	return plan, nil
 }
 
-func (p *selectQueryPlanner) optimizeResultColumns() error {
+func (p *selectPlanner) optimizeResultColumns() error {
 	var err error
 	for i := range p.stmt.ResultColumns {
 		if p.stmt.ResultColumns[i].Expression != nil {
@@ -283,7 +252,7 @@ func foldExpr(e compiler.Expr) (compiler.Expr, error) {
 	}
 }
 
-func (p *selectQueryPlanner) getProjections() ([]projection, error) {
+func (p *selectPlanner) getProjections() ([]projection, error) {
 	var projections []projection
 	for _, resultColumn := range p.stmt.ResultColumns {
 		if resultColumn.All {
@@ -322,27 +291,7 @@ func (p *selectQueryPlanner) getProjections() ([]projection, error) {
 	return projections, nil
 }
 
-// ExecutionPlan returns the bytecode execution plan for the planner. Calling
-// QueryPlan is not a prerequisite to this method as it will be called by
-// ExecutionPlan if needed.
-func (sp *selectPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
-	if sp.queryPlanner.queryPlan == nil {
-		_, err := sp.QueryPlan()
-		if err != nil {
-			return nil, err
-		}
-	}
-	return sp.executionPlanner.getExecutionPlan()
-}
-
-func (p *selectExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
-	p.setResultHeader()
-	p.queryPlan.compile()
-	p.executionPlan.Commands = p.queryPlan.commands
-	return p.executionPlan, nil
-}
-
-func (p *selectExecutionPlanner) setResultHeader() {
+func (p *selectPlanner) setResultHeader() {
 	resultHeader := []string{}
 	switch t := p.queryPlan.root.(type) {
 	case *projectNode:
@@ -362,7 +311,7 @@ func (p *selectExecutionPlanner) setResultHeader() {
 }
 
 // setResultTypes attempts to precompute the type for each result column expr.
-func (p *selectExecutionPlanner) setResultTypes(exprs []compiler.Expr) error {
+func (p *selectPlanner) setResultTypes(exprs []compiler.Expr) error {
 	resolvedTypes := []catalog.CdbType{}
 	for _, expr := range exprs {
 		t, err := getExprType(expr)
