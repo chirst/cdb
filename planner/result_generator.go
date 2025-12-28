@@ -7,7 +7,7 @@ import (
 
 // generateExpressionTo takes the context of the plan and generates commands
 // that land the result of the given expr in the toRegister.
-func generateExpressionTo(plan *planV2, expr compiler.Expr, toRegister int) {
+func generateExpressionTo(plan *QueryPlan, expr compiler.Expr, toRegister int) {
 	rg := &resultExprGenerator{}
 	rg.plan = plan
 	rg.outputRegister = toRegister
@@ -16,7 +16,7 @@ func generateExpressionTo(plan *planV2, expr compiler.Expr, toRegister int) {
 
 // resultExprGenerator builds commands for the given expression.
 type resultExprGenerator struct {
-	plan *planV2
+	plan *QueryPlan
 	// outputRegister is the target register for the result of the expression.
 	outputRegister int
 }

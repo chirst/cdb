@@ -107,7 +107,12 @@ func (p *insertQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 		colValues:          p.stmt.ColValues,
 	}
 	p.queryPlan = insertNode
-	return newQueryPlan(insertNode, p.stmt.ExplainQueryPlan), nil
+	return newQueryPlan(
+		insertNode,
+		p.stmt.ExplainQueryPlan,
+		transactionTypeWrite,
+		rootPage,
+	), nil
 }
 
 // ExecutionPlan returns the bytecode routine for the planner. Calling QueryPlan

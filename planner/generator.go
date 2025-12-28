@@ -16,53 +16,10 @@ const (
 	transactionTypeWrite transactionType = 2
 )
 
-// planV2 holds the necessary data and receivers for generating a plan as well
-// as the final commands that define the execution plan.
-type planV2 struct {
-	// root is the root node of the plan tree.
-	root nodeV2
-	// commands is a list of commands that define the plan.
-	commands []vm.Command
-	// constInts is a mapping of constant integer values to the registers that
-	// contain the value.
-	constInts map[int]int
-	// constStrings is a mapping of constant string values to the registers that
-	// contain the value.
-	constStrings map[string]int
-	// constVars is a mapping of a variable's position to the registers that
-	// holds the variable's value.
-	constVars map[int]int
-	// freeRegister is a counter containing the next free register in the plan.
-	freeRegister int
-	// transactionType defines what kind of transaction the plan will need.
-	transactionType transactionType
-	// cursorId is the id of the cursor the plan is using. Note plans will
-	// eventually need to use more than one cursor, but for now it is convenient
-	// to pull the id from here.
-	cursorId int
-	// rootPageNumber is the root page number of the table cursorId is
-	// associated with. This should be a map at some point when multiple tables
-	// can be queried in one plan.
-	rootPageNumber int
-}
-
-func newPlan(transactionType transactionType, rootPageNumber int) *planV2 {
-	return &planV2{
-		commands:        []vm.Command{},
-		constInts:       make(map[int]int),
-		constStrings:    make(map[string]int),
-		constVars:       make(map[int]int),
-		freeRegister:    1,
-		transactionType: transactionType,
-		cursorId:        1,
-		rootPageNumber:  rootPageNumber,
-	}
-}
-
 // declareConstInt gets or sets a register with the const value and returns the
 // register. It is guaranteed the value will be in the register for the duration
 // of the plan.
-func (p *planV2) declareConstInt(i int) int {
+func (p *QueryPlan) declareConstInt(i int) int {
 	_, ok := p.constInts[i]
 	if !ok {
 		p.constInts[i] = p.freeRegister
@@ -74,7 +31,7 @@ func (p *planV2) declareConstInt(i int) int {
 // declareConstString gets or sets a register with the const value and returns
 // the register. It is guaranteed the value will be in the register for the
 // duration of the plan.
-func (p *planV2) declareConstString(s string) int {
+func (p *QueryPlan) declareConstString(s string) int {
 	_, ok := p.constStrings[s]
 	if !ok {
 		p.constStrings[s] = p.freeRegister
@@ -86,7 +43,7 @@ func (p *planV2) declareConstString(s string) int {
 // declareConstVar gets or sets a register with the const value and returns
 // the register. It is guaranteed the value will be in the register for the
 // duration of the plan.
-func (p *planV2) declareConstVar(position int) int {
+func (p *QueryPlan) declareConstVar(position int) int {
 	_, ok := p.constVars[position]
 	if !ok {
 		p.constVars[position] = p.freeRegister
@@ -95,7 +52,7 @@ func (p *planV2) declareConstVar(position int) int {
 	return p.constVars[position]
 }
 
-func (p *planV2) compile() {
+func (p *QueryPlan) compile() {
 	initCmd := &vm.InitCmd{}
 	p.commands = append(p.commands, initCmd)
 	p.root.produce()
@@ -106,7 +63,7 @@ func (p *planV2) compile() {
 	p.commands = append(p.commands, &vm.GotoCmd{P2: 1})
 }
 
-func (p *planV2) pushTransaction() {
+func (p *QueryPlan) pushTransaction() {
 	switch p.transactionType {
 	case transactionTypeNone:
 		return
@@ -133,7 +90,7 @@ func (p *planV2) pushTransaction() {
 	}
 }
 
-func (p *planV2) pushConstants() {
+func (p *QueryPlan) pushConstants() {
 	// these constants are pushed ordered since maps are unordered making it
 	// difficult to assert that a sequence of instructions appears.
 	p.pushConstantInts()
@@ -141,7 +98,7 @@ func (p *planV2) pushConstants() {
 	p.pushConstantVars()
 }
 
-func (p *planV2) pushConstantInts() {
+func (p *QueryPlan) pushConstantInts() {
 	temp := []*vm.IntegerCmd{}
 	for k := range p.constInts {
 		temp = append(temp, &vm.IntegerCmd{P1: k, P2: p.constInts[k]})
@@ -154,7 +111,7 @@ func (p *planV2) pushConstantInts() {
 	}
 }
 
-func (p *planV2) pushConstantStrings() {
+func (p *QueryPlan) pushConstantStrings() {
 	temp := []*vm.StringCmd{}
 	for v := range p.constStrings {
 		p.commands = append(p.commands, &vm.StringCmd{P1: p.constStrings[v], P4: v})
@@ -167,7 +124,7 @@ func (p *planV2) pushConstantStrings() {
 	}
 }
 
-func (p *planV2) pushConstantVars() {
+func (p *QueryPlan) pushConstantVars() {
 	temp := []*vm.VariableCmd{}
 	for v := range p.constVars {
 		p.commands = append(p.commands, &vm.VariableCmd{P1: v, P2: p.constVars[v]})
@@ -180,14 +137,9 @@ func (p *planV2) pushConstantVars() {
 	}
 }
 
-type nodeV2 interface {
-	produce()
-	consume()
-}
-
-type updateNodeV2 struct {
-	child nodeV2
-	plan  *planV2
+type updateNode struct {
+	child logicalNode
+	plan  *QueryPlan
 	// updateExprs is formed from the update statement AST. The idea is to
 	// provide an expression for each column where the expression is either a
 	// columnRef or the complex expression from the right hand side of the SET
@@ -201,11 +153,11 @@ type updateNodeV2 struct {
 	updateExprs []compiler.Expr
 }
 
-func (u *updateNodeV2) produce() {
+func (u *updateNode) produce() {
 	u.child.produce()
 }
 
-func (u *updateNodeV2) consume() {
+func (u *updateNode) consume() {
 	// RowID
 	u.plan.commands = append(u.plan.commands, &vm.RowIdCmd{
 		P1: u.plan.cursorId,
@@ -243,33 +195,33 @@ func (u *updateNodeV2) consume() {
 	})
 }
 
-type filterNodeV2 struct {
-	child     nodeV2
-	parent    nodeV2
-	plan      *planV2
+type filterNode struct {
+	child     logicalNode
+	parent    logicalNode
+	plan      *QueryPlan
 	predicate compiler.Expr
 }
 
-func (f *filterNodeV2) produce() {
+func (f *filterNode) produce() {
 	f.child.produce()
 }
 
-func (f *filterNodeV2) consume() {
+func (f *filterNode) consume() {
 	jumpCommand := generatePredicate(f.plan, f.predicate)
 	f.parent.consume()
 	jumpCommand.SetJumpAddress(len(f.plan.commands))
 }
 
-type scanNodeV2 struct {
-	parent nodeV2
-	plan   *planV2
+type scanNode struct {
+	parent logicalNode
+	plan   *QueryPlan
 }
 
-func (s *scanNodeV2) produce() {
+func (s *scanNode) produce() {
 	s.consume()
 }
 
-func (s *scanNodeV2) consume() {
+func (s *scanNode) consume() {
 	rewindCmd := &vm.RewindCmd{P1: s.plan.cursorId}
 	s.plan.commands = append(s.plan.commands, rewindCmd)
 	loopBeginAddress := len(s.plan.commands)
@@ -281,23 +233,23 @@ func (s *scanNodeV2) consume() {
 	rewindCmd.P2 = len(s.plan.commands)
 }
 
-type projectionV2 struct {
+type projection struct {
 	expr compiler.Expr
 	// alias is the alias of the projection or no alias for the zero value.
 	alias string
 }
 
-type projectNodeV2 struct {
-	child       nodeV2
-	plan        *planV2
-	projections []projectionV2
+type projectNode struct {
+	child       logicalNode
+	plan        *QueryPlan
+	projections []projection
 }
 
-func (p *projectNodeV2) produce() {
+func (p *projectNode) produce() {
 	p.child.produce()
 }
 
-func (p *projectNodeV2) consume() {
+func (p *projectNode) consume() {
 	startRegister := p.plan.freeRegister
 	reservedRegisters := len(p.projections)
 	p.plan.freeRegister += reservedRegisters
@@ -310,29 +262,29 @@ func (p *projectNodeV2) consume() {
 	})
 }
 
-type constantNodeV2 struct {
-	parent nodeV2
-	plan   *planV2
+type constantNode struct {
+	parent logicalNode
+	plan   *QueryPlan
 }
 
-func (c *constantNodeV2) produce() {
+func (c *constantNode) produce() {
 	c.consume()
 }
 
-func (c *constantNodeV2) consume() {
+func (c *constantNode) consume() {
 	c.parent.consume()
 }
 
-type countNodeV2 struct {
-	plan       *planV2
-	projection projectionV2
+type countNode struct {
+	plan       *QueryPlan
+	projection projection
 }
 
-func (c *countNodeV2) produce() {
+func (c *countNode) produce() {
 	c.consume()
 }
 
-func (c *countNodeV2) consume() {
+func (c *countNode) consume() {
 	c.plan.commands = append(c.plan.commands, &vm.CountCmd{
 		P1: c.plan.cursorId,
 		P2: c.plan.freeRegister,
@@ -344,4 +296,22 @@ func (c *countNodeV2) consume() {
 		P1: countRegister,
 		P2: countResults,
 	})
+}
+
+func (c *createNode) produce() {
+}
+
+func (c *createNode) consume() {
+}
+
+func (n *insertNode) produce() {
+}
+
+func (n *insertNode) consume() {
+}
+
+func (n *joinNode) produce() {
+}
+
+func (n *joinNode) consume() {
 }

@@ -8,7 +8,7 @@ import (
 // generatePredicate generates code to make a boolean jump for the given
 // expression within the plan context. The function returns the jump command to
 // lazily set the jump address.
-func generatePredicate(plan *planV2, expression compiler.Expr) vm.JumpCommand {
+func generatePredicate(plan *QueryPlan, expression compiler.Expr) vm.JumpCommand {
 	pg := &predicateGenerator{}
 	pg.plan = plan
 	pg.build(expression, 0)
@@ -18,7 +18,7 @@ func generatePredicate(plan *planV2, expression compiler.Expr) vm.JumpCommand {
 // predicateGenerator builds commands to calculate the boolean result of an
 // expression.
 type predicateGenerator struct {
-	plan *planV2
+	plan *QueryPlan
 	// jumpCommand is the command used to make the jump. The command can be
 	// accessed to defer setting the jump address.
 	jumpCommand vm.JumpCommand

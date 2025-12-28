@@ -29,12 +29,12 @@ type updatePlanner struct {
 type updateQueryPlanner struct {
 	catalog   updateCatalog
 	stmt      *compiler.UpdateStmt
-	queryPlan *updateNodeV2
+	queryPlan *updateNode
 }
 
 // updateExecutionPlanner generates a byte code routine for the given queryPlan.
 type updateExecutionPlanner struct {
-	queryPlan     *updateNodeV2
+	queryPlan     *updateNode
 	executionPlan *vm.ExecutionPlan
 }
 
@@ -70,11 +70,14 @@ func (p *updateQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 	if err != nil {
 		return nil, errTableNotExist
 	}
-	logicalPlan := newPlan(transactionTypeWrite, rootPage)
-	updateNode := &updateNodeV2{
-		plan:        logicalPlan,
-		updateExprs: []compiler.Expr{},
-	}
+	updateNode := &updateNode{updateExprs: []compiler.Expr{}}
+	logicalPlan := newQueryPlan(
+		updateNode,
+		p.stmt.ExplainQueryPlan,
+		transactionTypeWrite,
+		rootPage,
+	)
+	updateNode.plan = logicalPlan
 	p.queryPlan = updateNode
 	logicalPlan.root = updateNode
 
@@ -90,14 +93,14 @@ func (p *updateQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 		return nil, err
 	}
 
-	scanNode := &scanNodeV2{
+	scanNode := &scanNode{
 		plan: logicalPlan,
 	}
 	if p.stmt.Predicate != nil {
 		cev := &catalogExprVisitor{}
 		cev.Init(p.catalog, p.stmt.TableName)
 		p.stmt.Predicate.BreadthWalk(cev)
-		filterNode := &filterNodeV2{
+		filterNode := &filterNode{
 			plan:      logicalPlan,
 			predicate: p.stmt.Predicate,
 			parent:    updateNode,
@@ -110,10 +113,7 @@ func (p *updateQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 		updateNode.child = scanNode
 	}
 
-	return &QueryPlan{
-		ExplainQueryPlan: p.stmt.ExplainQueryPlan,
-		root:             updateNode,
-	}, nil
+	return logicalPlan, nil
 }
 
 // errIfPrimaryKeySet checks the primary key isn't being updated because it

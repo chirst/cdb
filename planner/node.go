@@ -8,10 +8,12 @@ import "github.com/chirst/cdb/compiler"
 type logicalNode interface {
 	children() []logicalNode
 	print() string
+	produce()
+	consume()
 }
 
 // TODO joinNode is unused, but remains as a prototype binary operation node.
-type joinNodeV2 struct {
+type joinNode struct {
 	// left is the left subtree of the join.
 	left logicalNode
 	// right is the right subtree of the join.

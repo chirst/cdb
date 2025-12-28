@@ -4,24 +4,66 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/chirst/cdb/vm"
 )
 
-// QueryPlan contains the query plan tree. It is capable of converting the tree
-// to a string representation for a query prefixed with `EXPLAIN QUERY PLAN`.
+// QueryPlan contains the query plan tree stemming from the root node. It is
+// capable of converting the tree to a string representation for a query
+// prefixed with `EXPLAIN QUERY PLAN`.
+//
+// The structure also holds the necessary data and receivers for generating a
+// plan as well as the final commands that define the execution plan.
 type QueryPlan struct {
 	// plan holds the string representation also known as the tree.
 	plan string
-	// root holds the root node of the query plan
+	// root is the root node of the plan tree.
 	root logicalNode
 	// ExplainQueryPlan is a flag indicating if the SQL asked for the query plan
 	// to be printed as a string representation with `EXPLAIN QUERY PLAN`.
 	ExplainQueryPlan bool
+	// commands is a list of commands that define the plan.
+	commands []vm.Command
+	// constInts is a mapping of constant integer values to the registers that
+	// contain the value.
+	constInts map[int]int
+	// constStrings is a mapping of constant string values to the registers that
+	// contain the value.
+	constStrings map[string]int
+	// constVars is a mapping of a variable's position to the registers that
+	// holds the variable's value.
+	constVars map[int]int
+	// freeRegister is a counter containing the next free register in the plan.
+	freeRegister int
+	// transactionType defines what kind of transaction the plan will need.
+	transactionType transactionType
+	// cursorId is the id of the cursor the plan is using. Note plans will
+	// eventually need to use more than one cursor, but for now it is convenient
+	// to pull the id from here.
+	cursorId int
+	// rootPageNumber is the root page number of the table cursorId is
+	// associated with. This should be a map at some point when multiple tables
+	// can be queried in one plan.
+	rootPageNumber int
 }
 
-func newQueryPlan(root logicalNode, explainQueryPlan bool) *QueryPlan {
+func newQueryPlan(
+	root logicalNode,
+	explainQueryPlan bool,
+	transactionType transactionType,
+	rootPageNumber int,
+) *QueryPlan {
 	return &QueryPlan{
 		root:             root,
 		ExplainQueryPlan: explainQueryPlan,
+		commands:         []vm.Command{},
+		constInts:        make(map[int]int),
+		constStrings:     make(map[string]int),
+		constVars:        make(map[int]int),
+		freeRegister:     1,
+		transactionType:  transactionType,
+		cursorId:         1,
+		rootPageNumber:   rootPageNumber,
 	}
 }
 
@@ -101,27 +143,27 @@ func (p *QueryPlan) connectSiblings() string {
 	return strings.Join(planMatrix, "\n")
 }
 
-func (p *projectNodeV2) print() string {
+func (p *projectNode) print() string {
 	return "project"
 }
 
-func (p *projectNodeV2) children() []logicalNode {
-	return []logicalNode{}
+func (p *projectNode) children() []logicalNode {
+	return []logicalNode{p.child}
 }
 
-func (s *scanNodeV2) print() string {
-	return fmt.Sprintf("scan table")
+func (s *scanNode) print() string {
+	return "scan table"
 }
 
-func (c *constantNodeV2) print() string {
+func (c *constantNode) print() string {
 	return "constant data source"
 }
 
-func (c *countNodeV2) print() string {
-	return fmt.Sprintf("count table")
+func (c *countNode) print() string {
+	return "count table"
 }
 
-func (j *joinNodeV2) print() string {
+func (j *joinNode) print() string {
 	return fmt.Sprint(j.operation)
 }
 
@@ -136,23 +178,27 @@ func (i *insertNode) print() string {
 	return "insert"
 }
 
-func (u *updateNodeV2) print() string {
+func (u *updateNode) print() string {
 	return "update"
 }
 
-func (s *scanNodeV2) children() []logicalNode {
+func (f *filterNode) print() string {
+	return "filter"
+}
+
+func (s *scanNode) children() []logicalNode {
 	return []logicalNode{}
 }
 
-func (c *constantNodeV2) children() []logicalNode {
+func (c *constantNode) children() []logicalNode {
 	return []logicalNode{}
 }
 
-func (c *countNodeV2) children() []logicalNode {
+func (c *countNode) children() []logicalNode {
 	return []logicalNode{}
 }
 
-func (j *joinNodeV2) children() []logicalNode {
+func (j *joinNode) children() []logicalNode {
 	return []logicalNode{j.left, j.right}
 }
 
@@ -164,6 +210,10 @@ func (i *insertNode) children() []logicalNode {
 	return []logicalNode{}
 }
 
-func (u *updateNodeV2) children() []logicalNode {
+func (u *updateNode) children() []logicalNode {
 	return []logicalNode{}
+}
+
+func (f *filterNode) children() []logicalNode {
+	return []logicalNode{f.child}
 }

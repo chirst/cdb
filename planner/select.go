@@ -42,7 +42,7 @@ type selectQueryPlanner struct {
 	stmt *compiler.SelectStmt
 	// queryPlan contains the logical plan being built. The root node must be a
 	// projection.
-	queryPlan *planV2
+	queryPlan *QueryPlan
 }
 
 // selectExecutionPlanner converts logical nodes in a query plan tree to
@@ -50,7 +50,7 @@ type selectQueryPlanner struct {
 type selectExecutionPlanner struct {
 	// queryPlan contains the logical plan. This node is populated by calling
 	// the QueryPlan method.
-	queryPlan *planV2
+	queryPlan *QueryPlan
 	// executionPlan contains the execution plan for the vm. This is built by
 	// calling ExecutionPlan.
 	executionPlan *vm.ExecutionPlan
@@ -143,40 +143,43 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 		if tableName == "" {
 			return nil, errors.New("must have from for COUNT")
 		}
-		plan := newPlan(transactionTypeRead, rootPageNumber)
-		cn := &countNodeV2{plan: plan, projection: projections[0]}
+		cn := &countNode{projection: projections[0]}
+		plan := newQueryPlan(
+			cn,
+			p.stmt.ExplainQueryPlan,
+			transactionTypeRead,
+			rootPageNumber,
+		)
+		cn.plan = plan
 		p.queryPlan = plan
-		plan.root = cn
-		return newQueryPlan(cn, p.stmt.ExplainQueryPlan), nil
+		return plan, nil
 	}
 
 	tt := transactionTypeRead
 	if tableName == "" {
 		tt = transactionTypeNone
 	}
-	plan := newPlan(tt, rootPageNumber)
-	projectNode := &projectNodeV2{
-		plan:        plan,
-		projections: projections,
-	}
+	projectNode := &projectNode{projections: projections}
+	plan := newQueryPlan(projectNode, p.stmt.ExplainQueryPlan, tt, rootPageNumber)
+	projectNode.plan = plan
 	if p.stmt.Where != nil {
 		cev := &catalogExprVisitor{}
 		cev.Init(p.catalog, tableName)
 		p.stmt.Where.BreadthWalk(cev)
-		filterNode := &filterNodeV2{
+		filterNode := &filterNode{
 			parent:    projectNode,
 			plan:      plan,
 			predicate: p.stmt.Where,
 		}
 		projectNode.child = filterNode
 		if tableName == "" {
-			constNode := &constantNodeV2{
+			constNode := &constantNode{
 				plan: plan,
 			}
 			filterNode.child = constNode
 			constNode.parent = filterNode
 		} else {
-			scanNode := &scanNodeV2{
+			scanNode := &scanNode{
 				plan: plan,
 			}
 			filterNode.child = scanNode
@@ -184,13 +187,13 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 		}
 	} else {
 		if tableName == "" {
-			constNode := &constantNodeV2{
+			constNode := &constantNode{
 				plan: plan,
 			}
 			projectNode.child = constNode
 			constNode.parent = projectNode
 		} else {
-			scanNode := &scanNodeV2{
+			scanNode := &scanNode{
 				plan: plan,
 			}
 			projectNode.child = scanNode
@@ -199,7 +202,7 @@ func (p *selectQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 	}
 	p.queryPlan = plan
 	plan.root = projectNode
-	return newQueryPlan(projectNode, p.stmt.ExplainQueryPlan), nil
+	return plan, nil
 }
 
 func (p *selectQueryPlanner) optimizeResultColumns() error {
@@ -280,8 +283,8 @@ func foldExpr(e compiler.Expr) (compiler.Expr, error) {
 	}
 }
 
-func (p *selectQueryPlanner) getProjections() ([]projectionV2, error) {
-	var projections []projectionV2
+func (p *selectQueryPlanner) getProjections() ([]projection, error) {
+	var projections []projection
 	for _, resultColumn := range p.stmt.ResultColumns {
 		if resultColumn.All {
 			cols, err := p.catalog.GetColumns(p.stmt.From.TableName)
@@ -289,7 +292,7 @@ func (p *selectQueryPlanner) getProjections() ([]projectionV2, error) {
 				return nil, err
 			}
 			for _, c := range cols {
-				projections = append(projections, projectionV2{
+				projections = append(projections, projection{
 					expr: &compiler.ColumnRef{
 						Table:  p.stmt.From.TableName,
 						Column: c,
@@ -302,7 +305,7 @@ func (p *selectQueryPlanner) getProjections() ([]projectionV2, error) {
 				return nil, err
 			}
 			for _, c := range cols {
-				projections = append(projections, projectionV2{
+				projections = append(projections, projection{
 					expr: &compiler.ColumnRef{
 						Table:  p.stmt.From.TableName,
 						Column: c,
@@ -310,7 +313,7 @@ func (p *selectQueryPlanner) getProjections() ([]projectionV2, error) {
 				})
 			}
 		} else if resultColumn.Expression != nil {
-			projections = append(projections, projectionV2{
+			projections = append(projections, projection{
 				expr:  resultColumn.Expression,
 				alias: resultColumn.Alias,
 			})
@@ -342,14 +345,14 @@ func (p *selectExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
 func (p *selectExecutionPlanner) setResultHeader() {
 	resultHeader := []string{}
 	switch t := p.queryPlan.root.(type) {
-	case *projectNodeV2:
+	case *projectNode:
 		projectExprs := []compiler.Expr{}
 		for _, projection := range t.projections {
 			resultHeader = append(resultHeader, projection.alias)
 			projectExprs = append(projectExprs, projection.expr)
 		}
 		p.setResultTypes(projectExprs)
-	case *countNodeV2:
+	case *countNode:
 		resultHeader = append(resultHeader, t.projection.alias)
 		p.setResultTypes([]compiler.Expr{t.projection.expr})
 	default:

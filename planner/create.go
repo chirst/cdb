@@ -88,7 +88,12 @@ func (p *createQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 			tableName: p.stmt.TableName,
 		}
 		p.queryPlan = noopCreateNode
-		return newQueryPlan(noopCreateNode, p.stmt.ExplainQueryPlan), nil
+		return newQueryPlan(
+			noopCreateNode,
+			p.stmt.ExplainQueryPlan,
+			transactionTypeWrite,
+			0,
+		), nil
 	}
 	if tableExists {
 		return nil, errTableExists
@@ -104,7 +109,12 @@ func (p *createQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 		schema:     jSchema,
 	}
 	p.queryPlan = createNode
-	return newQueryPlan(createNode, p.stmt.ExplainQueryPlan), nil
+	return newQueryPlan(
+		createNode,
+		p.stmt.ExplainQueryPlan,
+		transactionTypeWrite,
+		0,
+	), nil
 }
 
 func (p *createQueryPlanner) getSchemaString() (string, error) {
