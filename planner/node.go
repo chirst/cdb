@@ -26,6 +26,7 @@ type joinNode struct {
 // createNode represents a operation to create an object in the system catalog.
 // For example a table, index, or trigger.
 type createNode struct {
+	plan *QueryPlan
 	// objectName is the name of the index, trigger, or table.
 	objectName string
 	// objectType could be an index, trigger, or in this case a table.

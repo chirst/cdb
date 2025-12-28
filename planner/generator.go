@@ -299,9 +299,23 @@ func (c *countNode) consume() {
 }
 
 func (c *createNode) produce() {
+	c.consume()
 }
 
 func (c *createNode) consume() {
+	if c.noop {
+		return
+	}
+	c.plan.commands = append(c.plan.commands, &vm.CreateBTreeCmd{P2: 1})
+	c.plan.commands = append(c.plan.commands, &vm.NewRowIdCmd{P1: c.plan.cursorId, P2: 2})
+	c.plan.commands = append(c.plan.commands, &vm.StringCmd{P1: 3, P4: c.objectType})
+	c.plan.commands = append(c.plan.commands, &vm.StringCmd{P1: 4, P4: c.objectName})
+	c.plan.commands = append(c.plan.commands, &vm.StringCmd{P1: 5, P4: c.tableName})
+	c.plan.commands = append(c.plan.commands, &vm.CopyCmd{P1: 1, P2: 6})
+	c.plan.commands = append(c.plan.commands, &vm.StringCmd{P1: 7, P4: string(c.schema)})
+	c.plan.commands = append(c.plan.commands, &vm.MakeRecordCmd{P1: 3, P2: 5, P3: 8})
+	c.plan.commands = append(c.plan.commands, &vm.InsertCmd{P1: c.plan.cursorId, P2: 8, P3: 2})
+	c.plan.commands = append(c.plan.commands, &vm.ParseSchemaCmd{})
 }
 
 func (n *insertNode) produce() {

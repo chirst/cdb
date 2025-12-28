@@ -47,30 +47,6 @@ func NewSelect(catalog selectCatalog, stmt *compiler.SelectStmt) *selectPlanner 
 
 // QueryPlan generates the query plan tree for the planner.
 func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
-	qp, err := p.getQueryPlan()
-	if err != nil {
-		return nil, err
-	}
-	return qp, err
-}
-
-// ExecutionPlan returns the bytecode execution plan for the planner. Calling
-// QueryPlan is not a prerequisite to this method as it will be called by
-// ExecutionPlan if needed.
-func (sp *selectPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
-	if sp.queryPlan == nil {
-		_, err := sp.QueryPlan()
-		if err != nil {
-			return nil, err
-		}
-	}
-	sp.setResultHeader()
-	sp.queryPlan.compile()
-	sp.executionPlan.Commands = sp.queryPlan.commands
-	return sp.executionPlan, nil
-}
-
-func (p *selectPlanner) getQueryPlan() (*QueryPlan, error) {
 	err := p.optimizeResultColumns()
 	if err != nil {
 		return nil, err
@@ -172,6 +148,22 @@ func (p *selectPlanner) getQueryPlan() (*QueryPlan, error) {
 	p.queryPlan = plan
 	plan.root = projectNode
 	return plan, nil
+}
+
+// ExecutionPlan returns the bytecode execution plan for the planner. Calling
+// QueryPlan is not a prerequisite to this method as it will be called by
+// ExecutionPlan if needed.
+func (sp *selectPlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
+	if sp.queryPlan == nil {
+		_, err := sp.QueryPlan()
+		if err != nil {
+			return nil, err
+		}
+	}
+	sp.setResultHeader()
+	sp.queryPlan.compile()
+	sp.executionPlan.Commands = sp.queryPlan.commands
+	return sp.executionPlan, nil
 }
 
 func (p *selectPlanner) optimizeResultColumns() error {

@@ -2,7 +2,6 @@ package planner
 
 import (
 	"errors"
-	"reflect"
 	"testing"
 
 	"github.com/chirst/cdb/catalog"
@@ -55,10 +54,8 @@ func TestCreateWithNoIDColumn(t *testing.T) {
 		t.Fatalf("failed to convert expected schema to json %s", err)
 	}
 	expectedCommands := []vm.Command{
-		&vm.InitCmd{P2: 1},
-		&vm.TransactionCmd{P2: 1},
+		&vm.InitCmd{P2: 12},
 		&vm.CreateBTreeCmd{P2: 1},
-		&vm.OpenWriteCmd{P1: 1, P2: 1},
 		&vm.NewRowIdCmd{P1: 1, P2: 2},
 		&vm.StringCmd{P1: 3, P4: "table"},
 		&vm.StringCmd{P1: 4, P4: "foo"},
@@ -69,16 +66,15 @@ func TestCreateWithNoIDColumn(t *testing.T) {
 		&vm.InsertCmd{P1: 1, P2: 8, P3: 2},
 		&vm.ParseSchemaCmd{},
 		&vm.HaltCmd{},
+		&vm.TransactionCmd{P2: 1},
+		&vm.OpenWriteCmd{P1: 1, P2: 1},
+		&vm.GotoCmd{P2: 1},
 	}
 	plan, err := NewCreate(mc, stmt).ExecutionPlan()
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i, c := range expectedCommands {
-		if !reflect.DeepEqual(c, plan.Commands[i]) {
-			t.Errorf("got %#v want %#v", plan.Commands[i], c)
-		}
-	}
+	assertCommandsMatch(t, plan.Commands, expectedCommands)
 }
 
 func TestCreateWithAlternateNamedIDColumn(t *testing.T) {
@@ -114,10 +110,8 @@ func TestCreateWithAlternateNamedIDColumn(t *testing.T) {
 		t.Fatalf("failed to convert expected schema to json %s", err)
 	}
 	expectedCommands := []vm.Command{
-		&vm.InitCmd{P2: 1},
-		&vm.TransactionCmd{P2: 1},
+		&vm.InitCmd{P2: 12},
 		&vm.CreateBTreeCmd{P2: 1},
-		&vm.OpenWriteCmd{P1: 1, P2: 1},
 		&vm.NewRowIdCmd{P1: 1, P2: 2},
 		&vm.StringCmd{P1: 3, P4: "table"},
 		&vm.StringCmd{P1: 4, P4: "foo"},
@@ -128,16 +122,15 @@ func TestCreateWithAlternateNamedIDColumn(t *testing.T) {
 		&vm.InsertCmd{P1: 1, P2: 8, P3: 2},
 		&vm.ParseSchemaCmd{},
 		&vm.HaltCmd{},
+		&vm.TransactionCmd{P2: 1},
+		&vm.OpenWriteCmd{P1: 1, P2: 1},
+		&vm.GotoCmd{P2: 1},
 	}
 	plan, err := NewCreate(mc, stmt).ExecutionPlan()
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i, c := range expectedCommands {
-		if !reflect.DeepEqual(c, plan.Commands[i]) {
-			t.Errorf("got %#v want %#v", plan.Commands[i], c)
-		}
-	}
+	assertCommandsMatch(t, plan.Commands, expectedCommands)
 }
 
 func TestCreatePrimaryKeyWithTextType(t *testing.T) {
@@ -215,17 +208,15 @@ func TestCreateIfNotExistsNoop(t *testing.T) {
 	}
 	mc := &mockCreateCatalog{tableExistsRes: true}
 	expectedCommands := []vm.Command{
-		&vm.InitCmd{P2: 1},
-		&vm.TransactionCmd{P2: 1},
+		&vm.InitCmd{P2: 2},
 		&vm.HaltCmd{},
+		&vm.TransactionCmd{P2: 1},
+		&vm.OpenWriteCmd{P1: 1, P2: 1},
+		&vm.GotoCmd{P2: 1},
 	}
 	plan, err := NewCreate(mc, stmt).ExecutionPlan()
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i, c := range expectedCommands {
-		if !reflect.DeepEqual(c, plan.Commands[i]) {
-			t.Errorf("got %#v want %#v", plan.Commands[i], c)
-		}
-	}
+	assertCommandsMatch(t, plan.Commands, expectedCommands)
 }
