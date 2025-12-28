@@ -74,7 +74,9 @@ func TestCreateWithNoIDColumn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertCommandsMatch(t, plan.Commands, expectedCommands)
+	if err := assertCommandsMatch(plan.Commands, expectedCommands); err != nil {
+		t.Error(err)
+	}
 }
 
 func TestCreateWithAlternateNamedIDColumn(t *testing.T) {
@@ -130,7 +132,9 @@ func TestCreateWithAlternateNamedIDColumn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertCommandsMatch(t, plan.Commands, expectedCommands)
+	if err := assertCommandsMatch(plan.Commands, expectedCommands); err != nil {
+		t.Error(err)
+	}
 }
 
 func TestCreatePrimaryKeyWithTextType(t *testing.T) {
@@ -218,5 +222,7 @@ func TestCreateIfNotExistsNoop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertCommandsMatch(t, plan.Commands, expectedCommands)
+	if err := assertCommandsMatch(plan.Commands, expectedCommands); err != nil {
+		t.Error(err)
+	}
 }

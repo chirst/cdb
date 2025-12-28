@@ -2,8 +2,6 @@ package planner
 
 import (
 	"errors"
-	"fmt"
-	"reflect"
 	"testing"
 
 	"github.com/chirst/cdb/catalog"
@@ -46,28 +44,6 @@ func (mockUpdateCatalog) GetColumnType(tableName string, columnName string) (cat
 	return catalog.CdbType{ID: catalog.CTInt}, nil
 }
 
-func assertCommandsMatch(t *testing.T, gotCommands, expectedCommands []vm.Command) {
-	didMatch := true
-	errOutput := "\n"
-	for i, c := range expectedCommands {
-		green := "\033[32m"
-		red := "\033[31m"
-		resetColor := "\033[0m"
-		color := green
-		if !reflect.DeepEqual(c, gotCommands[i]) {
-			didMatch = false
-			color = red
-		}
-		errOutput += fmt.Sprintf(
-			"%s%3d got  %#v%s\n    want %#v\n\n",
-			color, i, gotCommands[i], resetColor, c,
-		)
-	}
-	if !didMatch {
-		t.Error(errOutput)
-	}
-}
-
 func TestUpdate(t *testing.T) {
 	ast := &compiler.UpdateStmt{
 		StmtBase:  &compiler.StmtBase{},
@@ -99,7 +75,9 @@ func TestUpdate(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
-	assertCommandsMatch(t, plan.Commands, expectedCommands)
+	if err := assertCommandsMatch(plan.Commands, expectedCommands); err != nil {
+		t.Error(err)
+	}
 }
 
 func TestUpdateWithWhere(t *testing.T) {
@@ -145,5 +123,7 @@ func TestUpdateWithWhere(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
-	assertCommandsMatch(t, plan.Commands, expectedCommands)
+	if err := assertCommandsMatch(plan.Commands, expectedCommands); err != nil {
+		t.Error(err)
+	}
 }

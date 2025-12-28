@@ -93,7 +93,9 @@ func TestInsertWithoutPrimaryKey(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
-	assertCommandsMatch(t, plan.Commands, expectedCommands)
+	if err := assertCommandsMatch(plan.Commands, expectedCommands); err != nil {
+		t.Error(err)
+	}
 }
 
 func TestInsertWithPrimaryKey(t *testing.T) {
@@ -135,7 +137,9 @@ func TestInsertWithPrimaryKey(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
-	assertCommandsMatch(t, plan.Commands, expectedCommands)
+	if err := assertCommandsMatch(plan.Commands, expectedCommands); err != nil {
+		t.Error(err)
+	}
 }
 
 func TestInsertWithPrimaryKeyMiddleOrder(t *testing.T) {
@@ -177,7 +181,9 @@ func TestInsertWithPrimaryKeyMiddleOrder(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
-	assertCommandsMatch(t, plan.Commands, expectedCommands)
+	if err := assertCommandsMatch(plan.Commands, expectedCommands); err != nil {
+		t.Error(err)
+	}
 }
 
 func TestInsertWithPrimaryKeyParameter(t *testing.T) {
@@ -219,7 +225,9 @@ func TestInsertWithPrimaryKeyParameter(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
-	assertCommandsMatch(t, plan.Commands, expectedCommands)
+	if err := assertCommandsMatch(plan.Commands, expectedCommands); err != nil {
+		t.Error(err)
+	}
 }
 
 func TestInsertWithParameter(t *testing.T) {
@@ -261,7 +269,9 @@ func TestInsertWithParameter(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
-	assertCommandsMatch(t, plan.Commands, expectedCommands)
+	if err := assertCommandsMatch(plan.Commands, expectedCommands); err != nil {
+		t.Error(err)
+	}
 }
 
 func TestInsertIntoNonExistingTable(t *testing.T) {

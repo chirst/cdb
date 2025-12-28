@@ -462,7 +462,9 @@ func TestSelectPlan(t *testing.T) {
 			if err != nil {
 				t.Errorf("expected no err got err %s", err)
 			}
-			assertCommandsMatch(t, plan.Commands, c.expectedCommands)
+			if err := assertCommandsMatch(plan.Commands, c.expectedCommands); err != nil {
+				t.Error(err)
+			}
 		})
 	}
 }
