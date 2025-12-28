@@ -289,7 +289,15 @@ func (p *selectPlanner) setResultHeader() {
 	case *projectNode:
 		projectExprs := []compiler.Expr{}
 		for _, projection := range t.projections {
-			resultHeader = append(resultHeader, projection.alias)
+			header := ""
+			if projection.alias == "" {
+				if cr, ok := projection.expr.(*compiler.ColumnRef); ok {
+					header = cr.Column
+				}
+			} else {
+				header = projection.alias
+			}
+			resultHeader = append(resultHeader, header)
 			projectExprs = append(projectExprs, projection.expr)
 		}
 		p.setResultTypes(projectExprs)

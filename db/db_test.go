@@ -157,6 +157,25 @@ func TestAddColumns(t *testing.T) {
 	}
 }
 
+func TestSelectHeaders(t *testing.T) {
+	db := mustCreateDB(t)
+	mustExecute(t, db, "CREATE TABLE test (id INTEGER PRIMARY KEY, val INTEGER)")
+	mustExecute(t, db, "INSERT INTO test (val) VALUES (1)")
+	res := mustExecute(t, db, "SELECT *, id AS foo FROM test")
+	if rowCount := len(res.ResultRows); rowCount != 1 {
+		t.Fatalf("want 1 row but got %d", rowCount)
+	}
+	if got := res.ResultHeader[0]; got != "id" {
+		t.Fatalf("want id but got %s", got)
+	}
+	if got := res.ResultHeader[1]; got != "val" {
+		t.Fatalf("want val but got %s", got)
+	}
+	if got := res.ResultHeader[2]; got != "foo" {
+		t.Fatalf("want foo but got %s", got)
+	}
+}
+
 func TestSelectWithWhere(t *testing.T) {
 	db := mustCreateDB(t)
 	mustExecute(t, db, "CREATE TABLE test (id INTEGER PRIMARY KEY, val INTEGER)")
