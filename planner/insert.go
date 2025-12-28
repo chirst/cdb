@@ -1,6 +1,9 @@
 package planner
 
 import (
+	"fmt"
+	"slices"
+
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
 )
@@ -50,23 +53,18 @@ func (p *insertPlanner) QueryPlan() (*QueryPlan, error) {
 	if err != nil {
 		return nil, errTableNotExist
 	}
-	catalogColumnNames, err := p.catalog.GetColumns(p.stmt.TableName)
-	if err != nil {
-		return nil, err
-	}
 	if err := p.checkValuesMatchColumns(p.stmt); err != nil {
 		return nil, err
 	}
-	pkColumn, err := p.catalog.GetPrimaryKeyColumn(p.stmt.TableName)
+	colValues, err := p.getNonPkValues()
 	if err != nil {
 		return nil, err
 	}
 	insertNode := &insertNode{
-		rootPage:           rootPage,
-		catalogColumnNames: catalogColumnNames,
-		pkColumn:           pkColumn,
-		colNames:           p.stmt.ColNames,
-		colValues:          p.stmt.ColValues,
+		colValues: colValues,
+	}
+	if err := p.setPkValues(insertNode); err != nil {
+		return nil, err
 	}
 	p.queryPlan = insertNode
 	qp := newQueryPlan(
@@ -77,6 +75,58 @@ func (p *insertPlanner) QueryPlan() (*QueryPlan, error) {
 	)
 	insertNode.plan = qp
 	return qp, nil
+}
+
+func (p *insertPlanner) setPkValues(n *insertNode) error {
+	pkColumnName, err := p.catalog.GetPrimaryKeyColumn(p.stmt.TableName)
+	if err != nil {
+		return err
+	}
+	statementPkIdx := -1
+	if pkColumnName != "" {
+		statementPkIdx = slices.IndexFunc(p.stmt.ColNames, func(s string) bool {
+			return s == pkColumnName
+		})
+	}
+	if statementPkIdx == -1 {
+		n.autoPk = true
+	} else {
+		n.autoPk = false
+		n.pkValues = []compiler.Expr{}
+		for _, v := range p.stmt.ColValues {
+			n.pkValues = append(n.pkValues, v[statementPkIdx])
+		}
+	}
+	return nil
+}
+
+func (p *insertPlanner) getNonPkValues() ([][]compiler.Expr, error) {
+	pkColumnName, err := p.catalog.GetPrimaryKeyColumn(p.stmt.TableName)
+	if err != nil {
+		return nil, err
+	}
+	catalogColumnNames, err := p.catalog.GetColumns(p.stmt.TableName)
+	if err != nil {
+		return nil, err
+	}
+	resultValues := [][]compiler.Expr{}
+	for _, colValue := range p.stmt.ColValues {
+		resultValue := []compiler.Expr{}
+		for _, cn := range catalogColumnNames {
+			if cn == pkColumnName {
+				continue
+			}
+			stmtColIdx := slices.IndexFunc(p.stmt.ColNames, func(stmtColName string) bool {
+				return stmtColName == cn
+			})
+			if stmtColIdx == -1 {
+				return nil, fmt.Errorf("%w %s", errMissingColumnName, cn)
+			}
+			resultValue = append(resultValue, colValue[stmtColIdx])
+		}
+		resultValues = append(resultValues, resultValue)
+	}
+	return resultValues, nil
 }
 
 // ExecutionPlan returns the bytecode routine for the planner. Calling QueryPlan

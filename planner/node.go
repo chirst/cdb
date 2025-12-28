@@ -49,17 +49,17 @@ type createNode struct {
 // insertNode represents an insert operation.
 type insertNode struct {
 	plan *QueryPlan
-	// rootPage is the rootPage of the table the insert is performed on.
-	rootPage int
-	// catalogColumnNames are all of the names of columns associated with the
-	// table.
-	catalogColumnNames []string
-	// pkColumn is the name of the primary key column in the catalog. The value
-	// is empty if no user defined pk.
-	pkColumn string
-	// colNames are the names of columns specified in the insert statement.
-	colNames []string
 	// colValues are the values specified in the insert statement. It is two
 	// dimensional i.e. VALUES (v1, v2), (v3, v4) is [[v1, v2], [v3, v4]].
+	//
+	// The logical planner must guarantee these values are in the correct
+	// ordinal position as the code generator will not check.
 	colValues [][]compiler.Expr
+	// pkValues holds the pk expression separate from colValues for each values
+	// entry. In case a pkValue wasn't specified in the values list a reasonable
+	// value will be provided for the code generator or the autoPk will be true.
+	pkValues []compiler.Expr
+	// autoPk indicates the generator should use a NewRowIdCmd for pk
+	// generation.
+	autoPk bool
 }
