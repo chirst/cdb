@@ -319,9 +319,86 @@ func (c *createNode) consume() {
 }
 
 func (n *insertNode) produce() {
+	n.consume()
 }
 
 func (n *insertNode) consume() {
+	// TODO should lift anything involving catalog into the logical planning.
+	for valueIdx := range len(n.colValues) {
+		// For simplicity, the primary key is in the first register.
+		const keyRegister = 1
+		n.buildPrimaryKey(n.plan.cursorId, keyRegister, valueIdx)
+		registerIdx := keyRegister
+		for _, catalogColumnName := range n.catalogColumnNames {
+			if catalogColumnName != "" && catalogColumnName == n.pkColumn {
+				// Skip the primary key column since it is handled before.
+				continue
+			}
+			registerIdx += 1
+			n.buildNonPkValue(valueIdx, registerIdx, catalogColumnName)
+		}
+		n.plan.commands = append(
+			n.plan.commands,
+			&vm.MakeRecordCmd{P1: 2, P2: registerIdx - 1, P3: registerIdx + 1},
+		)
+		n.plan.commands = append(
+			n.plan.commands,
+			&vm.InsertCmd{P1: n.plan.cursorId, P2: registerIdx + 1, P3: keyRegister},
+		)
+	}
+}
+
+func (p *insertNode) buildPrimaryKey(writeCursorId, keyRegister, valueIdx int) {
+	// If the table has a user defined pk column it needs to be looked up in the
+	// user defined column list. If the user has defined the pk column the
+	// execution plan will involve checking the uniqueness of the pk during
+	// execution. Otherwise the system guarantees a unique key.
+	statementPkIdx := -1
+	if p.pkColumn != "" {
+		statementPkIdx = slices.IndexFunc(p.colNames, func(s string) bool {
+			return s == p.pkColumn
+		})
+	}
+	if statementPkIdx == -1 {
+		p.plan.commands = append(p.plan.commands, &vm.NewRowIdCmd{P1: writeCursorId, P2: keyRegister})
+		return
+	}
+	switch rv := p.colValues[valueIdx][statementPkIdx].(type) {
+	case *compiler.IntLit:
+		p.plan.commands = append(p.plan.commands, &vm.IntegerCmd{P1: rv.Value, P2: keyRegister})
+	case *compiler.Variable:
+		// TODO must be int could likely be used more to enforce schema types.
+		p.plan.commands = append(p.plan.commands, &vm.VariableCmd{P1: rv.Position, P2: keyRegister})
+		p.plan.commands = append(p.plan.commands, &vm.MustBeIntCmd{P1: keyRegister})
+	default:
+		panic("unsupported row id value")
+	}
+	continueIdx := len(p.plan.commands) + 2
+	p.plan.commands = append(p.plan.commands, &vm.NotExistsCmd{P1: writeCursorId, P2: continueIdx, P3: keyRegister})
+	p.plan.commands = append(p.plan.commands, &vm.HaltCmd{P1: 1, P4: pkConstraint})
+}
+
+func (p *insertNode) buildNonPkValue(valueIdx, registerIdx int, catalogColumnName string) {
+	// Get the statement index of the column name. Because the name positions
+	// can mismatch the table column positions.
+	stmtColIdx := slices.IndexFunc(p.colNames, func(stmtColName string) bool {
+		return stmtColName == catalogColumnName
+	})
+	// Requires the statement to define a value for each column in the table.
+	// TODO lift this check up into logical planner
+	// if stmtColIdx == -1 {
+	// 	return fmt.Errorf("%w %s", errMissingColumnName, catalogColumnName)
+	// }
+	switch cv := p.colValues[valueIdx][stmtColIdx].(type) {
+	case *compiler.StringLit:
+		p.plan.commands = append(p.plan.commands, &vm.StringCmd{P1: registerIdx, P4: cv.Value})
+	case *compiler.IntLit:
+		p.plan.commands = append(p.plan.commands, &vm.IntegerCmd{P1: cv.Value, P2: registerIdx})
+	case *compiler.Variable:
+		p.plan.commands = append(p.plan.commands, &vm.VariableCmd{P1: cv.Position, P2: registerIdx})
+	default:
+		panic("unsupported type of value")
+	}
 }
 
 func (n *joinNode) produce() {

@@ -48,6 +48,7 @@ type createNode struct {
 
 // insertNode represents an insert operation.
 type insertNode struct {
+	plan *QueryPlan
 	// rootPage is the rootPage of the table the insert is performed on.
 	rootPage int
 	// catalogColumnNames are all of the names of columns associated with the
