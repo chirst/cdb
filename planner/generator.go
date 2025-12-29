@@ -1,157 +1,8 @@
 package planner
 
 import (
-	"slices"
-
-	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
 )
-
-// transactionType defines possible transactions for a query plan.
-type transactionType int
-
-const (
-	transactionTypeNone  transactionType = 0
-	transactionTypeRead  transactionType = 1
-	transactionTypeWrite transactionType = 2
-)
-
-// declareConstInt gets or sets a register with the const value and returns the
-// register. It is guaranteed the value will be in the register for the duration
-// of the plan.
-func (p *QueryPlan) declareConstInt(i int) int {
-	_, ok := p.constInts[i]
-	if !ok {
-		p.constInts[i] = p.freeRegister
-		p.freeRegister += 1
-	}
-	return p.constInts[i]
-}
-
-// declareConstString gets or sets a register with the const value and returns
-// the register. It is guaranteed the value will be in the register for the
-// duration of the plan.
-func (p *QueryPlan) declareConstString(s string) int {
-	_, ok := p.constStrings[s]
-	if !ok {
-		p.constStrings[s] = p.freeRegister
-		p.freeRegister += 1
-	}
-	return p.constStrings[s]
-}
-
-// declareConstVar gets or sets a register with the const value and returns
-// the register. It is guaranteed the value will be in the register for the
-// duration of the plan.
-func (p *QueryPlan) declareConstVar(position int) int {
-	_, ok := p.constVars[position]
-	if !ok {
-		p.constVars[position] = p.freeRegister
-		p.freeRegister += 1
-	}
-	return p.constVars[position]
-}
-
-func (p *QueryPlan) compile() {
-	initCmd := &vm.InitCmd{}
-	p.commands = append(p.commands, initCmd)
-	p.root.produce()
-	p.commands = append(p.commands, &vm.HaltCmd{})
-	initCmd.P2 = len(p.commands)
-	p.pushTransaction()
-	p.pushConstants()
-	p.commands = append(p.commands, &vm.GotoCmd{P2: 1})
-}
-
-func (p *QueryPlan) pushTransaction() {
-	switch p.transactionType {
-	case transactionTypeNone:
-		return
-	case transactionTypeRead:
-		p.commands = append(
-			p.commands,
-			&vm.TransactionCmd{P2: 0},
-		)
-		p.commands = append(
-			p.commands,
-			&vm.OpenReadCmd{P1: p.cursorId, P2: p.rootPageNumber},
-		)
-	case transactionTypeWrite:
-		p.commands = append(
-			p.commands,
-			&vm.TransactionCmd{P2: 1},
-		)
-		p.commands = append(
-			p.commands,
-			&vm.OpenWriteCmd{P1: p.cursorId, P2: p.rootPageNumber},
-		)
-	default:
-		panic("unexpected transaction type")
-	}
-}
-
-func (p *QueryPlan) pushConstants() {
-	// these constants are pushed ordered since maps are unordered making it
-	// difficult to assert that a sequence of instructions appears.
-	p.pushConstantInts()
-	p.pushConstantStrings()
-	p.pushConstantVars()
-}
-
-func (p *QueryPlan) pushConstantInts() {
-	temp := []*vm.IntegerCmd{}
-	for k := range p.constInts {
-		temp = append(temp, &vm.IntegerCmd{P1: k, P2: p.constInts[k]})
-	}
-	slices.SortFunc(temp, func(a, b *vm.IntegerCmd) int {
-		return a.P2 - b.P2
-	})
-	for i := range temp {
-		p.commands = append(p.commands, temp[i])
-	}
-}
-
-func (p *QueryPlan) pushConstantStrings() {
-	temp := []*vm.StringCmd{}
-	for v := range p.constStrings {
-		temp = append(temp, &vm.StringCmd{P1: p.constStrings[v], P4: v})
-	}
-	slices.SortFunc(temp, func(a, b *vm.StringCmd) int {
-		return a.P1 - b.P1
-	})
-	for i := range temp {
-		p.commands = append(p.commands, temp[i])
-	}
-}
-
-func (p *QueryPlan) pushConstantVars() {
-	temp := []*vm.VariableCmd{}
-	for v := range p.constVars {
-		temp = append(temp, &vm.VariableCmd{P1: v, P2: p.constVars[v]})
-	}
-	slices.SortFunc(temp, func(a, b *vm.VariableCmd) int {
-		return a.P2 - b.P2
-	})
-	for i := range temp {
-		p.commands = append(p.commands, temp[i])
-	}
-}
-
-type updateNode struct {
-	child logicalNode
-	plan  *QueryPlan
-	// updateExprs is formed from the update statement AST. The idea is to
-	// provide an expression for each column where the expression is either a
-	// columnRef or the complex expression from the right hand side of the SET
-	// keyword. Note it is important to provide the expressions in their correct
-	// ordinal position as the generator will not try to order them correctly.
-	//
-	// The row id is not allowed to be updated at the moment because it could
-	// cause infinite loops due to it changing the physical location of the
-	// record. The query plan will have to use a temporary storage to update
-	// primary keys.
-	updateExprs []compiler.Expr
-}
 
 func (u *updateNode) produce() {
 	u.child.produce()
@@ -195,13 +46,6 @@ func (u *updateNode) consume() {
 	})
 }
 
-type filterNode struct {
-	child     logicalNode
-	parent    logicalNode
-	plan      *QueryPlan
-	predicate compiler.Expr
-}
-
 func (f *filterNode) produce() {
 	f.child.produce()
 }
@@ -210,11 +54,6 @@ func (f *filterNode) consume() {
 	jumpCommand := generatePredicate(f.plan, f.predicate)
 	f.parent.consume()
 	jumpCommand.SetJumpAddress(len(f.plan.commands))
-}
-
-type scanNode struct {
-	parent logicalNode
-	plan   *QueryPlan
 }
 
 func (s *scanNode) produce() {
@@ -231,18 +70,6 @@ func (s *scanNode) consume() {
 		P2: loopBeginAddress,
 	})
 	rewindCmd.P2 = len(s.plan.commands)
-}
-
-type projection struct {
-	expr compiler.Expr
-	// alias is the alias of the projection or no alias for the zero value.
-	alias string
-}
-
-type projectNode struct {
-	child       logicalNode
-	plan        *QueryPlan
-	projections []projection
 }
 
 func (p *projectNode) produce() {
@@ -262,22 +89,12 @@ func (p *projectNode) consume() {
 	})
 }
 
-type constantNode struct {
-	parent logicalNode
-	plan   *QueryPlan
-}
-
 func (c *constantNode) produce() {
 	c.consume()
 }
 
 func (c *constantNode) consume() {
 	c.parent.consume()
-}
-
-type countNode struct {
-	plan       *QueryPlan
-	projection projection
 }
 
 func (c *countNode) produce() {
@@ -375,8 +192,6 @@ func (n *insertNode) consume() {
 	}
 }
 
-func (n *joinNode) produce() {
-}
+func (n *joinNode) produce() {}
 
-func (n *joinNode) consume() {
-}
+func (n *joinNode) consume() {}
