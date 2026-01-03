@@ -363,28 +363,11 @@ func (p *parser) parseValue(stmt *InsertStmt, valueIdx int) (*InsertStmt, error)
 	}
 	stmt.ColValues = append(stmt.ColValues, []Expr{})
 	for {
-		v := p.nextNonSpace()
-		if v.tokenType != tkNumeric && v.tokenType != tkLiteral && v.tokenType != tkParam {
-			return nil, fmt.Errorf(literalErr, v.value)
+		exp, err := p.parseExpression(0)
+		if err != nil {
+			return nil, err
 		}
-		if v.tokenType == tkLiteral {
-			stmt.ColValues[valueIdx] = append(
-				stmt.ColValues[valueIdx],
-				&StringLit{
-					Value: v.value,
-				},
-			)
-		} else if v.tokenType == tkParam {
-			variableExpr := &Variable{Position: p.paramCount}
-			p.paramCount += 1
-			stmt.ColValues[valueIdx] = append(stmt.ColValues[valueIdx], variableExpr)
-		} else {
-			intValue, err := strconv.Atoi(v.value)
-			if err != nil {
-				return nil, fmt.Errorf("failed to convert %v to integer", v.value)
-			}
-			stmt.ColValues[valueIdx] = append(stmt.ColValues[valueIdx], &IntLit{Value: intValue})
-		}
+		stmt.ColValues[valueIdx] = append(stmt.ColValues[valueIdx], exp)
 		sep := p.nextNonSpace()
 		if sep.value != "," {
 			if sep.value == ")" {
