@@ -2,26 +2,177 @@ package planner
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/chirst/cdb/vm"
 )
 
-// QueryPlan contains the query plan tree. It is capable of converting the tree
-// to a string representation for a query prefixed with `EXPLAIN QUERY PLAN`.
+// QueryPlan contains the query plan tree stemming from the root node. It is
+// capable of converting the tree to a string representation for a query
+// prefixed with `EXPLAIN QUERY PLAN`.
+//
+// The structure also holds the necessary data and receivers for generating a
+// plan as well as the final commands that define the execution plan.
 type QueryPlan struct {
 	// plan holds the string representation also known as the tree.
 	plan string
-	// root holds the root node of the query plan
+	// root is the root node of the plan tree.
 	root logicalNode
 	// ExplainQueryPlan is a flag indicating if the SQL asked for the query plan
 	// to be printed as a string representation with `EXPLAIN QUERY PLAN`.
 	ExplainQueryPlan bool
+	// commands is a list of commands that define the plan.
+	commands []vm.Command
+	// constInts is a mapping of constant integer values to the registers that
+	// contain the value.
+	constInts map[int]int
+	// constStrings is a mapping of constant string values to the registers that
+	// contain the value.
+	constStrings map[string]int
+	// constVars is a mapping of a variable's position to the registers that
+	// holds the variable's value.
+	constVars map[int]int
+	// freeRegister is a counter containing the next free register in the plan.
+	freeRegister int
+	// transactionType defines what kind of transaction the plan will need.
+	transactionType transactionType
 }
 
-func newQueryPlan(root logicalNode, explainQueryPlan bool) *QueryPlan {
+func newQueryPlan(
+	root logicalNode,
+	explainQueryPlan bool,
+	transactionType transactionType,
+) *QueryPlan {
 	return &QueryPlan{
 		root:             root,
 		ExplainQueryPlan: explainQueryPlan,
+		commands:         []vm.Command{},
+		constInts:        make(map[int]int),
+		constStrings:     make(map[string]int),
+		constVars:        make(map[int]int),
+		freeRegister:     1,
+		transactionType:  transactionType,
+	}
+}
+
+// transactionType defines possible transactions for a query plan.
+type transactionType int
+
+const (
+	transactionTypeNone  transactionType = 0
+	transactionTypeRead  transactionType = 1
+	transactionTypeWrite transactionType = 2
+)
+
+// declareConstInt gets or sets a register with the const value and returns the
+// register. It is guaranteed the value will be in the register for the duration
+// of the plan.
+func (p *QueryPlan) declareConstInt(i int) int {
+	_, ok := p.constInts[i]
+	if !ok {
+		p.constInts[i] = p.freeRegister
+		p.freeRegister += 1
+	}
+	return p.constInts[i]
+}
+
+// declareConstString gets or sets a register with the const value and returns
+// the register. It is guaranteed the value will be in the register for the
+// duration of the plan.
+func (p *QueryPlan) declareConstString(s string) int {
+	_, ok := p.constStrings[s]
+	if !ok {
+		p.constStrings[s] = p.freeRegister
+		p.freeRegister += 1
+	}
+	return p.constStrings[s]
+}
+
+// declareConstVar gets or sets a register with the const value and returns
+// the register. It is guaranteed the value will be in the register for the
+// duration of the plan.
+func (p *QueryPlan) declareConstVar(position int) int {
+	_, ok := p.constVars[position]
+	if !ok {
+		p.constVars[position] = p.freeRegister
+		p.freeRegister += 1
+	}
+	return p.constVars[position]
+}
+
+// compile sets byte code for the root node and it's children on commands.
+func (p *QueryPlan) compile() {
+	initCmd := &vm.InitCmd{}
+	p.commands = append(p.commands, initCmd)
+	p.root.produce()
+	p.commands = append(p.commands, &vm.HaltCmd{})
+	initCmd.P2 = len(p.commands)
+	p.pushTransaction()
+	// these constants are pushed ordered since maps are unordered making it
+	// difficult to assert that a sequence of instructions appears.
+	p.pushConstantInts()
+	p.pushConstantStrings()
+	p.pushConstantVars()
+	p.commands = append(p.commands, &vm.GotoCmd{P2: 1})
+}
+
+func (p *QueryPlan) pushTransaction() {
+	switch p.transactionType {
+	case transactionTypeNone:
+		return
+	case transactionTypeRead:
+		p.commands = append(
+			p.commands,
+			&vm.TransactionCmd{P2: 0},
+		)
+	case transactionTypeWrite:
+		p.commands = append(
+			p.commands,
+			&vm.TransactionCmd{P2: 1},
+		)
+	default:
+		panic("unexpected transaction type")
+	}
+}
+
+func (p *QueryPlan) pushConstantInts() {
+	temp := []*vm.IntegerCmd{}
+	for k := range p.constInts {
+		temp = append(temp, &vm.IntegerCmd{P1: k, P2: p.constInts[k]})
+	}
+	slices.SortFunc(temp, func(a, b *vm.IntegerCmd) int {
+		return a.P2 - b.P2
+	})
+	for i := range temp {
+		p.commands = append(p.commands, temp[i])
+	}
+}
+
+func (p *QueryPlan) pushConstantStrings() {
+	temp := []*vm.StringCmd{}
+	for v := range p.constStrings {
+		temp = append(temp, &vm.StringCmd{P1: p.constStrings[v], P4: v})
+	}
+	slices.SortFunc(temp, func(a, b *vm.StringCmd) int {
+		return a.P1 - b.P1
+	})
+	for i := range temp {
+		p.commands = append(p.commands, temp[i])
+	}
+}
+
+func (p *QueryPlan) pushConstantVars() {
+	temp := []*vm.VariableCmd{}
+	for v := range p.constVars {
+		temp = append(temp, &vm.VariableCmd{P1: v, P2: p.constVars[v]})
+	}
+	slices.SortFunc(temp, func(a, b *vm.VariableCmd) int {
+		return a.P2 - b.P2
+	})
+	for i := range temp {
+		p.commands = append(p.commands, temp[i])
 	}
 }
 
@@ -99,92 +250,4 @@ func (p *QueryPlan) connectSiblings() string {
 		}
 	}
 	return strings.Join(planMatrix, "\n")
-}
-
-func (p *projectNode) print() string {
-	list := "("
-	for i, proj := range p.projections {
-		list += proj.print()
-		if i+1 < len(p.projections) {
-			list += ", "
-		}
-	}
-	list += ")"
-	return "project" + list
-}
-
-func (p *projection) print() string {
-	if p.isCount {
-		return "count(*)"
-	}
-	if p.colName == "" {
-		return "<anonymous>"
-	}
-	return p.colName
-}
-
-func (s *scanNode) print() string {
-	if s.scanPredicate != nil {
-		return fmt.Sprintf("scan table %s with predicate", s.tableName)
-	}
-	return fmt.Sprintf("scan table %s", s.tableName)
-}
-
-func (c *constantNode) print() string {
-	return "constant data source"
-}
-
-func (c *countNode) print() string {
-	return fmt.Sprintf("count table %s", c.tableName)
-}
-
-func (j *joinNode) print() string {
-	return fmt.Sprint(j.operation)
-}
-
-func (c *createNode) print() string {
-	if c.noop {
-		return fmt.Sprintf("assert table %s does not exist", c.tableName)
-	}
-	return fmt.Sprintf("create table %s", c.tableName)
-}
-
-func (i *insertNode) print() string {
-	return "insert"
-}
-
-func (u *updateNode) print() string {
-	return "update"
-}
-
-func (p *projectNode) children() []logicalNode {
-	return []logicalNode{p.child}
-}
-
-func (s *scanNode) children() []logicalNode {
-	return []logicalNode{}
-}
-
-func (c *constantNode) children() []logicalNode {
-	return []logicalNode{}
-}
-
-func (c *countNode) children() []logicalNode {
-	return []logicalNode{}
-}
-
-func (j *joinNode) children() []logicalNode {
-	return []logicalNode{j.left, j.right}
-}
-
-func (c *createNode) children() []logicalNode {
-	return []logicalNode{}
-}
-
-func (i *insertNode) children() []logicalNode {
-	return []logicalNode{}
-}
-
-func (u *updateNode) children() []logicalNode {
-	return []logicalNode{}
 }

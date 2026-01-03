@@ -4,6 +4,7 @@ import (
 	"errors"
 	"slices"
 
+	"github.com/chirst/cdb/catalog"
 	"github.com/chirst/cdb/compiler"
 	"github.com/chirst/cdb/vm"
 )
@@ -14,24 +15,14 @@ type updateCatalog interface {
 	GetRootPageNumber(string) (int, error)
 	GetColumns(string) ([]string, error)
 	GetPrimaryKeyColumn(string) (string, error)
+	GetColumnType(tableName string, columnName string) (catalog.CdbType, error)
 }
 
 // updatePanner houses the query planner and execution planner for a update
 // statement.
 type updatePlanner struct {
-	queryPlanner     *updateQueryPlanner
-	executionPlanner *updateExecutionPlanner
-}
-
-// updateQueryPlanner generates a queryPlan for the given update statement.
-type updateQueryPlanner struct {
-	catalog   updateCatalog
-	stmt      *compiler.UpdateStmt
-	queryPlan *updateNode
-}
-
-// updateExecutionPlanner generates a byte code routine for the given queryPlan.
-type updateExecutionPlanner struct {
+	catalog       updateCatalog
+	stmt          *compiler.UpdateStmt
 	queryPlan     *updateNode
 	executionPlan *vm.ExecutionPlan
 }
@@ -39,40 +30,35 @@ type updateExecutionPlanner struct {
 // NewUpdate create a update planner.
 func NewUpdate(catalog updateCatalog, stmt *compiler.UpdateStmt) *updatePlanner {
 	return &updatePlanner{
-		queryPlanner: &updateQueryPlanner{
-			catalog: catalog,
-			stmt:    stmt,
-		},
-		executionPlanner: &updateExecutionPlanner{
-			executionPlan: vm.NewExecutionPlan(
-				catalog.GetVersion(),
-				stmt.Explain,
-			),
-		},
+		catalog: catalog,
+		stmt:    stmt,
+		executionPlan: vm.NewExecutionPlan(
+			catalog.GetVersion(),
+			stmt.Explain,
+		),
 	}
 }
 
 // QueryPlan sets up a high level plan to be passed to ExecutionPlan.
 func (p *updatePlanner) QueryPlan() (*QueryPlan, error) {
-	qp, err := p.queryPlanner.getQueryPlan()
-	if err != nil {
-		return nil, err
-	}
-	p.executionPlanner.queryPlan = p.queryPlanner.queryPlan
-	return qp, err
-}
-
-// getQueryPlan returns a updateNode with a high level plan.
-func (p *updateQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 	rootPage, err := p.catalog.GetRootPageNumber(p.stmt.TableName)
 	if err != nil {
 		return nil, errTableNotExist
 	}
 	updateNode := &updateNode{
-		rootPage:    rootPage,
-		recordExprs: []compiler.Expr{},
+		updateExprs:    []compiler.Expr{},
+		tableName:      p.stmt.TableName,
+		rootPageNumber: rootPage,
+		cursorId:       1,
 	}
+	logicalPlan := newQueryPlan(
+		updateNode,
+		p.stmt.ExplainQueryPlan,
+		transactionTypeWrite,
+	)
+	updateNode.plan = logicalPlan
 	p.queryPlan = updateNode
+	logicalPlan.root = updateNode
 
 	if err := p.errIfPrimaryKeySet(); err != nil {
 		return nil, err
@@ -86,23 +72,37 @@ func (p *updateQueryPlanner) getQueryPlan() (*QueryPlan, error) {
 		return nil, err
 	}
 
-	if err := p.errIfSetExprNotSupported(); err != nil {
-		return nil, err
+	scanNode := &scanNode{
+		plan:           logicalPlan,
+		tableName:      p.stmt.TableName,
+		rootPageNumber: rootPage,
+		cursorId:       1,
+		isWriteCursor:  true,
+	}
+	if p.stmt.Predicate != nil {
+		cev := &catalogExprVisitor{}
+		cev.Init(p.catalog, p.stmt.TableName)
+		p.stmt.Predicate.BreadthWalk(cev)
+		filterNode := &filterNode{
+			plan:      logicalPlan,
+			predicate: p.stmt.Predicate,
+			parent:    updateNode,
+			child:     scanNode,
+			cursorId:  1,
+		}
+		updateNode.child = filterNode
+		scanNode.parent = filterNode
+	} else {
+		scanNode.parent = updateNode
+		updateNode.child = scanNode
 	}
 
-	if err := p.includeUpdate(); err != nil {
-		return nil, err
-	}
-
-	return &QueryPlan{
-		ExplainQueryPlan: p.stmt.ExplainQueryPlan,
-		root:             updateNode,
-	}, nil
+	return logicalPlan, nil
 }
 
 // errIfPrimaryKeySet checks the primary key isn't being updated because it
 // could cause an infinite loop if not handled properly.
-func (p *updateQueryPlanner) errIfPrimaryKeySet() error {
+func (p *updatePlanner) errIfPrimaryKeySet() error {
 	pkColumnName, err := p.catalog.GetPrimaryKeyColumn(p.stmt.TableName)
 	if err != nil {
 		return err
@@ -115,7 +115,7 @@ func (p *updateQueryPlanner) errIfPrimaryKeySet() error {
 
 // errIfSetNotOnDestinationTable checks the set list has column names that are
 // part of the table being updated.
-func (p *updateQueryPlanner) errIfSetNotOnDestinationTable() error {
+func (p *updatePlanner) errIfSetNotOnDestinationTable() error {
 	schemaColumns, err := p.catalog.GetColumns(p.stmt.TableName)
 	if err != nil {
 		return err
@@ -130,7 +130,7 @@ func (p *updateQueryPlanner) errIfSetNotOnDestinationTable() error {
 
 // setQueryPlanRecordExpressions populates the query plan with appropriate
 // expressions for setting up to make a record.
-func (p *updateQueryPlanner) setQueryPlanRecordExpressions() error {
+func (p *updatePlanner) setQueryPlanRecordExpressions() error {
 	schemaColumns, err := p.catalog.GetColumns(p.stmt.TableName)
 	if err != nil {
 		return err
@@ -141,14 +141,17 @@ func (p *updateQueryPlanner) setQueryPlanRecordExpressions() error {
 	}
 	idx := 0
 	for _, schemaColumn := range schemaColumns {
+		if schemaColumn == pkColName {
+			continue
+		}
 		if setListExpression, ok := p.stmt.SetList[schemaColumn]; ok {
-			p.queryPlan.recordExprs = append(
-				p.queryPlan.recordExprs,
+			p.queryPlan.updateExprs = append(
+				p.queryPlan.updateExprs,
 				setListExpression,
 			)
 		} else {
-			p.queryPlan.recordExprs = append(
-				p.queryPlan.recordExprs,
+			p.queryPlan.updateExprs = append(
+				p.queryPlan.updateExprs,
 				&compiler.ColumnRef{
 					Table:        p.stmt.TableName,
 					Column:       schemaColumn,
@@ -161,155 +164,23 @@ func (p *updateQueryPlanner) setQueryPlanRecordExpressions() error {
 			idx += 1
 		}
 	}
-	return nil
-}
-
-// errIfSetExprNotSupported is temporary until more expressions can be supported
-// in the execution plan.
-func (p *updateQueryPlanner) errIfSetExprNotSupported() error {
-	for _, e := range p.queryPlan.recordExprs {
-		switch e.(type) {
-		case *compiler.IntLit:
-			continue
-		case *compiler.StringLit:
-			continue
-		case *compiler.ColumnRef:
-			continue
-		default:
-			return errors.New("set list expression not supported")
-		}
-	}
-	return nil
-}
-
-func (p *updateQueryPlanner) includeUpdate() error {
-	if p.stmt.Predicate == nil {
-		return nil
-	}
-	p.queryPlan.predicate = p.stmt.Predicate
-	t, ok := p.queryPlan.predicate.(*compiler.BinaryExpr)
-	supportErr := errors.New("only pk update supported in where clause")
-	if !ok {
-		return supportErr
-	}
-	l, ok := t.Left.(*compiler.ColumnRef)
-	if !ok {
-		return supportErr
-	}
-	pkColName, err := p.catalog.GetPrimaryKeyColumn(p.stmt.TableName)
-	if err != nil {
-		return err
-	}
-	if l.Column != pkColName {
-		return supportErr
-	}
-	_, ok = t.Right.(*compiler.IntLit)
-	if !ok {
-		return supportErr
-	}
-	if t.Operator != compiler.OpEq {
-		return supportErr
+	for i := range p.queryPlan.updateExprs {
+		cev := &catalogExprVisitor{}
+		cev.Init(p.catalog, p.stmt.TableName)
+		p.queryPlan.updateExprs[i].BreadthWalk(cev)
 	}
 	return nil
 }
 
 // Execution plan is a byte code routine based off a high level query plan.
 func (p *updatePlanner) ExecutionPlan() (*vm.ExecutionPlan, error) {
-	if p.queryPlanner.queryPlan == nil {
+	if p.queryPlan == nil {
 		_, err := p.QueryPlan()
 		if err != nil {
 			return nil, err
 		}
 	}
-	return p.executionPlanner.getExecutionPlan()
-}
-
-// getExecutionPlan transforms a query plan to a byte code routine.
-func (p *updateExecutionPlanner) getExecutionPlan() (*vm.ExecutionPlan, error) {
-	freeRegisterCounter := 1
-	// Init
-	p.executionPlan.Append(&vm.InitCmd{P2: 1})
-	p.executionPlan.Append(&vm.TransactionCmd{P2: 1})
-	cursorId := 1
-	p.executionPlan.Append(&vm.OpenWriteCmd{P1: cursorId, P2: p.queryPlan.rootPage})
-
-	// Go to start of table
-	rewindCmd := &vm.RewindCmd{P1: cursorId} // P2 deferred
-	p.executionPlan.Append(rewindCmd)
-
-	// Loop
-	loopStartAddress := len(p.executionPlan.Commands)
-
-	// If needed, include jump for if.
-	var notEqCmd *vm.NotEqualCmd
-	if p.queryPlan.predicate != nil {
-		p.executionPlan.Append(&vm.RowIdCmd{P1: cursorId, P2: freeRegisterCounter})
-		freeRegisterCounter += 1
-		// No ok checks because done in logical plan.
-		pe := p.queryPlan.predicate.(*compiler.BinaryExpr)
-		r := pe.Right.(*compiler.IntLit)
-		p.executionPlan.Append(&vm.IntegerCmd{P1: r.Value, P2: freeRegisterCounter})
-		freeRegisterCounter += 1
-		notEqCmd = &vm.NotEqualCmd{
-			P1: freeRegisterCounter - 2,
-			P2: -1, // deferred
-			P3: freeRegisterCounter - 1,
-		}
-		p.executionPlan.Append(notEqCmd)
-	}
-
-	// take each item in the set list and build to make a record
-	loopStartRegister := freeRegisterCounter
-	var pkRegister int
-	for _, expression := range p.queryPlan.recordExprs {
-		switch typedExpression := expression.(type) {
-		case *compiler.ColumnRef:
-			if typedExpression.IsPrimaryKey {
-				p.executionPlan.Append(&vm.RowIdCmd{
-					P1: cursorId,
-					P2: freeRegisterCounter,
-				})
-				pkRegister = freeRegisterCounter
-			} else {
-				p.executionPlan.Append(&vm.ColumnCmd{
-					P1: cursorId,
-					P2: typedExpression.ColIdx,
-					P3: freeRegisterCounter,
-				})
-			}
-		case *compiler.IntLit:
-			p.executionPlan.Append(&vm.IntegerCmd{
-				P1: typedExpression.Value,
-				P2: freeRegisterCounter,
-			})
-		case *compiler.StringLit:
-			p.executionPlan.Append(&vm.StringCmd{
-				P1: freeRegisterCounter,
-				P4: typedExpression.Value,
-			})
-		default:
-			return nil, errors.New("expression not supported")
-		}
-		freeRegisterCounter += 1
-	}
-	p.executionPlan.Append(&vm.MakeRecordCmd{
-		P1: loopStartRegister + 1,            // plus 1 for the pk
-		P2: len(p.queryPlan.recordExprs) - 1, // minus 1 for the pk
-		P3: freeRegisterCounter,
-	})
-	p.executionPlan.Append(&vm.DeleteCmd{P1: cursorId})
-	p.executionPlan.Append(&vm.InsertCmd{
-		P1: cursorId,
-		P2: freeRegisterCounter,
-		P3: pkRegister,
-	})
-	p.executionPlan.Append(&vm.NextCmd{P1: cursorId, P2: loopStartAddress})
-	if notEqCmd != nil {
-		notEqCmd.P2 = len(p.executionPlan.Commands) - 1
-	}
-
-	// End
-	p.executionPlan.Append(&vm.HaltCmd{})
-	rewindCmd.P2 = len(p.executionPlan.Commands) - 1
+	p.queryPlan.plan.compile()
+	p.executionPlan.Commands = p.queryPlan.plan.commands
 	return p.executionPlan, nil
 }

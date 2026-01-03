@@ -1,59 +1,26 @@
 package planner
 
-import "github.com/chirst/cdb/compiler"
+import (
+	"fmt"
+
+	"github.com/chirst/cdb/compiler"
+)
 
 // This file defines the relational nodes in a logical query plan.
 
 // logicalNode defines the interface for a node in the query plan tree.
 type logicalNode interface {
+	// children returns the child nodes.
 	children() []logicalNode
+	// print returns the string representation for explain.
 	print() string
-}
-
-// projectNode defines what columns should be projected.
-type projectNode struct {
-	projections []projection
-	child       logicalNode
-}
-
-// projection is part of the sum of projections in a project node.
-type projection struct {
-	// isCount signifies the projection is the count function.
-	isCount bool
-	// colName is the name of the column to be projected.
-	colName string
-}
-
-// scanNode represents a full scan on a table
-type scanNode struct {
-	// tableName is the name of the table to be scanned
-	tableName string
-	// rootPage is the valid page number corresponding to the table
-	rootPage int
-	// scanColumns contains information about how the scan will project columns
-	scanColumns []scanColumn
-	// scanPredicate is an expression evaluated as a boolean. This behaves as a
-	// filter in the scan.
-	scanPredicate compiler.Expr
-}
-
-type scanColumn = compiler.Expr
-
-// constantNode is used in select statements where there is no table.
-type constantNode struct {
-	// resultColumns are the result columns containing expressions.
-	resultColumns []compiler.Expr
-	// predicate filters the result depending on the result of the expression.
-	predicate compiler.Expr
-}
-
-// countNode represents a special optimization when a table needs a full count
-// with no filtering or other projections.
-type countNode struct {
-	// tableName is the name of the table to be scanned
-	tableName string
-	// rootPage is the valid page number corresponding to the table
-	rootPage int
+	// produce works with consume to generate byte code in the nodes associated
+	// query plan. produce typically calls its children's produce methods until
+	// a leaf is reached. When the leaf is reached consume is called which emits
+	// byte code as the stack unwinds.
+	produce()
+	// consume works with produce.
+	consume()
 }
 
 // TODO joinNode is unused, but remains as a prototype binary operation node.
@@ -67,9 +34,18 @@ type joinNode struct {
 	operation string
 }
 
+func (j *joinNode) print() string {
+	return fmt.Sprint(j.operation)
+}
+
+func (j *joinNode) children() []logicalNode {
+	return []logicalNode{j.left, j.right}
+}
+
 // createNode represents a operation to create an object in the system catalog.
 // For example a table, index, or trigger.
 type createNode struct {
+	plan *QueryPlan
 	// objectName is the name of the index, trigger, or table.
 	objectName string
 	// objectType could be an index, trigger, or in this case a table.
@@ -87,35 +63,179 @@ type createNode struct {
 	// because the query plan would be invalidated given the existence of the object
 	// has changed between query planning and query execution.
 	noop bool
+	// rootPageNumber is the page number of the system catalog.
+	catalogRootPageNumber int
+	// catalogCursorId is the id of the cursor associated with the system
+	// catalog table being updated.
+	catalogCursorId int
+}
+
+func (c *createNode) print() string {
+	if c.noop {
+		return fmt.Sprintf("assert table %s does not exist", c.tableName)
+	}
+	return fmt.Sprintf("create table %s", c.tableName)
+}
+
+func (c *createNode) children() []logicalNode {
+	return []logicalNode{}
 }
 
 // insertNode represents an insert operation.
 type insertNode struct {
-	// rootPage is the rootPage of the table the insert is performed on.
-	rootPage int
-	// catalogColumnNames are all of the names of columns associated with the
-	// table.
-	catalogColumnNames []string
-	// pkColumn is the name of the primary key column in the catalog. The value
-	// is empty if no user defined pk.
-	pkColumn string
-	// colNames are the names of columns specified in the insert statement.
-	colNames []string
+	plan *QueryPlan
 	// colValues are the values specified in the insert statement. It is two
 	// dimensional i.e. VALUES (v1, v2), (v3, v4) is [[v1, v2], [v3, v4]].
+	//
+	// The logical planner must guarantee these values are in the correct
+	// ordinal position as the code generator will not check.
 	colValues [][]compiler.Expr
+	// pkValues holds the pk expression separate from colValues for each values
+	// entry. In case a pkValue wasn't specified in the values list a reasonable
+	// value will be provided for the code generator or the autoPk will be true.
+	pkValues []compiler.Expr
+	// autoPk indicates the generator should use a NewRowIdCmd for pk
+	// generation.
+	autoPk bool
+	// tableName is the name of the table being inserted to.
+	tableName string
+	// rootPageNumber is the page number of the table being inserted to.
+	rootPageNumber int
+	// cursorId is the id of the cursor associated with the table being inserted
+	// to.
+	cursorId int
 }
 
-// updateNode represents an update operation
-type updateNode struct {
-	// rootPage is the rootPage of the table the update is performed on.
-	rootPage int
-	// recordExprs is a list of expressions that can be evaluated to make the
-	// desired record. If a column is in the update set list that column will be
-	// some sort of expression. If a column is not in the set list it will
-	// simply be a columnRef. Note the ordering is important of these
-	// expressions because they have to make the record.
-	recordExprs []compiler.Expr
-	// predicate is the where clause or nil
+func (i *insertNode) print() string {
+	return "insert"
+}
+
+func (i *insertNode) children() []logicalNode {
+	return []logicalNode{}
+}
+
+type countNode struct {
+	plan       *QueryPlan
+	projection projection
+	// tableName is the name of the table being scanned.
+	tableName string
+	// rootPageNumber is the page number of the table being scanned.
+	rootPageNumber int
+	// cursorId is the id of the cursor associated with the table being scanned.
+	cursorId int
+}
+
+func (c *countNode) children() []logicalNode {
+	return []logicalNode{}
+}
+
+func (c *countNode) print() string {
+	return fmt.Sprintf("count table %s", c.tableName)
+}
+
+type constantNode struct {
+	parent logicalNode
+	plan   *QueryPlan
+}
+
+func (c *constantNode) print() string {
+	return "constant data source"
+}
+
+func (c *constantNode) children() []logicalNode {
+	return []logicalNode{}
+}
+
+type projection struct {
+	expr compiler.Expr
+	// alias is the alias of the projection or no alias for the zero value.
+	alias string
+}
+
+type projectNode struct {
+	child       logicalNode
+	plan        *QueryPlan
+	projections []projection
+	// cursorId is the id of the cursor associated with the table being
+	// projected. In the future this will likely need to be enhanced since
+	// projections are not entirely meant for one table.
+	cursorId int
+}
+
+func (p *projectNode) print() string {
+	return "project"
+}
+
+func (p *projectNode) children() []logicalNode {
+	return []logicalNode{p.child}
+}
+
+type scanNode struct {
+	parent logicalNode
+	plan   *QueryPlan
+	// tableName is the name of the table being scanned.
+	tableName string
+	// rootPageNumber is the page number of the table being scanned.
+	rootPageNumber int
+	// cursorId is the id of the cursor associated with the table being scanned.
+	cursorId int
+	// isWriteCursor is true when the cursor should be a write cursor.
+	isWriteCursor bool
+}
+
+func (s *scanNode) print() string {
+	return fmt.Sprintf("scan table %s", s.tableName)
+}
+
+func (s *scanNode) children() []logicalNode {
+	return []logicalNode{}
+}
+
+type filterNode struct {
+	child     logicalNode
+	parent    logicalNode
+	plan      *QueryPlan
 	predicate compiler.Expr
+	// cursorId is the id of the cursor associated with the table being filtered.
+	// In the future this will likely need to be enhanced since filters are not
+	// entirely meant for one table.
+	cursorId int
+}
+
+func (f *filterNode) print() string {
+	return "filter"
+}
+
+func (f *filterNode) children() []logicalNode {
+	return []logicalNode{f.child}
+}
+
+type updateNode struct {
+	child logicalNode
+	plan  *QueryPlan
+	// updateExprs is formed from the update statement AST. The idea is to
+	// provide an expression for each column where the expression is either a
+	// columnRef or the complex expression from the right hand side of the SET
+	// keyword. Note it is important to provide the expressions in their correct
+	// ordinal position as the generator will not try to order them correctly.
+	//
+	// The row id is not allowed to be updated at the moment because it could
+	// cause infinite loops due to it changing the physical location of the
+	// record. The query plan will have to use a temporary storage to update
+	// primary keys.
+	updateExprs []compiler.Expr
+	// tableName is the name of the table being updated.
+	tableName string
+	// rootPageNumber is the page number of the table being updated.
+	rootPageNumber int
+	// cursorId is the id of the cursor associated with the table being updated.
+	cursorId int
+}
+
+func (u *updateNode) print() string {
+	return fmt.Sprintf("update table %s", u.tableName)
+}
+
+func (u *updateNode) children() []logicalNode {
+	return []logicalNode{}
 }

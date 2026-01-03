@@ -1,15 +1,24 @@
 package planner
 
-import "github.com/chirst/cdb/compiler"
+import (
+	"github.com/chirst/cdb/catalog"
+	"github.com/chirst/cdb/compiler"
+)
 
 // catalogExprVisitor assigns catalog information to visited expressions.
 type catalogExprVisitor struct {
-	catalog   selectCatalog
+	catalog   cevCatalog
 	tableName string
 	err       error
 }
 
-func (c *catalogExprVisitor) Init(catalog selectCatalog, tableName string) {
+type cevCatalog interface {
+	GetColumns(string) ([]string, error)
+	GetPrimaryKeyColumn(string) (string, error)
+	GetColumnType(tableName string, columnName string) (catalog.CdbType, error)
+}
+
+func (c *catalogExprVisitor) Init(catalog cevCatalog, tableName string) {
 	c.catalog = catalog
 	c.tableName = tableName
 }

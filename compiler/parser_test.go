@@ -345,6 +345,7 @@ func TestParseCreate(t *testing.T) {
 }
 
 type insertTestCase struct {
+	name     string
 	tokens   []token
 	expected Stmt
 }
@@ -352,6 +353,7 @@ type insertTestCase struct {
 func TestParseInsert(t *testing.T) {
 	cases := []insertTestCase{
 		{
+			name: "ManyValues",
 			tokens: []token{
 				{tkKeyword, "INSERT"},
 				{tkWhitespace, " "},
@@ -448,15 +450,87 @@ func TestParseInsert(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "WithExpressions",
+			tokens: []token{
+				{tkKeyword, "INSERT"},
+				{tkWhitespace, " "},
+				{tkKeyword, "INTO"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+				{tkWhitespace, " "},
+				{tkSeparator, "("},
+				{tkIdentifier, "id"},
+				{tkSeparator, ","},
+				{tkWhitespace, " "},
+				{tkIdentifier, "age"},
+				{tkSeparator, ")"},
+				{tkWhitespace, " "},
+				{tkKeyword, "VALUES"},
+				{tkWhitespace, " "},
+				{tkSeparator, "("},
+				{tkNumeric, "1"},
+				{tkWhitespace, " "},
+				{tkOperator, "+"},
+				{tkWhitespace, " "},
+				{tkNumeric, "1"},
+				{tkSeparator, ","},
+				{tkWhitespace, " "},
+				{tkNumeric, "2"},
+				{tkWhitespace, " "},
+				{tkOperator, "-"},
+				{tkWhitespace, " "},
+				{tkNumeric, "1"},
+				{tkSeparator, ")"},
+				{tkSeparator, ","},
+				{tkWhitespace, " "},
+				{tkSeparator, "("},
+				{tkNumeric, "3"},
+				{tkSeparator, ","},
+				{tkWhitespace, " "},
+				{tkNumeric, "4"},
+				{tkSeparator, ")"},
+			},
+			expected: &InsertStmt{
+				StmtBase: &StmtBase{
+					Explain: false,
+				},
+				TableName: "foo",
+				ColNames: []string{
+					"id",
+					"age",
+				},
+				ColValues: [][]Expr{
+					{
+						&BinaryExpr{
+							Operator: "+",
+							Left:     &IntLit{Value: 1},
+							Right:    &IntLit{Value: 1},
+						},
+						&BinaryExpr{
+							Operator: "-",
+							Left:     &IntLit{Value: 2},
+							Right:    &IntLit{Value: 1},
+						},
+					},
+					{
+						&IntLit{Value: 3},
+						&IntLit{Value: 4},
+					},
+				},
+			},
+		},
 	}
 	for _, c := range cases {
-		ret, err := NewParser(c.tokens).Parse()
-		if err != nil {
-			t.Errorf("expected no err got err %s", err)
-		}
-		if !reflect.DeepEqual(ret, c.expected) {
-			t.Errorf("expected %#v got %#v", c.expected, ret)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			ret, err := NewParser(c.tokens).Parse()
+			if err != nil {
+				t.Errorf("expected no err got err %s", err)
+			}
+			if !reflect.DeepEqual(ret, c.expected) {
+				t.Errorf("expected %#v got %#v", c.expected, ret)
+			}
+		})
 	}
 }
 

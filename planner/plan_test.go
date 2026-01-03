@@ -4,11 +4,6 @@ import "testing"
 
 func TestExplainQueryPlan(t *testing.T) {
 	root := &projectNode{
-		projections: []projection{
-			{colName: "id"},
-			{colName: "first_name"},
-			{colName: "last_name"},
-		},
 		child: &joinNode{
 			operation: "join",
 			left: &joinNode{
@@ -19,29 +14,29 @@ func TestExplainQueryPlan(t *testing.T) {
 				right: &joinNode{
 					operation: "join",
 					left: &scanNode{
-						tableName: "baz",
+						tableName: "bar",
 					},
 					right: &scanNode{
-						tableName: "buzz",
+						tableName: "baz",
 					},
 				},
 			},
 			right: &scanNode{
-				tableName: "bar",
+				tableName: "buzz",
 			},
 		},
 	}
-	qp := newQueryPlan(root, true)
+	qp := newQueryPlan(root, true, transactionTypeRead)
 	formattedResult := qp.ToString()
 	expectedResult := "" +
-		" ── project(id, first_name, last_name)\n" +
+		" ── project\n" +
 		"     └─ join\n" +
 		"         ├─ join\n" +
 		"         |   ├─ scan table foo\n" +
 		"         |   └─ join\n" +
-		"         |       ├─ scan table baz\n" +
-		"         |       └─ scan table buzz\n" +
-		"         └─ scan table bar\n"
+		"         |       ├─ scan table bar\n" +
+		"         |       └─ scan table baz\n" +
+		"         └─ scan table buzz\n"
 	if formattedResult != expectedResult {
 		t.Fatalf("got\n%s\nwant\n%s", formattedResult, expectedResult)
 	}

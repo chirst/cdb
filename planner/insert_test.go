@@ -2,7 +2,6 @@ package planner
 
 import (
 	"errors"
-	"reflect"
 	"testing"
 
 	"github.com/chirst/cdb/compiler"
@@ -38,25 +37,32 @@ func (m *mockInsertCatalog) GetPrimaryKeyColumn(tableName string) (string, error
 
 func TestInsertWithoutPrimaryKey(t *testing.T) {
 	expectedCommands := []vm.Command{
-		&vm.InitCmd{P2: 1},
-		&vm.TransactionCmd{P2: 1},
+		&vm.InitCmd{P2: 18},
 		&vm.OpenWriteCmd{P1: 1, P2: 2},
 		&vm.NewRowIdCmd{P1: 1, P2: 1},
-		&vm.StringCmd{P1: 2, P4: "gud"},
-		&vm.StringCmd{P1: 3, P4: "dude"},
-		&vm.MakeRecordCmd{P1: 2, P2: 2, P3: 4},
-		&vm.InsertCmd{P1: 1, P2: 4, P3: 1},
-		&vm.NewRowIdCmd{P1: 1, P2: 1},
-		&vm.StringCmd{P1: 2, P4: "joe"},
-		&vm.StringCmd{P1: 3, P4: "doe"},
-		&vm.MakeRecordCmd{P1: 2, P2: 2, P3: 4},
-		&vm.InsertCmd{P1: 1, P2: 4, P3: 1},
-		&vm.NewRowIdCmd{P1: 1, P2: 1},
-		&vm.StringCmd{P1: 2, P4: "jan"},
-		&vm.StringCmd{P1: 3, P4: "ice"},
-		&vm.MakeRecordCmd{P1: 2, P2: 2, P3: 4},
-		&vm.InsertCmd{P1: 1, P2: 4, P3: 1},
+		&vm.CopyCmd{P1: 4, P2: 2},
+		&vm.CopyCmd{P1: 5, P2: 3},
+		&vm.MakeRecordCmd{P1: 2, P2: 2, P3: 6},
+		&vm.InsertCmd{P1: 1, P2: 6, P3: 1},
+		&vm.NewRowIdCmd{P1: 1, P2: 7},
+		&vm.CopyCmd{P1: 10, P2: 8},
+		&vm.CopyCmd{P1: 11, P2: 9},
+		&vm.MakeRecordCmd{P1: 8, P2: 2, P3: 12},
+		&vm.InsertCmd{P1: 1, P2: 12, P3: 7},
+		&vm.NewRowIdCmd{P1: 1, P2: 13},
+		&vm.CopyCmd{P1: 16, P2: 14},
+		&vm.CopyCmd{P1: 17, P2: 15},
+		&vm.MakeRecordCmd{P1: 14, P2: 2, P3: 18},
+		&vm.InsertCmd{P1: 1, P2: 18, P3: 13},
 		&vm.HaltCmd{},
+		&vm.TransactionCmd{P2: 1},
+		&vm.StringCmd{P1: 4, P4: "gud"},
+		&vm.StringCmd{P1: 5, P4: "dude"},
+		&vm.StringCmd{P1: 10, P4: "joe"},
+		&vm.StringCmd{P1: 11, P4: "doe"},
+		&vm.StringCmd{P1: 16, P4: "jan"},
+		&vm.StringCmd{P1: 17, P4: "ice"},
+		&vm.GotoCmd{P2: 1},
 	}
 
 	ast := &compiler.InsertStmt{
@@ -87,25 +93,27 @@ func TestInsertWithoutPrimaryKey(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
-	for i, c := range expectedCommands {
-		if !reflect.DeepEqual(c, plan.Commands[i]) {
-			t.Errorf("got %#v want %#v", plan.Commands[i], c)
-		}
+	if err := assertCommandsMatch(plan.Commands, expectedCommands); err != nil {
+		t.Error(err)
 	}
 }
 
 func TestInsertWithPrimaryKey(t *testing.T) {
 	expectedCommands := []vm.Command{
-		&vm.InitCmd{P2: 1},
-		&vm.TransactionCmd{P2: 1},
+		&vm.InitCmd{P2: 10},
 		&vm.OpenWriteCmd{P1: 1, P2: 2},
-		&vm.IntegerCmd{P1: 22, P2: 1},
+		&vm.CopyCmd{P1: 2, P2: 1},
+		&vm.MustBeIntCmd{P1: 1},
 		&vm.NotExistsCmd{P1: 1, P2: 6, P3: 1},
 		&vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"},
-		&vm.StringCmd{P1: 2, P4: "gud"},
-		&vm.MakeRecordCmd{P1: 2, P2: 1, P3: 3},
-		&vm.InsertCmd{P1: 1, P2: 3, P3: 1},
+		&vm.CopyCmd{P1: 4, P2: 3},
+		&vm.MakeRecordCmd{P1: 3, P2: 1, P3: 5},
+		&vm.InsertCmd{P1: 1, P2: 5, P3: 1},
 		&vm.HaltCmd{},
+		&vm.TransactionCmd{P2: 1},
+		&vm.IntegerCmd{P1: 22, P2: 2},
+		&vm.StringCmd{P1: 4, P4: "gud"},
+		&vm.GotoCmd{P2: 1},
 	}
 	ast := &compiler.InsertStmt{
 		StmtBase:  &compiler.StmtBase{},
@@ -129,25 +137,27 @@ func TestInsertWithPrimaryKey(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
-	for i, c := range expectedCommands {
-		if !reflect.DeepEqual(c, plan.Commands[i]) {
-			t.Errorf("got %#v want %#v", plan.Commands[i], c)
-		}
+	if err := assertCommandsMatch(plan.Commands, expectedCommands); err != nil {
+		t.Error(err)
 	}
 }
 
 func TestInsertWithPrimaryKeyMiddleOrder(t *testing.T) {
 	expectedCommands := []vm.Command{
-		&vm.InitCmd{P2: 1},
-		&vm.TransactionCmd{P2: 1},
+		&vm.InitCmd{P2: 10},
 		&vm.OpenWriteCmd{P1: 1, P2: 2},
-		&vm.IntegerCmd{P1: 12, P2: 1},
+		&vm.CopyCmd{P1: 2, P2: 1},
+		&vm.MustBeIntCmd{P1: 1},
 		&vm.NotExistsCmd{P1: 1, P2: 6, P3: 1},
 		&vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"},
-		&vm.StringCmd{P1: 2, P4: "feller"},
-		&vm.MakeRecordCmd{P1: 2, P2: 1, P3: 3},
-		&vm.InsertCmd{P1: 1, P2: 3, P3: 1},
+		&vm.CopyCmd{P1: 4, P2: 3},
+		&vm.MakeRecordCmd{P1: 3, P2: 1, P3: 5},
+		&vm.InsertCmd{P1: 1, P2: 5, P3: 1},
 		&vm.HaltCmd{},
+		&vm.TransactionCmd{P2: 1},
+		&vm.IntegerCmd{P1: 12, P2: 2},
+		&vm.StringCmd{P1: 4, P4: "feller"},
+		&vm.GotoCmd{P2: 1},
 	}
 	ast := &compiler.InsertStmt{
 		StmtBase:  &compiler.StmtBase{},
@@ -171,26 +181,27 @@ func TestInsertWithPrimaryKeyMiddleOrder(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
-	for i, c := range expectedCommands {
-		if !reflect.DeepEqual(c, plan.Commands[i]) {
-			t.Errorf("got %#v want %#v", plan.Commands[i], c)
-		}
+	if err := assertCommandsMatch(plan.Commands, expectedCommands); err != nil {
+		t.Error(err)
 	}
 }
 
 func TestInsertWithPrimaryKeyParameter(t *testing.T) {
 	expectedCommands := []vm.Command{
-		&vm.InitCmd{P2: 1},
-		&vm.TransactionCmd{P2: 1},
+		&vm.InitCmd{P2: 10},
 		&vm.OpenWriteCmd{P1: 1, P2: 2},
-		&vm.VariableCmd{P1: 0, P2: 1},
+		&vm.CopyCmd{P1: 2, P2: 1},
 		&vm.MustBeIntCmd{P1: 1},
-		&vm.NotExistsCmd{P1: 1, P2: 7, P3: 1},
+		&vm.NotExistsCmd{P1: 1, P2: 6, P3: 1},
 		&vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"},
-		&vm.StringCmd{P1: 2, P4: "feller"},
-		&vm.MakeRecordCmd{P1: 2, P2: 1, P3: 3},
-		&vm.InsertCmd{P1: 1, P2: 3, P3: 1},
+		&vm.CopyCmd{P1: 4, P2: 3},
+		&vm.MakeRecordCmd{P1: 3, P2: 1, P3: 5},
+		&vm.InsertCmd{P1: 1, P2: 5, P3: 1},
 		&vm.HaltCmd{},
+		&vm.TransactionCmd{P2: 1},
+		&vm.StringCmd{P1: 4, P4: "feller"},
+		&vm.VariableCmd{P1: 0, P2: 2},
+		&vm.GotoCmd{P2: 1},
 	}
 	ast := &compiler.InsertStmt{
 		StmtBase:  &compiler.StmtBase{},
@@ -214,26 +225,27 @@ func TestInsertWithPrimaryKeyParameter(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
-	for i, c := range expectedCommands {
-		if !reflect.DeepEqual(c, plan.Commands[i]) {
-			t.Errorf("got %#v want %#v", plan.Commands[i], c)
-		}
+	if err := assertCommandsMatch(plan.Commands, expectedCommands); err != nil {
+		t.Error(err)
 	}
 }
 
 func TestInsertWithParameter(t *testing.T) {
 	expectedCommands := []vm.Command{
-		&vm.InitCmd{P2: 1},
-		&vm.TransactionCmd{P2: 1},
+		&vm.InitCmd{P2: 10},
 		&vm.OpenWriteCmd{P1: 1, P2: 2},
-		&vm.VariableCmd{P1: 0, P2: 1},
+		&vm.CopyCmd{P1: 2, P2: 1},
 		&vm.MustBeIntCmd{P1: 1},
-		&vm.NotExistsCmd{P1: 1, P2: 7, P3: 1},
+		&vm.NotExistsCmd{P1: 1, P2: 6, P3: 1},
 		&vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"},
-		&vm.VariableCmd{P1: 1, P2: 2},
-		&vm.MakeRecordCmd{P1: 2, P2: 1, P3: 3},
-		&vm.InsertCmd{P1: 1, P2: 3, P3: 1},
+		&vm.CopyCmd{P1: 4, P2: 3},
+		&vm.MakeRecordCmd{P1: 3, P2: 1, P3: 5},
+		&vm.InsertCmd{P1: 1, P2: 5, P3: 1},
 		&vm.HaltCmd{},
+		&vm.TransactionCmd{P2: 1},
+		&vm.VariableCmd{P1: 0, P2: 2},
+		&vm.VariableCmd{P1: 1, P2: 4},
+		&vm.GotoCmd{P2: 1},
 	}
 	ast := &compiler.InsertStmt{
 		StmtBase:  &compiler.StmtBase{},
@@ -257,10 +269,8 @@ func TestInsertWithParameter(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected no err got err %s", err)
 	}
-	for i, c := range expectedCommands {
-		if !reflect.DeepEqual(c, plan.Commands[i]) {
-			t.Errorf("got %#v want %#v", plan.Commands[i], c)
-		}
+	if err := assertCommandsMatch(plan.Commands, expectedCommands); err != nil {
+		t.Error(err)
 	}
 }
 
