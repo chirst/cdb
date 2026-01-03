@@ -8,9 +8,10 @@ import (
 // generatePredicate generates code to make a boolean jump for the given
 // expression within the plan context. The function returns the jump command to
 // lazily set the jump address.
-func generatePredicate(plan *QueryPlan, expression compiler.Expr) vm.JumpCommand {
+func generatePredicate(plan *QueryPlan, expression compiler.Expr, cursorId int) vm.JumpCommand {
 	pg := &predicateGenerator{}
 	pg.plan = plan
+	pg.cursorId = cursorId
 	pg.build(expression, 0)
 	return pg.jumpCommand
 }
@@ -22,6 +23,10 @@ type predicateGenerator struct {
 	// jumpCommand is the command used to make the jump. The command can be
 	// accessed to defer setting the jump address.
 	jumpCommand vm.JumpCommand
+	// cursorId is the id of the cursor for the table in the associated query.
+	// This will need to be enhanced at some point to support more than one
+	// alias in a predicate, but is fine for now.
+	cursorId int
 }
 
 func (p *predicateGenerator) build(e compiler.Expr, level int) (int, error) {
@@ -183,14 +188,14 @@ func (p *predicateGenerator) valueRegisterFor(ce *compiler.ColumnRef) int {
 	if ce.IsPrimaryKey {
 		r := p.getNextRegister()
 		p.plan.commands = append(p.plan.commands, &vm.RowIdCmd{
-			P1: p.plan.cursorId,
+			P1: p.cursorId,
 			P2: r,
 		})
 		return r
 	}
 	r := p.getNextRegister()
 	p.plan.commands = append(p.plan.commands, &vm.ColumnCmd{
-		P1: p.plan.cursorId,
+		P1: p.cursorId,
 		P2: ce.ColIdx, P3: r,
 	})
 	return r

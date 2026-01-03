@@ -37,7 +37,8 @@ func (m *mockInsertCatalog) GetPrimaryKeyColumn(tableName string) (string, error
 
 func TestInsertWithoutPrimaryKey(t *testing.T) {
 	expectedCommands := []vm.Command{
-		&vm.InitCmd{P2: 17},
+		&vm.InitCmd{P2: 18},
+		&vm.OpenWriteCmd{P1: 1, P2: 2},
 		&vm.NewRowIdCmd{P1: 1, P2: 1},
 		&vm.CopyCmd{P1: 4, P2: 2},
 		&vm.CopyCmd{P1: 5, P2: 3},
@@ -55,7 +56,6 @@ func TestInsertWithoutPrimaryKey(t *testing.T) {
 		&vm.InsertCmd{P1: 1, P2: 18, P3: 13},
 		&vm.HaltCmd{},
 		&vm.TransactionCmd{P2: 1},
-		&vm.OpenWriteCmd{P1: 1, P2: 2},
 		&vm.StringCmd{P1: 4, P4: "gud"},
 		&vm.StringCmd{P1: 5, P4: "dude"},
 		&vm.StringCmd{P1: 10, P4: "joe"},
@@ -100,17 +100,17 @@ func TestInsertWithoutPrimaryKey(t *testing.T) {
 
 func TestInsertWithPrimaryKey(t *testing.T) {
 	expectedCommands := []vm.Command{
-		&vm.InitCmd{P2: 9},
+		&vm.InitCmd{P2: 10},
+		&vm.OpenWriteCmd{P1: 1, P2: 2},
 		&vm.CopyCmd{P1: 2, P2: 1},
 		&vm.MustBeIntCmd{P1: 1},
-		&vm.NotExistsCmd{P1: 1, P2: 5, P3: 1},
+		&vm.NotExistsCmd{P1: 1, P2: 6, P3: 1},
 		&vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"},
 		&vm.CopyCmd{P1: 4, P2: 3},
 		&vm.MakeRecordCmd{P1: 3, P2: 1, P3: 5},
 		&vm.InsertCmd{P1: 1, P2: 5, P3: 1},
 		&vm.HaltCmd{},
 		&vm.TransactionCmd{P2: 1},
-		&vm.OpenWriteCmd{P1: 1, P2: 2},
 		&vm.IntegerCmd{P1: 22, P2: 2},
 		&vm.StringCmd{P1: 4, P4: "gud"},
 		&vm.GotoCmd{P2: 1},
@@ -144,17 +144,17 @@ func TestInsertWithPrimaryKey(t *testing.T) {
 
 func TestInsertWithPrimaryKeyMiddleOrder(t *testing.T) {
 	expectedCommands := []vm.Command{
-		&vm.InitCmd{P2: 9},
+		&vm.InitCmd{P2: 10},
+		&vm.OpenWriteCmd{P1: 1, P2: 2},
 		&vm.CopyCmd{P1: 2, P2: 1},
 		&vm.MustBeIntCmd{P1: 1},
-		&vm.NotExistsCmd{P1: 1, P2: 5, P3: 1},
+		&vm.NotExistsCmd{P1: 1, P2: 6, P3: 1},
 		&vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"},
 		&vm.CopyCmd{P1: 4, P2: 3},
 		&vm.MakeRecordCmd{P1: 3, P2: 1, P3: 5},
 		&vm.InsertCmd{P1: 1, P2: 5, P3: 1},
 		&vm.HaltCmd{},
 		&vm.TransactionCmd{P2: 1},
-		&vm.OpenWriteCmd{P1: 1, P2: 2},
 		&vm.IntegerCmd{P1: 12, P2: 2},
 		&vm.StringCmd{P1: 4, P4: "feller"},
 		&vm.GotoCmd{P2: 1},
@@ -188,17 +188,17 @@ func TestInsertWithPrimaryKeyMiddleOrder(t *testing.T) {
 
 func TestInsertWithPrimaryKeyParameter(t *testing.T) {
 	expectedCommands := []vm.Command{
-		&vm.InitCmd{P2: 9},
+		&vm.InitCmd{P2: 10},
+		&vm.OpenWriteCmd{P1: 1, P2: 2},
 		&vm.CopyCmd{P1: 2, P2: 1},
 		&vm.MustBeIntCmd{P1: 1},
-		&vm.NotExistsCmd{P1: 1, P2: 5, P3: 1},
+		&vm.NotExistsCmd{P1: 1, P2: 6, P3: 1},
 		&vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"},
 		&vm.CopyCmd{P1: 4, P2: 3},
 		&vm.MakeRecordCmd{P1: 3, P2: 1, P3: 5},
 		&vm.InsertCmd{P1: 1, P2: 5, P3: 1},
 		&vm.HaltCmd{},
 		&vm.TransactionCmd{P2: 1},
-		&vm.OpenWriteCmd{P1: 1, P2: 2},
 		&vm.StringCmd{P1: 4, P4: "feller"},
 		&vm.VariableCmd{P1: 0, P2: 2},
 		&vm.GotoCmd{P2: 1},
@@ -232,17 +232,17 @@ func TestInsertWithPrimaryKeyParameter(t *testing.T) {
 
 func TestInsertWithParameter(t *testing.T) {
 	expectedCommands := []vm.Command{
-		&vm.InitCmd{P2: 9},
+		&vm.InitCmd{P2: 10},
+		&vm.OpenWriteCmd{P1: 1, P2: 2},
 		&vm.CopyCmd{P1: 2, P2: 1},
 		&vm.MustBeIntCmd{P1: 1},
-		&vm.NotExistsCmd{P1: 1, P2: 5, P3: 1},
+		&vm.NotExistsCmd{P1: 1, P2: 6, P3: 1},
 		&vm.HaltCmd{P1: 1, P4: "pk unique constraint violated"},
 		&vm.CopyCmd{P1: 4, P2: 3},
 		&vm.MakeRecordCmd{P1: 3, P2: 1, P3: 5},
 		&vm.InsertCmd{P1: 1, P2: 5, P3: 1},
 		&vm.HaltCmd{},
 		&vm.TransactionCmd{P2: 1},
-		&vm.OpenWriteCmd{P1: 1, P2: 2},
 		&vm.VariableCmd{P1: 0, P2: 2},
 		&vm.VariableCmd{P1: 1, P2: 4},
 		&vm.GotoCmd{P2: 1},

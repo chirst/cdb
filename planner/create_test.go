@@ -54,7 +54,8 @@ func TestCreateWithNoIDColumn(t *testing.T) {
 		t.Fatalf("failed to convert expected schema to json %s", err)
 	}
 	expectedCommands := []vm.Command{
-		&vm.InitCmd{P2: 12},
+		&vm.InitCmd{P2: 13},
+		&vm.OpenWriteCmd{P1: 1, P2: 1},
 		&vm.CreateBTreeCmd{P2: 1},
 		&vm.NewRowIdCmd{P1: 1, P2: 2},
 		&vm.StringCmd{P1: 3, P4: "table"},
@@ -67,7 +68,6 @@ func TestCreateWithNoIDColumn(t *testing.T) {
 		&vm.ParseSchemaCmd{},
 		&vm.HaltCmd{},
 		&vm.TransactionCmd{P2: 1},
-		&vm.OpenWriteCmd{P1: 1, P2: 1},
 		&vm.GotoCmd{P2: 1},
 	}
 	plan, err := NewCreate(mc, stmt).ExecutionPlan()
@@ -112,7 +112,8 @@ func TestCreateWithAlternateNamedIDColumn(t *testing.T) {
 		t.Fatalf("failed to convert expected schema to json %s", err)
 	}
 	expectedCommands := []vm.Command{
-		&vm.InitCmd{P2: 12},
+		&vm.InitCmd{P2: 13},
+		&vm.OpenWriteCmd{P1: 1, P2: 1},
 		&vm.CreateBTreeCmd{P2: 1},
 		&vm.NewRowIdCmd{P1: 1, P2: 2},
 		&vm.StringCmd{P1: 3, P4: "table"},
@@ -125,7 +126,6 @@ func TestCreateWithAlternateNamedIDColumn(t *testing.T) {
 		&vm.ParseSchemaCmd{},
 		&vm.HaltCmd{},
 		&vm.TransactionCmd{P2: 1},
-		&vm.OpenWriteCmd{P1: 1, P2: 1},
 		&vm.GotoCmd{P2: 1},
 	}
 	plan, err := NewCreate(mc, stmt).ExecutionPlan()
@@ -215,7 +215,6 @@ func TestCreateIfNotExistsNoop(t *testing.T) {
 		&vm.InitCmd{P2: 2},
 		&vm.HaltCmd{},
 		&vm.TransactionCmd{P2: 1},
-		&vm.OpenWriteCmd{P1: 1, P2: 1},
 		&vm.GotoCmd{P2: 1},
 	}
 	plan, err := NewCreate(mc, stmt).ExecutionPlan()

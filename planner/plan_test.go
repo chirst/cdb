@@ -8,27 +8,35 @@ func TestExplainQueryPlan(t *testing.T) {
 			operation: "join",
 			left: &joinNode{
 				operation: "join",
-				left:      &scanNode{},
+				left: &scanNode{
+					tableName: "foo",
+				},
 				right: &joinNode{
 					operation: "join",
-					left:      &scanNode{},
-					right:     &scanNode{},
+					left: &scanNode{
+						tableName: "bar",
+					},
+					right: &scanNode{
+						tableName: "baz",
+					},
 				},
 			},
-			right: &scanNode{},
+			right: &scanNode{
+				tableName: "buzz",
+			},
 		},
 	}
-	qp := newQueryPlan(root, true, transactionTypeRead, 0)
+	qp := newQueryPlan(root, true, transactionTypeRead)
 	formattedResult := qp.ToString()
 	expectedResult := "" +
 		" ── project\n" +
 		"     └─ join\n" +
 		"         ├─ join\n" +
-		"         |   ├─ scan table\n" +
+		"         |   ├─ scan table foo\n" +
 		"         |   └─ join\n" +
-		"         |       ├─ scan table\n" +
-		"         |       └─ scan table\n" +
-		"         └─ scan table\n"
+		"         |       ├─ scan table bar\n" +
+		"         |       └─ scan table baz\n" +
+		"         └─ scan table buzz\n"
 	if formattedResult != expectedResult {
 		t.Fatalf("got\n%s\nwant\n%s", formattedResult, expectedResult)
 	}

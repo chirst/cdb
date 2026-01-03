@@ -88,12 +88,16 @@ func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
 		if tableName == "" {
 			return nil, errors.New("must have from for COUNT")
 		}
-		cn := &countNode{projection: projections[0]}
+		cn := &countNode{
+			projection:     projections[0],
+			rootPageNumber: rootPageNumber,
+			tableName:      tableName,
+			cursorId:       1,
+		}
 		plan := newQueryPlan(
 			cn,
 			p.stmt.ExplainQueryPlan,
 			transactionTypeRead,
-			rootPageNumber,
 		)
 		cn.plan = plan
 		p.queryPlan = plan
@@ -104,8 +108,11 @@ func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
 	if tableName == "" {
 		tt = transactionTypeNone
 	}
-	projectNode := &projectNode{projections: projections}
-	plan := newQueryPlan(projectNode, p.stmt.ExplainQueryPlan, tt, rootPageNumber)
+	projectNode := &projectNode{
+		projections: projections,
+		cursorId:    1,
+	}
+	plan := newQueryPlan(projectNode, p.stmt.ExplainQueryPlan, tt)
 	projectNode.plan = plan
 	if p.stmt.Where != nil {
 		cev := &catalogExprVisitor{}
@@ -115,6 +122,7 @@ func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
 			parent:    projectNode,
 			plan:      plan,
 			predicate: p.stmt.Where,
+			cursorId:  1,
 		}
 		projectNode.child = filterNode
 		if tableName == "" {
@@ -125,7 +133,10 @@ func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
 			constNode.parent = filterNode
 		} else {
 			scanNode := &scanNode{
-				plan: plan,
+				plan:           plan,
+				tableName:      tableName,
+				rootPageNumber: rootPageNumber,
+				cursorId:       1,
 			}
 			filterNode.child = scanNode
 			scanNode.parent = filterNode
@@ -139,7 +150,10 @@ func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
 			constNode.parent = projectNode
 		} else {
 			scanNode := &scanNode{
-				plan: plan,
+				plan:           plan,
+				tableName:      tableName,
+				rootPageNumber: rootPageNumber,
+				cursorId:       1,
 			}
 			projectNode.child = scanNode
 			scanNode.parent = projectNode

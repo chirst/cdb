@@ -7,10 +7,11 @@ import (
 
 // generateExpressionTo takes the context of the plan and generates commands
 // that land the result of the given expr in the toRegister.
-func generateExpressionTo(plan *QueryPlan, expr compiler.Expr, toRegister int) {
+func generateExpressionTo(plan *QueryPlan, expr compiler.Expr, toRegister int, cursorId int) {
 	rg := &resultExprGenerator{}
 	rg.plan = plan
 	rg.outputRegister = toRegister
+	rg.cursorId = cursorId
 	rg.build(expr, 0)
 }
 
@@ -19,6 +20,10 @@ type resultExprGenerator struct {
 	plan *QueryPlan
 	// outputRegister is the target register for the result of the expression.
 	outputRegister int
+	// cursorId is the id of the cursor for the table in the associated query.
+	// This will need to be enhanced at some point to support more than one
+	// aliased column in the results, but is fine for now.
+	cursorId int
 }
 
 func (e *resultExprGenerator) build(root compiler.Expr, level int) int {
@@ -72,11 +77,11 @@ func (e *resultExprGenerator) build(root compiler.Expr, level int) int {
 	case *compiler.ColumnRef:
 		r := e.getNextRegister(level)
 		if n.IsPrimaryKey {
-			e.plan.commands = append(e.plan.commands, &vm.RowIdCmd{P1: e.plan.cursorId, P2: r})
+			e.plan.commands = append(e.plan.commands, &vm.RowIdCmd{P1: e.cursorId, P2: r})
 		} else {
 			e.plan.commands = append(
 				e.plan.commands,
-				&vm.ColumnCmd{P1: e.plan.cursorId, P2: n.ColIdx, P3: r},
+				&vm.ColumnCmd{P1: e.cursorId, P2: n.ColIdx, P3: r},
 			)
 		}
 		return r

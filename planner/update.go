@@ -45,12 +45,16 @@ func (p *updatePlanner) QueryPlan() (*QueryPlan, error) {
 	if err != nil {
 		return nil, errTableNotExist
 	}
-	updateNode := &updateNode{updateExprs: []compiler.Expr{}}
+	updateNode := &updateNode{
+		updateExprs:    []compiler.Expr{},
+		tableName:      p.stmt.TableName,
+		rootPageNumber: rootPage,
+		cursorId:       1,
+	}
 	logicalPlan := newQueryPlan(
 		updateNode,
 		p.stmt.ExplainQueryPlan,
 		transactionTypeWrite,
-		rootPage,
 	)
 	updateNode.plan = logicalPlan
 	p.queryPlan = updateNode
@@ -69,7 +73,11 @@ func (p *updatePlanner) QueryPlan() (*QueryPlan, error) {
 	}
 
 	scanNode := &scanNode{
-		plan: logicalPlan,
+		plan:           logicalPlan,
+		tableName:      p.stmt.TableName,
+		rootPageNumber: rootPage,
+		cursorId:       1,
+		isWriteCursor:  true,
 	}
 	if p.stmt.Predicate != nil {
 		cev := &catalogExprVisitor{}
@@ -80,6 +88,7 @@ func (p *updatePlanner) QueryPlan() (*QueryPlan, error) {
 			predicate: p.stmt.Predicate,
 			parent:    updateNode,
 			child:     scanNode,
+			cursorId:  1,
 		}
 		updateNode.child = filterNode
 		scanNode.parent = filterNode

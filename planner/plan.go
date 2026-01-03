@@ -38,21 +38,12 @@ type QueryPlan struct {
 	freeRegister int
 	// transactionType defines what kind of transaction the plan will need.
 	transactionType transactionType
-	// cursorId is the id of the cursor the plan is using. Note plans will
-	// eventually need to use more than one cursor, but for now it is convenient
-	// to pull the id from here.
-	cursorId int
-	// rootPageNumber is the root page number of the table cursorId is
-	// associated with. This should be a map at some point when multiple tables
-	// can be queried in one plan.
-	rootPageNumber int
 }
 
 func newQueryPlan(
 	root logicalNode,
 	explainQueryPlan bool,
 	transactionType transactionType,
-	rootPageNumber int,
 ) *QueryPlan {
 	return &QueryPlan{
 		root:             root,
@@ -63,8 +54,6 @@ func newQueryPlan(
 		constVars:        make(map[int]int),
 		freeRegister:     1,
 		transactionType:  transactionType,
-		cursorId:         1,
-		rootPageNumber:   rootPageNumber,
 	}
 }
 
@@ -138,18 +127,10 @@ func (p *QueryPlan) pushTransaction() {
 			p.commands,
 			&vm.TransactionCmd{P2: 0},
 		)
-		p.commands = append(
-			p.commands,
-			&vm.OpenReadCmd{P1: p.cursorId, P2: p.rootPageNumber},
-		)
 	case transactionTypeWrite:
 		p.commands = append(
 			p.commands,
 			&vm.TransactionCmd{P2: 1},
-		)
-		p.commands = append(
-			p.commands,
-			&vm.OpenWriteCmd{P1: p.cursorId, P2: p.rootPageNumber},
 		)
 	default:
 		panic("unexpected transaction type")

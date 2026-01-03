@@ -49,15 +49,16 @@ func (p *createPlanner) QueryPlan() (*QueryPlan, error) {
 	tableExists := p.catalog.TableExists(p.stmt.TableName)
 	if p.stmt.IfNotExists && tableExists {
 		noopCreateNode := &createNode{
-			noop:      true,
-			tableName: p.stmt.TableName,
+			noop:                  true,
+			tableName:             p.stmt.TableName,
+			catalogRootPageNumber: schemaTableRoot,
+			catalogCursorId:       1,
 		}
 		p.queryPlan = noopCreateNode
 		qp := newQueryPlan(
 			noopCreateNode,
 			p.stmt.ExplainQueryPlan,
 			transactionTypeWrite,
-			schemaTableRoot,
 		)
 		noopCreateNode.plan = qp
 		return qp, nil
@@ -70,17 +71,18 @@ func (p *createPlanner) QueryPlan() (*QueryPlan, error) {
 		return nil, err
 	}
 	createNode := &createNode{
-		objectType: "table",
-		objectName: p.stmt.TableName,
-		tableName:  p.stmt.TableName,
-		schema:     jSchema,
+		objectType:            "table",
+		objectName:            p.stmt.TableName,
+		tableName:             p.stmt.TableName,
+		schema:                jSchema,
+		catalogRootPageNumber: schemaTableRoot,
+		catalogCursorId:       1,
 	}
 	p.queryPlan = createNode
 	qp := newQueryPlan(
 		createNode,
 		p.stmt.ExplainQueryPlan,
 		transactionTypeWrite,
-		schemaTableRoot,
 	)
 	createNode.plan = qp
 	return qp, nil

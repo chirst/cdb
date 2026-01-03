@@ -63,6 +63,11 @@ type createNode struct {
 	// because the query plan would be invalidated given the existence of the object
 	// has changed between query planning and query execution.
 	noop bool
+	// rootPageNumber is the page number of the system catalog.
+	catalogRootPageNumber int
+	// catalogCursorId is the id of the cursor associated with the system
+	// catalog table being updated.
+	catalogCursorId int
 }
 
 func (c *createNode) print() string {
@@ -92,6 +97,13 @@ type insertNode struct {
 	// autoPk indicates the generator should use a NewRowIdCmd for pk
 	// generation.
 	autoPk bool
+	// tableName is the name of the table being inserted to.
+	tableName string
+	// rootPageNumber is the page number of the table being inserted to.
+	rootPageNumber int
+	// cursorId is the id of the cursor associated with the table being inserted
+	// to.
+	cursorId int
 }
 
 func (i *insertNode) print() string {
@@ -105,6 +117,12 @@ func (i *insertNode) children() []logicalNode {
 type countNode struct {
 	plan       *QueryPlan
 	projection projection
+	// tableName is the name of the table being scanned.
+	tableName string
+	// rootPageNumber is the page number of the table being scanned.
+	rootPageNumber int
+	// cursorId is the id of the cursor associated with the table being scanned.
+	cursorId int
 }
 
 func (c *countNode) children() []logicalNode {
@@ -112,7 +130,7 @@ func (c *countNode) children() []logicalNode {
 }
 
 func (c *countNode) print() string {
-	return "count table"
+	return fmt.Sprintf("count table %s", c.tableName)
 }
 
 type constantNode struct {
@@ -138,6 +156,10 @@ type projectNode struct {
 	child       logicalNode
 	plan        *QueryPlan
 	projections []projection
+	// cursorId is the id of the cursor associated with the table being
+	// projected. In the future this will likely need to be enhanced since
+	// projections are not entirely meant for one table.
+	cursorId int
 }
 
 func (p *projectNode) print() string {
@@ -151,10 +173,18 @@ func (p *projectNode) children() []logicalNode {
 type scanNode struct {
 	parent logicalNode
 	plan   *QueryPlan
+	// tableName is the name of the table being scanned.
+	tableName string
+	// rootPageNumber is the page number of the table being scanned.
+	rootPageNumber int
+	// cursorId is the id of the cursor associated with the table being scanned.
+	cursorId int
+	// isWriteCursor is true when the cursor should be a write cursor.
+	isWriteCursor bool
 }
 
 func (s *scanNode) print() string {
-	return "scan table"
+	return fmt.Sprintf("scan table %s", s.tableName)
 }
 
 func (s *scanNode) children() []logicalNode {
@@ -166,6 +196,10 @@ type filterNode struct {
 	parent    logicalNode
 	plan      *QueryPlan
 	predicate compiler.Expr
+	// cursorId is the id of the cursor associated with the table being filtered.
+	// In the future this will likely need to be enhanced since filters are not
+	// entirely meant for one table.
+	cursorId int
 }
 
 func (f *filterNode) print() string {
@@ -190,10 +224,16 @@ type updateNode struct {
 	// record. The query plan will have to use a temporary storage to update
 	// primary keys.
 	updateExprs []compiler.Expr
+	// tableName is the name of the table being updated.
+	tableName string
+	// rootPageNumber is the page number of the table being updated.
+	rootPageNumber int
+	// cursorId is the id of the cursor associated with the table being updated.
+	cursorId int
 }
 
 func (u *updateNode) print() string {
-	return "update"
+	return fmt.Sprintf("update table %s", u.tableName)
 }
 
 func (u *updateNode) children() []logicalNode {

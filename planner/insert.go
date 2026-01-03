@@ -61,7 +61,10 @@ func (p *insertPlanner) QueryPlan() (*QueryPlan, error) {
 		return nil, err
 	}
 	insertNode := &insertNode{
-		colValues: colValues,
+		colValues:      colValues,
+		rootPageNumber: rootPage,
+		tableName:      p.stmt.TableName,
+		cursorId:       1,
 	}
 	if err := p.setPkValues(insertNode); err != nil {
 		return nil, err
@@ -71,7 +74,6 @@ func (p *insertPlanner) QueryPlan() (*QueryPlan, error) {
 		insertNode,
 		p.stmt.ExplainQueryPlan,
 		transactionTypeWrite,
-		rootPage,
 	)
 	insertNode.plan = qp
 	return qp, nil
