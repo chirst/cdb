@@ -239,3 +239,18 @@ func (u *updateNode) print() string {
 func (u *updateNode) children() []logicalNode {
 	return []logicalNode{}
 }
+
+type deleteNode struct {
+	child          logicalNode
+	plan           *QueryPlan
+	rootPageNumber int
+	cursorId       int
+}
+
+func (d *deleteNode) print() string {
+	return "delete"
+}
+
+func (d *deleteNode) children() []logicalNode {
+	return []logicalNode{d.child}
+}

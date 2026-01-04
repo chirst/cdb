@@ -216,6 +216,14 @@ func (n *insertNode) consume() {
 	}
 }
 
+func (d *deleteNode) consume() {
+	d.plan.commands = append(d.plan.commands, &vm.DeleteCmd{P1: d.cursorId})
+}
+
+func (d *deleteNode) produce() {
+	d.child.produce()
+}
+
 func (n *joinNode) produce() {}
 
 func (n *joinNode) consume() {}

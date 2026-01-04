@@ -493,6 +493,37 @@ func TestLexUpdate(t *testing.T) {
 	}
 }
 
+func TestLexDelete(t *testing.T) {
+	cases := []tc{
+		{
+			sql: "DELETE FROM foo WHERE id = 1",
+			expected: []token{
+				{tkKeyword, "DELETE"},
+				{tkWhitespace, " "},
+				{tkKeyword, "FROM"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "foo"},
+				{tkWhitespace, " "},
+				{tkKeyword, "WHERE"},
+				{tkWhitespace, " "},
+				{tkIdentifier, "id"},
+				{tkWhitespace, " "},
+				{tkOperator, "="},
+				{tkWhitespace, " "},
+				{tkNumeric, "1"},
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.sql, func(t *testing.T) {
+			ret := NewLexer(c.sql).Lex()
+			if !reflect.DeepEqual(ret, c.expected) {
+				t.Errorf("expected %#v got %#v", c.expected, ret)
+			}
+		})
+	}
+}
+
 func TestToStatements(t *testing.T) {
 	type testCase struct {
 		src         string

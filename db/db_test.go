@@ -389,3 +389,34 @@ func TestUpdateStatement(t *testing.T) {
 		t.Fatalf("expected all 3 rows to be 1")
 	}
 }
+
+func TestDeleteAll(t *testing.T) {
+	db := mustCreateDB(t)
+	mustExecute(t, db, "CREATE TABLE foo (id INTEGER PRIMARY KEY, a INTEGER);")
+	mustExecute(t, db, "INSERT INTO foo (a) VALUES (1), (2), (3);")
+	mustExecute(t, db, "DELETE FROM foo;")
+	res := mustExecute(t, db, "SELECT * FROM foo;")
+	if lrr := len(res.ResultRows); lrr != 0 {
+		t.Fatalf("expected no rows but got %d", lrr)
+	}
+}
+
+func TestDeleteStatementWithWhere(t *testing.T) {
+	db := mustCreateDB(t)
+	mustExecute(t, db, "CREATE TABLE foo (id INTEGER PRIMARY KEY, a INTEGER);")
+	mustExecute(t, db, "INSERT INTO foo (a) VALUES (11), (12), (13);")
+	mustExecute(t, db, "DELETE FROM foo WHERE a = 12;")
+	res := mustExecute(t, db, "SELECT * FROM foo;")
+	expectedRows := 2
+	if lrr := len(res.ResultRows); lrr != expectedRows {
+		t.Fatalf("expected %d rows but got %d", expectedRows, lrr)
+	}
+	want1 := "11"
+	if got1 := *res.ResultRows[0][1]; got1 != want1 {
+		t.Fatalf("expected %s but got %s", want1, got1)
+	}
+	want2 := "13"
+	if got2 := *res.ResultRows[1][1]; got2 != want2 {
+		t.Fatalf("expected %s but got %s", want2, got2)
+	}
+}

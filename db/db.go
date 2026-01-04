@@ -127,6 +127,8 @@ func (db *DB) getPlannerFor(statement compiler.Stmt) statementPlanner {
 		return planner.NewInsert(db.catalog, s)
 	case *compiler.UpdateStmt:
 		return planner.NewUpdate(db.catalog, s)
+	case *compiler.DeleteStmt:
+		return planner.NewDelete(db.catalog, s)
 	}
 	panic("statement not supported")
 }

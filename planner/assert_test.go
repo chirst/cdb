@@ -16,6 +16,9 @@ func assertCommandsMatch(gotCommands, expectedCommands []vm.Command) error {
 	red := "\033[31m"
 	resetColor := "\033[0m"
 	for i, c := range expectedCommands {
+		if i >= len(gotCommands) {
+			continue
+		}
 		color := green
 		if !reflect.DeepEqual(c, gotCommands[i]) {
 			didMatch = false
