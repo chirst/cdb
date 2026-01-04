@@ -72,6 +72,7 @@ const (
 	kwExists  = "EXISTS"
 	kwUpdate  = "UPDATE"
 	kwSet     = "SET"
+	kwDelete  = "DELETE"
 )
 
 // keywords is a list of all keywords.
@@ -98,6 +99,7 @@ var keywords = []string{
 	kwExists,
 	kwUpdate,
 	kwSet,
+	kwDelete,
 }
 
 // Operators where op is operator.

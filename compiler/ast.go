@@ -71,6 +71,12 @@ type UpdateStmt struct {
 	Predicate Expr
 }
 
+type DeleteStmt struct {
+	*StmtBase
+	TableName string
+	Predicate Expr
+}
+
 type ExprVisitor interface {
 	VisitBinaryExpr(*BinaryExpr)
 	VisitUnaryExpr(*UnaryExpr)

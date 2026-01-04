@@ -11,10 +11,9 @@ import (
 )
 
 const (
-	tokenErr   = "unexpected token %s"
-	identErr   = "expected identifier but got %s"
-	columnErr  = "expected column type but got %s"
-	literalErr = "expected literal but got %s"
+	tokenErr  = "unexpected token %s"
+	identErr  = "expected identifier but got %s"
+	columnErr = "expected column type but got %s"
 )
 
 type parser struct {
@@ -68,6 +67,8 @@ func (p *parser) parseStmt() (Stmt, error) {
 		return p.parseInsert(sb)
 	case kwUpdate:
 		return p.parseUpdate(sb)
+	case kwDelete:
+		return p.parseDelete(sb)
 	}
 	return nil, fmt.Errorf(tokenErr, t.value)
 }
@@ -425,6 +426,29 @@ func (p *parser) parseUpdate(sb *StmtBase) (*UpdateStmt, error) {
 		stmt.Predicate = whereExp
 	} else if where.tokenType != tkEOF && where.value != ";" {
 		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
+	}
+	return stmt, nil
+}
+
+func (p *parser) parseDelete(sb *StmtBase) (*DeleteStmt, error) {
+	stmt := &DeleteStmt{StmtBase: sb}
+	from := p.nextNonSpace()
+	if from.value != kwFrom {
+		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
+	}
+	tableName := p.nextNonSpace()
+	if tableName.tokenType != tkIdentifier {
+		return nil, fmt.Errorf(tokenErr, p.tokens[p.end].value)
+	}
+	stmt.TableName = tableName.value
+	possibleWhere := p.peekNextNonSpace()
+	if possibleWhere.value == kwWhere {
+		p.nextNonSpace()
+		expr, err := p.parseExpression(0)
+		if err != nil {
+			return nil, err
+		}
+		stmt.Predicate = expr
 	}
 	return stmt, nil
 }
