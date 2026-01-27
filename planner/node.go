@@ -237,7 +237,7 @@ func (u *updateNode) print() string {
 }
 
 func (u *updateNode) children() []logicalNode {
-	return []logicalNode{}
+	return []logicalNode{u.child}
 }
 
 type deleteNode struct {
