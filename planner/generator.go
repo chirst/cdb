@@ -227,3 +227,31 @@ func (d *deleteNode) produce() {
 func (n *joinNode) produce() {}
 
 func (n *joinNode) consume() {}
+
+func (s *seekNode) produce() {
+	s.consume()
+}
+
+func (s *seekNode) consume() {
+	if s.isWriteCursor {
+		s.plan.commands = append(
+			s.plan.commands,
+			&vm.OpenWriteCmd{P1: s.cursorId, P2: s.rootPageNumber},
+		)
+	} else {
+		s.plan.commands = append(
+			s.plan.commands,
+			&vm.OpenReadCmd{P1: s.cursorId, P2: s.rootPageNumber},
+		)
+	}
+	rowIdRegister := s.plan.freeRegister
+	s.plan.freeRegister += 1
+	generateExpressionTo(s.plan, s.predicate, rowIdRegister, s.cursorId)
+	seekCmd := &vm.SeekRowId{
+		P1: s.cursorId,
+		P3: rowIdRegister,
+	}
+	s.plan.commands = append(s.plan.commands, seekCmd)
+	s.parent.consume()
+	seekCmd.P2 = len(s.plan.commands)
+}

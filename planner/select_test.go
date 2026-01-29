@@ -389,14 +389,12 @@ func TestSelectPlan(t *testing.T) {
 		{
 			description: "WithWhereClause",
 			expectedCommands: []vm.Command{
-				&vm.InitCmd{P2: 9},
+				&vm.InitCmd{P2: 7},
 				&vm.OpenReadCmd{P1: 1, P2: 2},
-				&vm.RewindCmd{P1: 1, P2: 8},
-				&vm.RowIdCmd{P1: 1, P2: 1},
-				&vm.NotEqualCmd{P1: 1, P2: 7, P3: 2},
-				&vm.RowIdCmd{P1: 1, P2: 4},
-				&vm.ResultRowCmd{P1: 4, P2: 1},
-				&vm.NextCmd{P1: 1, P2: 3},
+				&vm.CopyCmd{P1: 2, P2: 1},
+				&vm.SeekRowId{P1: 1, P2: 6, P3: 1},
+				&vm.RowIdCmd{P1: 1, P2: 3},
+				&vm.ResultRowCmd{P1: 3, P2: 1},
 				&vm.HaltCmd{},
 				&vm.TransactionCmd{P1: 0},
 				&vm.IntegerCmd{P1: 1, P2: 2},
@@ -485,5 +483,42 @@ func TestSelectTableDoesNotExist(t *testing.T) {
 	_, err := NewSelect(mockCatalog, ast).ExecutionPlan()
 	if expectErr := errTableNotExist; !errors.Is(err, expectErr) {
 		t.Fatalf("expected err: %s but got: %s", expectErr, err)
+	}
+}
+
+func TestUsePrimaryKeyIndex(t *testing.T) {
+	ast := &compiler.SelectStmt{
+		StmtBase: &compiler.StmtBase{},
+		From: &compiler.From{
+			TableName: "foo",
+		},
+		ResultColumns: []compiler.ResultColumn{
+			{
+				All: true,
+			},
+		},
+		Where: &compiler.BinaryExpr{
+			Left:     &compiler.ColumnRef{Column: "id"},
+			Right:    &compiler.IntLit{Value: 1},
+			Operator: compiler.OpEq,
+		},
+	}
+	mockCatalog := &mockSelectCatalog{
+		primaryKeyColumnName: "id",
+	}
+	qp, err := NewSelect(mockCatalog, ast).QueryPlan()
+	if err != nil {
+		t.Errorf("expected no err got err %s", err)
+	}
+	if pn, ok := qp.root.(*projectNode); ok {
+		if seekN, ok := pn.child.(*seekNode); ok {
+			if seekN.parent != pn {
+				t.Error("expected parent to be pn")
+			}
+		} else {
+			t.Errorf("expected seek node but got %#v", pn.child)
+		}
+	} else {
+		t.Errorf("expected project node but got %#v", qp.root)
 	}
 }

@@ -190,6 +190,27 @@ func (c *Cursor) GotoLastRecord() bool {
 	return true
 }
 
+func (c *Cursor) GotoKey(key []byte) bool {
+	candidatePage := c.pager.GetPage(c.rootPageNumber)
+	for !candidatePage.IsLeaf() {
+		v, exists := candidatePage.GetValue(key)
+		if !exists {
+			return false
+		}
+		nextPageNumber := int(binary.LittleEndian.Uint32(v))
+		candidatePage = c.pager.GetPage(nextPageNumber)
+	}
+	c.moveToPage(candidatePage)
+	entries := c.currentPage.GetEntries()
+	for i, e := range entries {
+		if bytes.Equal(e.Key, key) {
+			c.currentTupleKey = entries[i].Key
+			return true
+		}
+	}
+	return false
+}
+
 // GetKey returns the key of the current tuple.
 func (c *Cursor) GetKey() []byte {
 	return c.currentTupleKey

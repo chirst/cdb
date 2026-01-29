@@ -69,6 +69,7 @@ func (d *deletePlanner) QueryPlan() (*QueryPlan, error) {
 		deleteNode.child = sn
 		sn.parent = deleteNode
 	}
+	(&optimizer{}).optimizePlan(qp)
 	return qp, nil
 }
 

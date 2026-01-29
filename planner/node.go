@@ -21,6 +21,9 @@ type logicalNode interface {
 	produce()
 	// consume works with produce.
 	consume()
+	// setChildren allows the caller to set a node's children. It may be
+	// advisable to call children to get an idea how many children the node has.
+	setChildren(n ...logicalNode)
 }
 
 // TODO joinNode is unused, but remains as a prototype binary operation node.
@@ -40,6 +43,11 @@ func (j *joinNode) print() string {
 
 func (j *joinNode) children() []logicalNode {
 	return []logicalNode{j.left, j.right}
+}
+
+func (j *joinNode) setChildren(n ...logicalNode) {
+	j.left = n[0]
+	j.right = n[1]
 }
 
 // createNode represents a operation to create an object in the system catalog.
@@ -81,6 +89,8 @@ func (c *createNode) children() []logicalNode {
 	return []logicalNode{}
 }
 
+func (c *createNode) setChildren(n ...logicalNode) {}
+
 // insertNode represents an insert operation.
 type insertNode struct {
 	plan *QueryPlan
@@ -114,6 +124,8 @@ func (i *insertNode) children() []logicalNode {
 	return []logicalNode{}
 }
 
+func (i *insertNode) setChildren(n ...logicalNode) {}
+
 type countNode struct {
 	plan       *QueryPlan
 	projection projection
@@ -133,6 +145,8 @@ func (c *countNode) print() string {
 	return fmt.Sprintf("count table %s", c.tableName)
 }
 
+func (c *countNode) setChildren(n ...logicalNode) {}
+
 type constantNode struct {
 	parent logicalNode
 	plan   *QueryPlan
@@ -145,6 +159,8 @@ func (c *constantNode) print() string {
 func (c *constantNode) children() []logicalNode {
 	return []logicalNode{}
 }
+
+func (c *constantNode) setChildren(n ...logicalNode) {}
 
 type projection struct {
 	expr compiler.Expr
@@ -170,6 +186,10 @@ func (p *projectNode) children() []logicalNode {
 	return []logicalNode{p.child}
 }
 
+func (p *projectNode) setChildren(n ...logicalNode) {
+	p.child = n[0]
+}
+
 type scanNode struct {
 	parent logicalNode
 	plan   *QueryPlan
@@ -191,6 +211,35 @@ func (s *scanNode) children() []logicalNode {
 	return []logicalNode{}
 }
 
+func (s *scanNode) setChildren(n ...logicalNode) {}
+
+type seekNode struct {
+	parent logicalNode
+	plan   *QueryPlan
+	// tableName is the name of the table being searched.
+	tableName string
+	// rootPageNumber is the root page number of the table being searched.
+	rootPageNumber int
+	// cursorId is the id of the cursor associated with the search.
+	cursorId int
+	// isWriteCursor determines whether or not the cursor is for read or write.
+	isWriteCursor bool
+	// fullPredicate is the entire expression this node matches.
+	fullPredicate compiler.Expr
+	// predicate is a subset of fullPredicate usually excluding the columnRef.
+	predicate compiler.Expr
+}
+
+func (s *seekNode) print() string {
+	return fmt.Sprintf("seek table %s (%s)", s.tableName, s.fullPredicate.Print())
+}
+
+func (s *seekNode) children() []logicalNode {
+	return []logicalNode{}
+}
+
+func (s *seekNode) setChildren(n ...logicalNode) {}
+
 type filterNode struct {
 	child     logicalNode
 	parent    logicalNode
@@ -203,11 +252,15 @@ type filterNode struct {
 }
 
 func (f *filterNode) print() string {
-	return "filter"
+	return "filter (" + f.predicate.Print() + ")"
 }
 
 func (f *filterNode) children() []logicalNode {
 	return []logicalNode{f.child}
+}
+
+func (f *filterNode) setChildren(n ...logicalNode) {
+	f.child = n[0]
 }
 
 type updateNode struct {
@@ -240,6 +293,10 @@ func (u *updateNode) children() []logicalNode {
 	return []logicalNode{u.child}
 }
 
+func (u *updateNode) setChildren(n ...logicalNode) {
+	u.child = n[0]
+}
+
 type deleteNode struct {
 	child          logicalNode
 	plan           *QueryPlan
@@ -253,4 +310,8 @@ func (d *deleteNode) print() string {
 
 func (d *deleteNode) children() []logicalNode {
 	return []logicalNode{d.child}
+}
+
+func (d *deleteNode) setChildren(n ...logicalNode) {
+	d.child = n[0]
 }

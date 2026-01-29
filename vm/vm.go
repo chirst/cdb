@@ -107,6 +107,7 @@ func (e *ExecutionPlan) Append(command Command) {
 // the system catalog Execute will return ErrVersionChanged in the ExecuteResult
 // err field so the plan can be recompiled.
 func (v *vm) Execute(plan *ExecutionPlan, parameters []any) *ExecuteResult {
+	parameters = v.normalizeParameters(parameters)
 	if plan.Explain {
 		return v.explain(plan)
 	}
@@ -150,6 +151,23 @@ func (v *vm) Execute(plan *ExecutionPlan, parameters []any) *ExecuteResult {
 	}
 }
 
+// normalizeParameters converts parameters to a simpler type. This is because of
+// things like a int vs int64 producing different byte array values. This can
+// for example cause bugs with comparisons within the key value store.
+func (v *vm) normalizeParameters(parameters []any) []any {
+	for i := range parameters {
+		switch t := parameters[i].(type) {
+		case int16:
+			parameters[i] = int(t)
+		case int32:
+			parameters[i] = int(t)
+		case int64:
+			parameters[i] = int(t)
+		}
+	}
+	return parameters
+}
+
 // resolveVarTypes takes unresolved var types in the result types and determines
 // their type from the passed in go type.
 func (v *vm) resolveVarTypes(plan *ExecutionPlan, parameters []any) error {
@@ -157,12 +175,6 @@ func (v *vm) resolveVarTypes(plan *ExecutionPlan, parameters []any) error {
 		if plan.ResultTypes[i].ID == catalog.CTVar {
 			switch parameters[plan.ResultTypes[i].VarPosition].(type) {
 			case int:
-				plan.ResultTypes[i].ID = catalog.CTInt
-			case int16:
-				plan.ResultTypes[i].ID = catalog.CTInt
-			case int32:
-				plan.ResultTypes[i].ID = catalog.CTInt
-			case int64:
 				plan.ResultTypes[i].ID = catalog.CTInt
 			case string:
 				plan.ResultTypes[i].ID = catalog.CTStr
@@ -553,6 +565,31 @@ func (c *NewRowIdCmd) execute(vm *vm, routine *routine) cmdRes {
 func (c *NewRowIdCmd) explain(addr int) []*string {
 	comment := fmt.Sprintf("Generate row id for cursor %d and store in register[%d]", c.P1, c.P2)
 	return formatExplain(addr, "NewRowID", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
+// SeekRowIdCmd moves cursor P1 to the row id in register P3. If there is no
+// record it jumps to P2.
+type SeekRowId cmd
+
+func (c *SeekRowId) execute(vm *vm, routine *routine) cmdRes {
+	key, err := kv.EncodeKey(routine.registers[c.P3])
+	if err != nil {
+		return cmdRes{
+			err: err,
+		}
+	}
+	found := routine.cursors[c.P1].GotoKey(key)
+	if !found {
+		return cmdRes{
+			nextAddress: c.P2,
+		}
+	}
+	return cmdRes{}
+}
+
+func (c *SeekRowId) explain(addr int) []*string {
+	comment := fmt.Sprintf("Move cursor %d to row in register[%d] or jump to addr[%d]", c.P1, c.P3, c.P2)
+	return formatExplain(addr, "SeekRowID", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
 
 // InsertCmd write to cursor P1 with data in P2 and key in P3

@@ -96,7 +96,7 @@ func (p *updatePlanner) QueryPlan() (*QueryPlan, error) {
 		scanNode.parent = updateNode
 		updateNode.child = scanNode
 	}
-
+	(&optimizer{}).optimizePlan(logicalPlan)
 	return logicalPlan, nil
 }
 

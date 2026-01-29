@@ -161,6 +161,7 @@ func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
 	}
 	p.queryPlan = plan
 	plan.root = projectNode
+	(&optimizer{}).optimizePlan(plan)
 	return plan, nil
 }
 
