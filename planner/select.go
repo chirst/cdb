@@ -161,7 +161,66 @@ func (p *selectPlanner) QueryPlan() (*QueryPlan, error) {
 	}
 	p.queryPlan = plan
 	plan.root = projectNode
+	p.optimizePlan(tableName, rootPageNumber)
 	return plan, nil
+}
+
+func (p *selectPlanner) optimizePlan(tableName string, rpn int) {
+	// A very basic optimization to start with. Check a filter node has a scan
+	// child. If the filter can be moved to a seek then remove the filter and
+	// push the predicate into a seek.
+	if tableName == "" {
+		return
+	}
+	if len(p.queryPlan.root.children()) != 0 {
+		if fn, ok := p.queryPlan.root.children()[0].(*filterNode); ok {
+			rowExpr := p.canOpt(fn)
+			if rowExpr == nil {
+				return
+			}
+			// opt fn
+			seekN := &seekNode{
+				parent:         fn.parent,
+				plan:           fn.plan,
+				tableName:      tableName,
+				rootPageNumber: rpn,
+				cursorId:       1,
+				isWriteCursor:  false,
+				predicate:      rowExpr,
+			}
+			// bad dependency
+			if pn, ok := seekN.parent.(*projectNode); ok {
+				pn.child = seekN
+			}
+			seekN.parent = fn.parent
+		}
+	}
+}
+
+func (p *selectPlanner) canOpt(fn *filterNode) compiler.Expr {
+	// Is the binary expression of the forms
+	// - PrimaryKey = Integer
+	// - Integer = PrimaryKey
+	// Then use a seek node instead of scan
+	if _, ok := fn.child.(*scanNode); !ok {
+		return nil
+	}
+	if be, ok := fn.predicate.(*compiler.BinaryExpr); ok {
+		if be.Operator == compiler.OpEq {
+			if lcr, ok := be.Left.(*compiler.ColumnRef); ok && lcr.IsPrimaryKey {
+				// tied to int
+				if rowExpr, ok := be.Right.(*compiler.IntLit); ok {
+					return rowExpr
+				}
+			}
+			if rcr, ok := be.Left.(*compiler.ColumnRef); ok && rcr.IsPrimaryKey {
+				if rowExpr, ok := be.Left.(*compiler.IntLit); ok {
+					return rowExpr
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // ExecutionPlan returns the bytecode execution plan for the planner. Calling

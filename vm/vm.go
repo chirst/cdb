@@ -555,6 +555,31 @@ func (c *NewRowIdCmd) explain(addr int) []*string {
 	return formatExplain(addr, "NewRowID", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
 }
 
+// SeekRowIdCmd moves cursor P1 to the row id in register P3. If there is no
+// record it jumps to P2.
+type SeekRowId cmd
+
+func (c *SeekRowId) execute(vm *vm, routine *routine) cmdRes {
+	key, err := kv.EncodeKey(routine.registers[c.P3])
+	if err != nil {
+		return cmdRes{
+			err: err,
+		}
+	}
+	found := routine.cursors[c.P1].GotoKey(key)
+	if !found {
+		return cmdRes{
+			nextAddress: c.P2,
+		}
+	}
+	return cmdRes{}
+}
+
+func (c *SeekRowId) explain(addr int) []*string {
+	comment := fmt.Sprintf("Move cursor %d to row in register[%d] or jump to addr[%d]", c.P1, c.P3, c.P2)
+	return formatExplain(addr, "SeekRowID", c.P1, c.P2, c.P3, c.P4, c.P5, comment)
+}
+
 // InsertCmd write to cursor P1 with data in P2 and key in P3
 type InsertCmd cmd
 

@@ -191,6 +191,24 @@ func (s *scanNode) children() []logicalNode {
 	return []logicalNode{}
 }
 
+type seekNode struct {
+	parent         logicalNode
+	plan           *QueryPlan
+	tableName      string
+	rootPageNumber int
+	cursorId       int
+	isWriteCursor  bool
+	predicate      compiler.Expr
+}
+
+func (s *seekNode) print() string {
+	return fmt.Sprintf("seek table %s (%s)", s.tableName, s.predicate.Print())
+}
+
+func (s *seekNode) children() []logicalNode {
+	return []logicalNode{}
+}
+
 type filterNode struct {
 	child     logicalNode
 	parent    logicalNode
@@ -203,7 +221,7 @@ type filterNode struct {
 }
 
 func (f *filterNode) print() string {
-	return "filter"
+	return "filter (" + f.predicate.Print() + ")"
 }
 
 func (f *filterNode) children() []logicalNode {

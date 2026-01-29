@@ -1,6 +1,11 @@
 package compiler
 
-import "github.com/chirst/cdb/catalog"
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/chirst/cdb/catalog"
+)
 
 // ast (Abstract Syntax Tree) defines a data structure representing a SQL
 // program. This data structure is generated from the parser. This data
@@ -92,6 +97,8 @@ type Expr interface {
 	// BreadthWalk implements the visitor pattern for a in-order breadth first
 	// walk.
 	BreadthWalk(v ExprVisitor)
+	// Print returns a string representing the expression
+	Print() string
 }
 
 // BinaryExpr is for an expression with two operands.
@@ -105,6 +112,10 @@ func (be *BinaryExpr) BreadthWalk(v ExprVisitor) {
 	v.VisitBinaryExpr(be)
 	be.Left.BreadthWalk(v)
 	be.Right.BreadthWalk(v)
+}
+
+func (be *BinaryExpr) Print() string {
+	return fmt.Sprintf("%s %s %s", be.Left.Print(), be.Operator, be.Right.Print())
 }
 
 // UnaryExpr is an expression with one operand.
@@ -137,6 +148,13 @@ func (cr *ColumnRef) BreadthWalk(v ExprVisitor) {
 	v.VisitColumnRefExpr(cr)
 }
 
+func (cr *ColumnRef) Print() string {
+	if cr.IsPrimaryKey {
+		return fmt.Sprintf("%s PRIMARY KEY", cr.Column)
+	}
+	return cr.Column
+}
+
 // IntLit is an expression that is a literal integer such as "1".
 type IntLit struct {
 	Value int
@@ -144,6 +162,10 @@ type IntLit struct {
 
 func (il *IntLit) BreadthWalk(v ExprVisitor) {
 	v.VisitIntLit(il)
+}
+
+func (be *IntLit) Print() string {
+	return strconv.Itoa(be.Value)
 }
 
 // StringLit is an expression that is a literal string such as "'asdf'".
@@ -155,6 +177,10 @@ func (sl *StringLit) BreadthWalk(v ExprVisitor) {
 	v.VisitStringLit(sl)
 }
 
+func (vi *StringLit) Print() string {
+	return vi.Value
+}
+
 type Variable struct {
 	// Position is a unique integer defining what order the variable appeared in
 	// the statement.
@@ -163,6 +189,10 @@ type Variable struct {
 
 func (vi *Variable) BreadthWalk(v ExprVisitor) {
 	v.VisitVariable(vi)
+}
+
+func (vi *Variable) Print() string {
+	return "?"
 }
 
 // FunctionExpr is an expression that represents a function.
@@ -179,4 +209,8 @@ const (
 
 func (f *FunctionExpr) BreadthWalk(v ExprVisitor) {
 	v.VisitFunctionExpr(f)
+}
+
+func (f *FunctionExpr) Print() string {
+	return f.FnType
 }

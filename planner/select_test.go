@@ -487,3 +487,36 @@ func TestSelectTableDoesNotExist(t *testing.T) {
 		t.Fatalf("expected err: %s but got: %s", expectErr, err)
 	}
 }
+
+func TestUsePrimaryKeyIndex(t *testing.T) {
+	ast := &compiler.SelectStmt{
+		StmtBase: &compiler.StmtBase{},
+		From: &compiler.From{
+			TableName: "foo",
+		},
+		ResultColumns: []compiler.ResultColumn{
+			{
+				All: true,
+			},
+		},
+		Where: &compiler.BinaryExpr{
+			Left:     &compiler.ColumnRef{Column: "id"},
+			Right:    &compiler.IntLit{Value: 1},
+			Operator: compiler.OpEq,
+		},
+	}
+	mockCatalog := &mockSelectCatalog{
+		primaryKeyColumnName: "id",
+	}
+	qp, err := NewSelect(mockCatalog, ast).QueryPlan()
+	if err != nil {
+		t.Errorf("expected no err got err %s", err)
+	}
+	if pn, ok := qp.root.(*projectNode); ok {
+		if _, ok := pn.child.(*seekNode); !ok {
+			t.Errorf("expected seek node but got %#v", pn.child)
+		}
+	} else {
+		t.Errorf("expected project node but got %#v", qp.root)
+	}
+}
