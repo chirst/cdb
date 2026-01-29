@@ -107,6 +107,7 @@ func (e *ExecutionPlan) Append(command Command) {
 // the system catalog Execute will return ErrVersionChanged in the ExecuteResult
 // err field so the plan can be recompiled.
 func (v *vm) Execute(plan *ExecutionPlan, parameters []any) *ExecuteResult {
+	parameters = v.normalizeParameters(parameters)
 	if plan.Explain {
 		return v.explain(plan)
 	}
@@ -150,6 +151,23 @@ func (v *vm) Execute(plan *ExecutionPlan, parameters []any) *ExecuteResult {
 	}
 }
 
+// normalizeParameters converts parameters to a simpler type. This is because of
+// things like a int vs int64 producing different byte array values. This can
+// for example cause bugs with comparisons within the key value store.
+func (v *vm) normalizeParameters(parameters []any) []any {
+	for i := range parameters {
+		switch t := parameters[i].(type) {
+		case int16:
+			parameters[i] = int(t)
+		case int32:
+			parameters[i] = int(t)
+		case int64:
+			parameters[i] = int(t)
+		}
+	}
+	return parameters
+}
+
 // resolveVarTypes takes unresolved var types in the result types and determines
 // their type from the passed in go type.
 func (v *vm) resolveVarTypes(plan *ExecutionPlan, parameters []any) error {
@@ -157,12 +175,6 @@ func (v *vm) resolveVarTypes(plan *ExecutionPlan, parameters []any) error {
 		if plan.ResultTypes[i].ID == catalog.CTVar {
 			switch parameters[plan.ResultTypes[i].VarPosition].(type) {
 			case int:
-				plan.ResultTypes[i].ID = catalog.CTInt
-			case int16:
-				plan.ResultTypes[i].ID = catalog.CTInt
-			case int32:
-				plan.ResultTypes[i].ID = catalog.CTInt
-			case int64:
 				plan.ResultTypes[i].ID = catalog.CTInt
 			case string:
 				plan.ResultTypes[i].ID = catalog.CTStr

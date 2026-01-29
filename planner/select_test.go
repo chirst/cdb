@@ -389,14 +389,12 @@ func TestSelectPlan(t *testing.T) {
 		{
 			description: "WithWhereClause",
 			expectedCommands: []vm.Command{
-				&vm.InitCmd{P2: 9},
+				&vm.InitCmd{P2: 7},
 				&vm.OpenReadCmd{P1: 1, P2: 2},
-				&vm.RewindCmd{P1: 1, P2: 8},
-				&vm.RowIdCmd{P1: 1, P2: 1},
-				&vm.NotEqualCmd{P1: 1, P2: 7, P3: 2},
-				&vm.RowIdCmd{P1: 1, P2: 4},
-				&vm.ResultRowCmd{P1: 4, P2: 1},
-				&vm.NextCmd{P1: 1, P2: 3},
+				&vm.CopyCmd{P1: 2, P2: 1},
+				&vm.SeekRowId{P1: 1, P2: 6, P3: 1},
+				&vm.RowIdCmd{P1: 1, P2: 3},
+				&vm.ResultRowCmd{P1: 3, P2: 1},
 				&vm.HaltCmd{},
 				&vm.TransactionCmd{P1: 0},
 				&vm.IntegerCmd{P1: 1, P2: 2},
@@ -513,7 +511,11 @@ func TestUsePrimaryKeyIndex(t *testing.T) {
 		t.Errorf("expected no err got err %s", err)
 	}
 	if pn, ok := qp.root.(*projectNode); ok {
-		if _, ok := pn.child.(*seekNode); !ok {
+		if seekN, ok := pn.child.(*seekNode); ok {
+			if seekN.parent != pn {
+				t.Error("expected parent to be pn")
+			}
+		} else {
 			t.Errorf("expected seek node but got %#v", pn.child)
 		}
 	} else {

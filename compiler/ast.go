@@ -2,7 +2,6 @@ package compiler
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/chirst/cdb/catalog"
 )
@@ -165,7 +164,7 @@ func (il *IntLit) BreadthWalk(v ExprVisitor) {
 }
 
 func (be *IntLit) Print() string {
-	return strconv.Itoa(be.Value)
+	return "?"
 }
 
 // StringLit is an expression that is a literal string such as "'asdf'".
@@ -178,7 +177,7 @@ func (sl *StringLit) BreadthWalk(v ExprVisitor) {
 }
 
 func (vi *StringLit) Print() string {
-	return vi.Value
+	return "?"
 }
 
 type Variable struct {
