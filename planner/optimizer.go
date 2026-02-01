@@ -52,7 +52,7 @@ func (*optimizer) canOpt(predicate compiler.Expr) compiler.Expr {
 			return t
 		}
 	}
-	if rcr, ok := be.Left.(*compiler.ColumnRef); ok && rcr.IsPrimaryKey {
+	if rcr, ok := be.Right.(*compiler.ColumnRef); ok && rcr.IsPrimaryKey {
 		switch t := be.Left.(type) {
 		case *compiler.IntLit:
 			return t

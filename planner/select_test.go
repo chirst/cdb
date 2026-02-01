@@ -522,3 +522,40 @@ func TestUsePrimaryKeyIndex(t *testing.T) {
 		t.Errorf("expected project node but got %#v", qp.root)
 	}
 }
+
+func TestUsePrimaryKeyIndexFlippedOperands(t *testing.T) {
+	ast := &compiler.SelectStmt{
+		StmtBase: &compiler.StmtBase{},
+		From: &compiler.From{
+			TableName: "foo",
+		},
+		ResultColumns: []compiler.ResultColumn{
+			{
+				All: true,
+			},
+		},
+		Where: &compiler.BinaryExpr{
+			Left:     &compiler.IntLit{Value: 1},
+			Right:    &compiler.ColumnRef{Column: "id"},
+			Operator: compiler.OpEq,
+		},
+	}
+	mockCatalog := &mockSelectCatalog{
+		primaryKeyColumnName: "id",
+	}
+	qp, err := NewSelect(mockCatalog, ast).QueryPlan()
+	if err != nil {
+		t.Errorf("expected no err got err %s", err)
+	}
+	if pn, ok := qp.root.(*projectNode); ok {
+		if seekN, ok := pn.child.(*seekNode); ok {
+			if seekN.parent != pn {
+				t.Error("expected parent to be pn")
+			}
+		} else {
+			t.Errorf("expected seek node but got %#v", pn.child)
+		}
+	} else {
+		t.Errorf("expected project node but got %#v", qp.root)
+	}
+}
