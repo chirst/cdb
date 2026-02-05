@@ -2,13 +2,26 @@
 CDB is a SQL database built for learning about the inner workings of databases. CDB
 was heavily inspired by [SQLite](https://www.sqlite.org/),
 [CockroachDB](https://github.com/cockroachdb/cockroach), and the
-[CMU Database Group](https://www.youtube.com/c/cmudatabasegroup). CDB implements
-a subset of SQL described below.
+[CMU Database Group](https://www.youtube.com/c/cmudatabasegroup).
+
+## Running CDB
+There are several ways to download or run CDB
+1. Download the appropriate executable from the releases to run the database
+through the REPL.
+2. Use with the go driver found in the `driver` package.
+3. The JDBC can be found at https://github.com/chirst/cdb-jdbc
+4. Run with a c library from the releases page.
 
 ## Language reference
+CDB implements a subset of SQL described below.
 
 ### System tables
-`cdb_schema` which holds the database schema.
+`cdb_schema` holds the database schema. This table can be queried to understand
+your schema.
+
+### Indexes
+Note indexes on primary keys are supported. See `EXPLAIN QUERY PLAN` for
+details. Or `EXPLAIN` for more details.
 
 ### SELECT
 ```mermaid
@@ -21,6 +34,9 @@ expression([expression])
 as([AS identifier])
 colSep[","]
 from([FROM])
+where([WHERE])
+expression2([expression])
+e(( ))
 
 begin --> explain
 explain --> queryPlan
@@ -33,7 +49,12 @@ as --> colSep
 expression --> colSep
 colSep --> expression
 expression --> from
+expression --> e
 from --> table
+table --> where
+where --> expression2
+table --> e
+expression2 --> e
 ```
 
 ### CREATE
@@ -92,8 +113,9 @@ values([VALUES])
 lparen2["("]
 rparen2[")"]
 colSep2[","]
-literal["literal"]
+expression["expression"]
 valSep[","]
+e(( ))
 
 begin --> explain
 explain --> queryPlan
@@ -106,16 +128,79 @@ tableIdent --> lparen
 lparen --> colIdent
 colIdent --> colSep
 colSep --> colIdent
+colIdent --> rparen
 colSep --> rparen
 rparen --> values
 values --> lparen2
-lparen2 --> literal
-literal --> colSep2
-colSep2 --> literal
-literal --> rparen2
+lparen2 --> expression
+expression --> colSep2
+colSep2 --> expression
+expression --> rparen2
 colSep2 --> rparen2
 rparen2 --> valSep
 valSep --> lparen2
+rparen2 --> e
+```
+
+### UPDATE
+```mermaid
+graph LR
+begin(( ))
+explain([EXPLAIN])
+queryPlan([QUERY PLAN])
+update([UPDATE])
+tableIdent["Table Identifier"]
+set([SET])
+colRef["Column Ref"]
+eq("=")
+expr("expression")
+comma(",")
+where([WHERE])
+expr2("expression")
+e(( ))
+
+begin --> explain
+begin --> update
+explain --> queryPlan
+explain --> update
+queryPlan --> update
+update --> tableIdent
+tableIdent --> set
+set --> colRef
+colRef --> eq
+eq --> expr
+expr --> comma
+comma --> colRef
+expr --> e
+expr --> where
+where --> expr2
+expr2 --> e
+```
+
+### DELETE
+```mermaid
+graph LR
+begin(( ))
+explain([EXPLAIN])
+queryPlan([QUERY PLAN])
+delete([DELETE])
+from([FROM])
+tableIdent["Table Identifier"]
+where([WHERE])
+expr("expression")
+e(( ))
+
+begin --> explain
+begin --> delete
+explain --> queryPlan
+explain --> delete
+queryPlan --> delete
+delete --> from
+from --> tableIdent
+tableIdent --> where
+where --> expr
+expr --> e
+tableIdent --> e
 ```
 
 ## Flags
@@ -128,11 +213,13 @@ title: Packages
 ---
 graph LR
     subgraph Adapters
+    cint["C Interface"]
     Driver
     REPL
     end
     Driver --> DB
     REPL --> DB
+    cint --> DB
     DB --> Compiler
     subgraph Compiler
     Lexer --> Parser --> AST
@@ -151,6 +238,7 @@ graph LR
     Storage
     end
 ```
+
 ### REPL (Read Eval Print Loop)
 The REPL works with the DB (Database) layer and is responsible for two things.
 Passing down the SQL strings that are read by the REPL to the DB. Printing out
@@ -159,13 +247,17 @@ of as an adapter layer.
 
 ### Driver
 The Driver plays the same role as the REPL in that it adapts the DB to be used
-in a Go program. This is done by implementing the Go standard library 
+in a Go program. This is done by implementing the Go standard library
 `database/sql/driver.Driver` interface.
 
+### C Interface
+The C Interface is special in that it enables the database to be used from
+almost any language. It is used to make the JDBC driver work. Found here
+https://github.com/chirst/cdb-jdbc
+
 ### DB (Database)
-The DB (Database) layer is an interface that is called by adapters like the
-REPL. In theory, the DB layer could be called directly by a consumer of the
-package or by something like a TCP connection adapter.
+The DB (Database) layer is an interface that is called by adapters think of this
+as the place where the the database connects with the outside world.
 
 ### Compiler
 The Compiler is responsible for converting a raw SQL string to a AST (Abstract
